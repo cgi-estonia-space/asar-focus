@@ -4,8 +4,6 @@ project(asar_focus CUDA CXX)
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CXX_STANDARD  17)
 
-
-
 set(SOURCES
         main.cpp
         device_padded_image.cu
@@ -45,9 +43,10 @@ set_target_properties(asar_focus PROPERTIES
 
 
 find_package(CUDAToolkit 11.2 REQUIRED)
+find_package(Boost 1.71.0 REQUIRED COMPONENTS date_time)
+find_package(GDAL REQUIRED)
 
-set_property(TARGET asar_focus PROPERTY CUDA_ARCHITECTURES 86)
-#set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_86,code=sm_86")
+
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-Wall")
 #set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-Werror")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-Wextra")
@@ -55,9 +54,20 @@ set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-Wextra")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --Werror all-warnings")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda")
-
+if (NOT DEFINED ENV{CUDAARCHS})
+    message(STATUS "CUDAARCHS not set, defaulting")
+    set(CMAKE_CUDA_ARCHITECTURES 60 CACHE STRING "CUDA architectures" FORCE)
+endif()
+message(STATUS "CUDA binary code will be generated for the following architecture(s) - ${CMAKE_CUDA_ARCHITECTURES}")
+set_property(TARGET asar_focus PROPERTY CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
 
 INCLUDE_DIRECTORIES(${CUDAToolkit_INCLUDE_DIRS})
 
+target_include_directories(asar_focus PRIVATE ${GDAL_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
+    message("Also adding 'stdc++fs' for linking since the g++ version ${CMAKE_CXX_COMPILER_VERSION} requires it.")
+    target_link_libraries(asar_focus PRIVATE gdal cufft stdc++fs)
+else ()
+    target_link_libraries(asar_focus PRIVATE gdal cufft)
+endif()
 
-target_link_libraries(asar_focus PRIVATE gdal cufft)
