@@ -17,20 +17,6 @@ using fl = float;
 using do_ = double; // do is already a keyword...
 
 
-struct mjd {
-    sl days;
-    ul seconds;
-    ul micros;
-};
-
-inline mjd bswap(mjd in) {
-    in.days = bswap(in.days);
-    in.seconds = bswap(in.seconds);
-    in.micros = bswap(in.micros);
-    return in;
-}
-
-static_assert(sizeof(mjd) == 12);
 
 
 struct __attribute__((packed)) GeneralSummary {
@@ -547,22 +533,22 @@ struct __attribute__((packed)) SummaryQualityADS {
 
     void BSwap() {
         zero_doppler_time = bswap(zero_doppler_time);
-        thresh_chirp_broadening - bswap(thresh_chirp_broadening);
-        thresh_chirp_sidelobe - bswap(thresh_chirp_sidelobe);
-        threst_chirp_islr - bswap(threst_chirp_islr);
-        thresh_input_mean - bswap(thresh_input_mean);
-        exp_input_mean - bswap(exp_input_mean);
-        thresh_input_std_dev - bswap(thresh_input_std_dev);
-        exp_input_std_dev - bswap(exp_input_std_dev);
-        thresh_dop_cen - bswap(thresh_dop_cen);
-        threst_dop_amb - bswap(threst_dop_amb);
-        thresh_output_mean - bswap(thresh_output_mean);
-        exp_output_mean - bswap(exp_output_mean);
-        thresh_output_std_dev - bswap(thresh_output_std_dev);
-        exp_output_std_dev - bswap(exp_output_std_dev);
-        thresh_input_missing_lines - bswap(thresh_input_missing_lines);
-        thresh_input_gaps - bswap(thresh_input_gaps);
-        lines_per_gap - bswap(lines_per_gap);
+        thresh_chirp_broadening = bswap(thresh_chirp_broadening);
+        thresh_chirp_sidelobe = bswap(thresh_chirp_sidelobe);
+        threst_chirp_islr = bswap(threst_chirp_islr);
+        thresh_input_mean = bswap(thresh_input_mean);
+        exp_input_mean = bswap(exp_input_mean);
+        thresh_input_std_dev = bswap(thresh_input_std_dev);
+        exp_input_std_dev = bswap(exp_input_std_dev);
+        thresh_dop_cen = bswap(thresh_dop_cen);
+        threst_dop_amb = bswap(threst_dop_amb);
+        thresh_output_mean = bswap(thresh_output_mean);
+        exp_output_mean = bswap(exp_output_mean);
+        thresh_output_std_dev = bswap(thresh_output_std_dev);
+        exp_output_std_dev = bswap(exp_output_std_dev);
+        thresh_input_missing_lines = bswap(thresh_input_missing_lines);
+        thresh_input_gaps = bswap(thresh_input_gaps);
+        lines_per_gap = bswap(lines_per_gap);
 
         BSWAP_ARR(input_mean);
         BSWAP_ARR(input_std_dev);
@@ -668,8 +654,8 @@ struct TiePoints {
     ul samp_numbers[11];
     fl slange_range_times[11];
     fl angles[11];
-    fl lats[11];
-    fl longs[11];
+    sl lats[11];
+    sl longs[11];
 };
 
 static_assert(sizeof(TiePoints) == 220);

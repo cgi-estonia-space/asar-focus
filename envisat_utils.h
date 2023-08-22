@@ -2,18 +2,11 @@
 
 #include <string>
 
+#include <boost/date_time/posix_time/posix_time.hpp>
+
 #include "checks.h"
 
-using sc = int8_t;
-using uc = uint8_t;
-using ss = int16_t;
-using us = uint16_t;
-using sl = int32_t;
-using ul = uint32_t;
-using sd = int64_t;
-using ud = uint64_t;
-using fl = float;
-using do_ = double; // do is already a keyword...
+#include "envisat_utils.h"
 
 
 
@@ -29,3 +22,32 @@ void CopyStrPad(uc (&arr)[N], const std::string &s) {
     }
 }
 
+
+
+inline boost::posix_time::ptime MjdToPtime(mjd m)
+{
+    boost::gregorian::date d(2000, 1, 1);
+
+    d += boost::gregorian::days(m.days);
+    boost::posix_time::ptime t(d);
+
+    t += boost::posix_time::seconds(m.seconds);
+    t += boost::posix_time::microseconds (m.micros);
+    return t;
+}
+
+inline mjd PtimeToMjd(boost::posix_time::ptime in)
+{
+
+    boost::gregorian::date d_0(2000, 1, 1);
+
+    boost::gregorian::date d_1(in.date());
+
+    std::cout << "SIIN : \n\n" << in << "\n\n";
+
+    mjd r = {};
+    r.days = (d_1 - d_0).days();
+    r.seconds = in.time_of_day().total_seconds();
+    r.micros = in.time_of_day().total_microseconds() % 1000000;
+    return r;
+}

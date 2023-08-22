@@ -3,12 +3,12 @@
 #include "envisat_ph.h"
 #include "envisat_sph.h"
 #include "envisat_mph.h"
-#include "envisat_dsd.h"
+#include "envisat_lvl1_dsd.h"
 
-#include "asar_metadata.h"
+#include "asar_lvl0_parser.h"
 
 
-struct __attribute__((packed)) ERS_IM_LVL1
+struct __attribute__((packed)) EnvisatIMS
 {
     MPH mph;
     Lvl1SPH sph;
@@ -35,22 +35,5 @@ struct MDS
     }
 };
 
-
-
-// 1247
-// 6099
-// 170
-// 2009
-// 55
-// 1483
-// 512
-static_assert(sizeof(ERS_IM_LVL1));
-
-
-
-
-
-
-
-void WriteLvl1(SARMetadata& el, MDS& mds);
+void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& mds);
 

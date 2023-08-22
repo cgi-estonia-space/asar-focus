@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD  17)
 
 set(SOURCES
         main.cpp
+        asar_lvl0_parser.cpp
+        asar_constants.cpp
         device_padded_image.cu
         range_doppler_algorithm.cu
         device_padded_image.cuh
@@ -19,23 +21,22 @@ set(SOURCES
         img_output.cpp
         img_output.h
         math_utils.h
-        iq_correction.cpp
-        iq_correction.h
         iq_correction.cu
         iq_correction.cuh
         envisat_file_format.h
+        processing_velocity_estimation.h
+        processing_velocity_estimation.cpp
         fractional_doppler_centroid.cu
         fractional_doppler_centroid.cuh
-        envisat_dsd.h
-        envisat_dsd.cpp
+        envisat_lvl1_dsd.h
         bswap_util.h
         envisat_sph.h
         envisat_mph.h
         envisat_ph.cpp
         envisat_ph.h
-        ers_im_lvl1_file.cpp
-        ers_im_lvl1_file.h
-        envisat_utils.h)
+        asar_lvl1_file.cpp
+        asar_lvl1_file.h
+        envisat_utils.h envisat_ins_file.cpp envisat_ins_file.h orbit_state_vector.cpp orbit_state_vector.h geo_tools.cpp geo_tools.h)
 
 add_executable(asar_focus ${SOURCES})
 set_target_properties(asar_focus PROPERTIES

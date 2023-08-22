@@ -6,16 +6,9 @@
 
 #include <boost/date_time/posix_time/posix_time.hpp>
 
-#include "envisat_dsd.h"
+#include "envisat_lvl1_dsd.h"
 #include "checks.h"
 
-
-
-struct GeoPos
-{
-    double latitude;
-    double longitude;
-};
 
 template<size_t N>
 void LastNewline(uc (&arr)[N])
@@ -200,7 +193,7 @@ void SetAfl(uc (&arr)[N], const char* keyword, float val, const char* unit = "")
 
 inline std::string PtimeToStr(boost::posix_time::ptime time)
 {
-    boost::posix_time::time_facet* facet = new boost::posix_time::time_facet("%Y-%b-%d %H:%M:%S.%f");
+    boost::posix_time::time_facet* facet = new boost::posix_time::time_facet("%d-%b-%Y %H:%M:%S.%f");
     std::stringstream date_stream;
     date_stream.imbue(std::locale(date_stream.getloc(), facet));
     date_stream << time;
@@ -211,15 +204,15 @@ inline std::string PtimeToStr(boost::posix_time::ptime time)
 
 inline boost::posix_time::ptime StrToPtime(std::string str)
 {
-    for(auto& e : str)
-    {
-        e = tolower(e);
-    }
-    boost::posix_time::time_facet* facet = new boost::posix_time::time_facet("%Y-%b-%d %H:%M:%S.%f");
+
+    boost::posix_time::time_input_facet * facet = new boost::posix_time::time_input_facet ("%d-%b-%Y %H:%M:%S%f");//.%f");
     std::stringstream date_stream(str);
-    date_stream.imbue(std::locale(date_stream.getloc(), facet));
+    date_stream.imbue(std::locale(std::locale::classic(), facet));
     boost::posix_time::ptime time;
     date_stream >> time;
-
+    if(time.is_not_a_date_time())
+    {
+        exit(1);
+    }
     return time;
 }

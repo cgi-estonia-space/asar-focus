@@ -1,6 +1,4 @@
-//
-// Created by priit on 3/3/23.
-//
+
 
 #include "device_padded_image.cuh"
 

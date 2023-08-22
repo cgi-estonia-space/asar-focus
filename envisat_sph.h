@@ -5,6 +5,8 @@
 
 #include "envisat_ph.h"
 
+#include "geo_tools.h"
+
 
 struct DSD {
     uc ds_name[39];
@@ -149,7 +151,7 @@ struct Lvl1SPH {
     }
 
 
-    void SetFirstPosition(GeoPos near, GeoPos mid, GeoPos far)
+    void SetFirstPosition(GeoPosLLH near, GeoPosLLH mid, GeoPosLLH far)
     {
         auto conv = [](double val){ return static_cast<int32_t>(1e6*val); };
         SetAl(first_near_lat, "FIRST_NEAR_LAT", conv(near.latitude), "<10-6degN>");
@@ -160,7 +162,7 @@ struct Lvl1SPH {
         SetAl(first_far_long, "FIRST_FAR_LONG", conv(far.longitude), "<10-6degE>");
     }
 
-    void SetLastPosition(GeoPos near, GeoPos mid, GeoPos far)
+    void SetLastPosition(GeoPosLLH near, GeoPosLLH mid, GeoPosLLH far)
     {
         auto conv = [](double val){ return static_cast<int32_t>(1e6*val); };
         SetAl(last_near_lat, "LAST_NEAR_LAT", conv(near.latitude), "<10-6degN>");

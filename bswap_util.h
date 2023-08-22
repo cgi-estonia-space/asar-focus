@@ -4,6 +4,8 @@
 #include <cstring>
 #include <utility>
 
+#include "envisat_types.h"
+
 template<class T>
 void bswap(T in) = delete;
 
@@ -40,10 +42,21 @@ inline int16_t bswap(int16_t in) {
 }
 
 
-
 #define BSWAP_ARR(x)  { static_assert(std::is_array_v<decltype(x)>); for(size_t ugly_macro_loop_index = 0; ugly_macro_loop_index < sizeof(x)/sizeof(x[0]); ugly_macro_loop_index++) { x[ugly_macro_loop_index] = bswap(x[ugly_macro_loop_index]); } }
 
 
+inline mjd bswap(mjd in) {
+    in.days = bswap(in.days);
+    in.seconds = bswap(in.seconds);
+    in.micros = bswap(in.micros);
+    return in;
+}
 
-
+inline FEPAnnotations bswap(FEPAnnotations in)
+{
+    in.isp_length = bswap(in.isp_length);
+    in.crcErrorCnt = bswap(in.crcErrorCnt);
+    in.correctionCnt = bswap(in.correctionCnt);
+    return in;
+}
 

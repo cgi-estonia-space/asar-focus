@@ -3,6 +3,9 @@
 #include <cstdlib>
 #include <string>
 #include <boost/algorithm/string.hpp>
+#include <iostream>
+
+#include "checks.h"
 
 
 constexpr size_t MPH_SIZE = 1247;
@@ -28,24 +31,12 @@ struct DSD_lvl0 {
     }
 };
 
-struct ProductHeader {
-    uint32_t offset;
-    std::string name;
-    std::string copy;
-
-    struct KV {
-        std::string key;
-        std::string value;
-    };
-
-    std::vector<KV> kv_map;
-
-    void set(uint32_t offset, const std::string &name, char *data, uint32_t n) {
-        this->offset = offset;
-        this->name = name;
-        this->copy = std::string(data, n);
+class ProductHeader {
+public:
+    void Load(uint32_t offset, const char *data, uint32_t n) {
+        copy_ = std::string(data, n);
         std::vector<std::string> tokens;
-        boost::algorithm::split(tokens, copy, boost::is_any_of("\n"));
+        boost::algorithm::split(tokens, copy_, boost::is_any_of("\n"));
 
         for (const auto &e: tokens) {
             auto idx = e.find('=');
@@ -53,20 +44,52 @@ struct ProductHeader {
                 continue;
             }
 
-            kv_map.push_back({e.substr(0, idx), e.substr(idx + 1, std::string::npos)});
+            auto value = e.substr(idx + 1, std::string::npos);
+            if(value.back() == '"') {
+                value.pop_back();
+            }
+            if(value.front() == '"')
+            {
+                value.erase(value.begin());
+            }
+            kv_vec_.push_back({e.substr(0, idx), value});
         }
     }
 
+    std::string Get(std::string key)
+    {
+        for(const auto& kv : kv_vec_)
+        {
+            if(kv.key == key)
+            {
+                return kv.value;
+            }
+        }
+        ERROR_EXIT(key + " not found in MPH/SPH file");
+    }
 
-    void print() {
-        for (auto e: kv_map) {
+
+    void PrintValues() {
+        for (const auto& e: kv_vec_) {
             std::cout << e.key << " | = | " << e.value << "\n";
         }
     }
 
+    const char* Data() const
+    {
+        return copy_.c_str();
+    }
+private:
+    struct KV {
+        std::string key;
+        std::string value;
+    };
+
+    std::vector<KV> kv_vec_;
+    std::string copy_;
 };
 
-size_t extract_bytes(const std::string &in) {
+inline size_t extract_bytes(const std::string &in) {
     auto idx = in.find('=');
     auto idx_end = in.find("<bytes>");
     for (size_t i = idx; i < in.size(); i++) {
@@ -77,7 +100,7 @@ size_t extract_bytes(const std::string &in) {
     return 0;
 }
 
-size_t extract_num(const std::string &in) {
+inline size_t extract_num(const std::string &in) {
     auto idx = in.find('=');
     auto idx_end = in.find("<bytes>");
     for (size_t i = idx; i < in.size(); i++) {
@@ -88,14 +111,14 @@ size_t extract_num(const std::string &in) {
     return 0;
 }
 
-std::vector<DSD_lvl0> extract_dsds(const ProductHeader &sph) {
+inline std::vector<DSD_lvl0> extract_dsds(const ProductHeader &sph) {
     size_t dsd_offset = SPH_SIZE - DSD_SIZE * 4;
 
     std::vector<DSD_lvl0> res;
 
     for (size_t i = 0; i < 4; i++) {
         std::vector<std::string> tokens;
-        std::string in(sph.copy.data() + dsd_offset + i * DSD_SIZE, DSD_SIZE);
+        std::string in(sph.Data() + dsd_offset + i * DSD_SIZE, DSD_SIZE);
         boost::algorithm::split(tokens, in, boost::is_any_of("\n"));
         if (tokens.size() < 6) {
             continue;
