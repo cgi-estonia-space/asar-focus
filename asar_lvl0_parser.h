@@ -30,20 +30,11 @@ struct ChirpInfo {
     double coefficient[5];
 };
 
-
-struct ImgFormat {
-    int range_size;
-    int azimuth_size;
-    int data_line_offset;
-    int record_length;
-};
-
 struct SARResults {
-    size_t total_samples;
     double dc_i;
     double dc_q;
     double iq_gain;
-    double quad_depart;
+    double phase_error; // degrees
     double Vr;
     double doppler_centroid;
 };
@@ -122,6 +113,7 @@ struct SARMetadata {
     boost::posix_time::ptime center_time;
 
     GeoPos3D center_point;
+    size_t total_raw_samples;
 
     SARResults results;
 
@@ -130,7 +122,6 @@ struct SARMetadata {
 inline boost::posix_time::ptime CalcAzimuthTime(const SARMetadata& meta, int azimuth_idx)
 {
     uint32_t us = (1/meta.pulse_repetition_frequency) * azimuth_idx * 1e6;
-    printf("az idx = %d , us = %u\n", azimuth_idx, us);
     return meta.first_line_time + boost::posix_time::microseconds(us);
 }
 

@@ -95,7 +95,7 @@ namespace {
         const float fft_bin_step = args.prf / src_y_size;
         // find FFT bin frequency
         float fn = 0.0f;
-        if ((dst_y < src_y_size / 2) + args.dc_steps) {
+        if ((dst_y < src_y_size / 2) - args.dc_steps) {
             fn = dst_y * fft_bin_step;
         } else {
             fn = (dst_y - src_y_size) * fft_bin_step;
@@ -169,15 +169,15 @@ namespace {
             // find FFT bin frequency
             float fn = 0.0f;
             //float half_pixel_shift = 0.0f;
-            if ((dst_y < src_height / 2 ) + args.dc_steps) {
+            if ((dst_y < src_height / 2 ) - args.dc_steps) {
                 fn = dst_y * fft_bin_step;
 
             } else {
                 fn = (dst_y - src_height) * fft_bin_step;
             }
 
-            const float max_freq = (src_height / 2) * fft_bin_step /*+ args.dc_steps*/ * fft_bin_step;
-            const float min_freq = -(src_height / 2) * fft_bin_step /*+ args.dc_steps*/ * fft_bin_step;
+            const float max_freq = (src_height / 2) * fft_bin_step - args.dc_steps * fft_bin_step;
+            const float min_freq = -(src_height / 2) * fft_bin_step - args.dc_steps * fft_bin_step;
             if (fn > args.azimuth_bandwidth_fraction * max_freq || fn < args.azimuth_bandwidth_fraction * min_freq) {
                 src_data[src_idx] = {};
                 return;
@@ -234,8 +234,6 @@ namespace {
 #endif
 
 
-        double V = metadata.platform_velocity;
-    printf("platform velocity Vs = %f\n", V);
         double Vr = metadata.results.Vr;
         printf("radar velocity Vr = %f\n", Vr);
 

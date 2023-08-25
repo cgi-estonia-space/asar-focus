@@ -1,6 +1,4 @@
-//
-// Created by priit on 8/16/23.
-//
+
 
 #include "geo_tools.h"
 

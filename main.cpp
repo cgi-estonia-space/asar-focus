@@ -99,16 +99,9 @@ int main(int argc, char *argv[]) {
     SARMetadata metadata = {};
     ASARMetadata asar_meta = {};
 
-
-
     std::vector<std::complex<float>> h_data;
     ParseIMFile(data, aux_path, metadata, asar_meta, h_data);
 
-    double Vr = EstimateProcessingVelocity(metadata);
-
-    metadata.results.Vr = 7097.110219566418;
-
-    printf("Vr = %f\n", Vr);
 
 
     std::string wif_name_base = asar_meta.product_name;
@@ -136,9 +129,29 @@ int main(int argc, char *argv[]) {
     printf("rg  = %d -> %d\n", rg_size, rg_padded);
     printf("az = %d -> %d\n", az_size, az_padded);
 
+    DevicePaddedImage img;
+    img.InitPadded(rg_size, az_size, rg_padded, az_padded);
+    img.ZeroMemory();
+
+    for(int y = 0; y < az_size; y++)
+    {
+        auto* dest = img.Data() + y * rg_padded;
+        auto* src = h_data.data() + y * rg_size;
+        cudaMemcpy(dest, src, rg_size * 8, cudaMemcpyHostToDevice);
+    }
+
+    RawDataCorrection(img, {metadata.total_raw_samples}, metadata.results);
+
+    img.ZeroNaNs();
 
 
+    double Vr = EstimateProcessingVelocity(metadata);
 
+    metadata.results.Vr = Vr;
+
+    //metadata.results.Vr = 7097.110219566418;
+
+    printf("Vr = %f\n", Vr);
 
 
     auto chirp = GenerateChirpData(metadata.chirp, rg_padded);
@@ -149,18 +162,6 @@ int main(int argc, char *argv[]) {
         FILE *fpe = fopen("/tmp/chirp.cf32", "w");
         fwrite(chirp.data(), 8, chirp.size(), fpe);
         fclose(fpe);
-    }
-
-
-    DevicePaddedImage img;
-    img.InitPadded(rg_size, az_size, rg_padded, az_padded);
-    img.ZeroMemory();
-
-    for(int y = 0; y < az_size; y++)
-    {
-        auto* dest = img.Data() + y * rg_padded;
-        auto* src = h_data.data() + y * rg_size;
-        cudaMemcpy(dest, src, rg_size * 8, cudaMemcpyHostToDevice);
     }
 
     // TODO
@@ -175,7 +176,7 @@ int main(int argc, char *argv[]) {
     double dc = 0.0;
     CalculateDopplerCentroid(img, metadata.pulse_repetition_frequency, dc);
 
-    metadata.results.doppler_centroid = -dc;
+    metadata.results.doppler_centroid = dc;
 
 
     printf("Image GPU byte size = %f GB\n", img.TotalByteSize() / 1e9);
@@ -212,8 +213,7 @@ int main(int argc, char *argv[]) {
         path += wif_name_base + "_slc.tif";
         WriteIntensityPaddedImg(out, path.c_str());
     }
-
-
+    
     printf("done!\n");
 
 

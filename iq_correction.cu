@@ -4,312 +4,315 @@
 
 #include "cuda_cleanup.h"
 
+#include "checks.h"
+
+#include <numeric>
+
 namespace {
-    __global__ void ReduceSumRawIQData(const IQ8 *data, int x_size, int y_size, unsigned long long *result) {
-        const int y_start = blockIdx.y;
-        const int x_start = threadIdx.x;
-        const int y_step = gridDim.y;
-        const int x_step = blockDim.x;
 
-        uint32_t n_samples = 0;
-        uint32_t acc_i = 0;
-        uint32_t acc_q = 0;
-        for (int y = y_start; y < y_size; y += y_step) {
-            for (int x = x_start; x < x_size; x += x_step) {
-                int idx = (y * x_size) + x;
-                auto sample = data[idx];
+constexpr int REDUCE_BLOCK_SIZE = 1024;
 
-                acc_i += sample.i;
-                acc_q += sample.q;
-                n_samples++;
+/*
+ * Simplified reduction kernels for I/Q summation,
+ * n(should be small)of 1D thread blocks iterate over the image, summing I and Q data,
+ * outputting the result this into a n sized device array.
+ * Likely can improved via thrust::reduce or a more complete multistep reduction implementation.
+ * Additionally intermediates are stored in double, potentially could be store in floats.
+ * However the total runtime of these operations is likely neglible, thus no point optimizing here.
+ */
+
+__global__ void DCBiasReduction(const cufftComplex* src, int x_size, int y_size, double* i_result_arr,
+                                double* q_result_arr) {
+    __shared__ double i_shared_acc[REDUCE_BLOCK_SIZE];
+    __shared__ double q_shared_acc[REDUCE_BLOCK_SIZE];
+
+    const int shared_idx = threadIdx.x;
+    const int result_idx = blockIdx.y;
+    const int y_start = blockIdx.y;
+    const int x_start = threadIdx.x;
+    const int y_step = gridDim.y;
+    const int x_step = blockDim.x;
+
+    double i_sum = 0.0;
+    double q_sum = 0.0;
+    for (int y = y_start; y < y_size; y += y_step) {
+        for (int x = x_start; x < x_size; x += x_step) {
+            int idx = (y * x_size) + x;
+            auto sample = src[idx];
+            float i = sample.x;
+            float q = sample.y;
+
+            if (!std::isnan(i) && !std::isnan(q)) {
+                i_sum += i;
+                q_sum += q;
             }
         }
-
-        // TODO shared reduction before atomics, if this should ever matter
-        //  3 x SM count x 1024 atomicAdds on one memory location should not be too bad
-        atomicAdd(result, acc_i);
-        atomicAdd(result + 1, acc_q);
-        atomicAdd(result + 2, n_samples);
     }
 
-    __global__ void ApplyDCBiasKernel(const IQ8 *src, int src_x_size, cufftComplex *dest, int dest_x_size,
-                                      int dest_x_stride, int dest_y_size, int dest_y_stride, float dc_i, float dc_q) {
-        const int x = threadIdx.x + blockIdx.x * blockDim.x;
-        const int y = threadIdx.y + blockIdx.y * blockDim.y;
+    // store each thread's result in shared memory, ensure all threads reach this point
+    i_shared_acc[shared_idx] = i_sum;
+    q_shared_acc[shared_idx] = q_sum;
+    __syncthreads();
 
-        const int dst_idx = y * dest_x_stride + x;
-        const int src_idx = y * src_x_size + x;
-
-        if (x < dest_x_size && y < dest_y_size) {
-            // signal data index, convert from 2 x uint8_t to 2 x Float32
-            auto iq8 = src[src_idx];
-            dest[dst_idx].x = static_cast<float>(iq8.i) - dc_i;
-            dest[dst_idx].y = static_cast<float>(iq8.q) - dc_q;
-        } else if (x < dest_x_stride && y < dest_y_stride) {
-            // zero pad index, both in range and azimuth
-            dest[dst_idx] = {0.0f, 0.0f};
+    // reduce the shared memory array to the first element
+    // Reduction #3: Sequential Addressing from NVidia Optimizing Parallel Reduction
+    for (int s = REDUCE_BLOCK_SIZE / 2; s > 0; s /= 2) {
+        if (shared_idx < s) {
+            i_shared_acc[shared_idx] += i_shared_acc[shared_idx + s];
+            q_shared_acc[shared_idx] += q_shared_acc[shared_idx + s];
         }
+        __syncthreads();
     }
 
+    // write the final result to global memory
+    if (shared_idx == 0) {
+        i_result_arr[result_idx] = i_shared_acc[0];
+        q_result_arr[result_idx] = q_shared_acc[0];
+    }
+}
 
-    __global__ void ReduceIQGain(const cufftComplex *data, int x_size, int x_stride, int y_size, double *result) {
-        const int y_start = blockIdx.y;
-        const int x_start = threadIdx.x;
-        const int y_step = gridDim.y;
-        const int x_step = blockDim.x;
+__global__ void GainCorrectionReduction(const cufftComplex* src, int x_size, int y_size, double* i_result_arr,
+                                        double* q_result_arr) {
+    __shared__ double i_sq_shared_acc[REDUCE_BLOCK_SIZE];
+    __shared__ double q_sq_shared_acc[REDUCE_BLOCK_SIZE];
 
+    const int shared_idx = threadIdx.x;
+    const int result_idx = blockIdx.y;
+    const int y_start = blockIdx.y;
+    const int x_start = threadIdx.x;
+    const int y_step = gridDim.y;
+    const int x_step = blockDim.x;
 
-        double i_sq = 0.0;
-        double q_sq = 0.0;
-        for (int y = y_start; y < y_size; y += y_step) {
-            for (int x = x_start; x < x_size; x += x_step) {
-                int idx = (y * x_stride) + x;
-                auto sample = data[idx];
-                float i = sample.x;
-                float q = sample.y;
+    double i_sq_sum = 0.0;
+    double q_sq_sum = 0.0;
+    for (int y = y_start; y < y_size; y += y_step) {
+        for (int x = x_start; x < x_size; x += x_step) {
+            int idx = (y * x_size) + x;
+            auto sample = src[idx];
+            float i = sample.x;
+            float q = sample.y;
 
-                i_sq += i*i;
-                q_sq += q*q;
-
+            if (!std::isnan(i) && !std::isnan(q)) {
+                i_sq_sum += (i * i);
+                q_sq_sum += (q * q);
             }
         }
-
-        // TODO shared reduction before atomics, if this should ever matter
-        //  3 x SM count x 1024 atomicAdds on one memory location should not be too bad
-        atomicAdd(result, i_sq);
-        atomicAdd(result + 1, q_sq);
     }
 
-    __global__ void ReduceQuadratureError(const cufftComplex *data, int x_size, int x_stride, int y_size, double *result) {
-        const int y_start = blockIdx.y;
-        const int x_start = threadIdx.x;
-        const int y_step = gridDim.y;
-        const int x_step = blockDim.x;
+    // store each thread's result in shared memory, ensure all threads reach this point
+    i_sq_shared_acc[shared_idx] = i_sq_sum;
+    q_sq_shared_acc[shared_idx] = q_sq_sum;
+    __syncthreads();
 
+    // reduce the shared memory array to the first element
+    // Reduction #3: Sequential Addressing from NVidia Optimizing Parallel Reduction
+    for (int s = REDUCE_BLOCK_SIZE / 2; s > 0; s /= 2) {
+        if (shared_idx < s) {
+            i_sq_shared_acc[shared_idx] += i_sq_shared_acc[shared_idx + s];
+            q_sq_shared_acc[shared_idx] += q_sq_shared_acc[shared_idx + s];
+        }
+        __syncthreads();
+    }
 
-        double iq_mul = 0.0;
-        double i_sq = 0.0;
-        double q_sq = 0.0;
-        for (int y = y_start; y < y_size; y += y_step) {
-            for (int x = x_start; x < x_size; x += x_step) {
-                int idx = (y * x_stride) + x;
-                auto sample = data[idx];
-                float i = sample.x;
-                float q = sample.y;
+    // write the final result to global memory
+    if (shared_idx == 0) {
+        i_result_arr[result_idx] = i_sq_shared_acc[0];
+        q_result_arr[result_idx] = q_sq_shared_acc[0];
+    }
+}
 
-                iq_mul += i*q;
-                i_sq += i*i;
-                q_sq += q*q;
+__global__ void PhaseCorrectionReduction(const cufftComplex* src, int x_size, int y_size, double* iq_result_arr,
+                                         double* i_sq_result_arr) {
+    __shared__ double iq_shared_acc[REDUCE_BLOCK_SIZE];
+    __shared__ double i_sq_shared_acc[REDUCE_BLOCK_SIZE];
 
+    const int shared_idx = threadIdx.x;
+    const int result_idx = blockIdx.y;
+    const int y_start = blockIdx.y;
+    const int x_start = threadIdx.x;
+    const int y_step = gridDim.y;
+    const int x_step = blockDim.x;
+
+    double iq_sum = 0.0;
+    double i_sq_sum = 0.0;
+    for (int y = y_start; y < y_size; y += y_step) {
+        for (int x = x_start; x < x_size; x += x_step) {
+            int idx = (y * x_size) + x;
+            auto sample = src[idx];
+            float i = sample.x;
+            float q = sample.y;
+
+            if (!std::isnan(i) && !std::isnan(q)) {
+                iq_sum += i * q;
+                i_sq_sum += i * i;
             }
         }
-
-        // TODO shared reduction before atomics, if this should ever matter
-        //  3 x SM count x 1024 atomicAdds on one memory location should not be too bad
-        atomicAdd(result, iq_mul);
-        atomicAdd(result + 1, i_sq);
-        atomicAdd(result + 2, q_sq);
     }
 
-    __global__ void ApplyGain(cufftComplex *data, int x_size, int x_stride, int y_size, float i_gain) {
-        const int x = threadIdx.x + blockIdx.x * blockDim.x;
-        const int y = threadIdx.y + blockIdx.y * blockDim.y;
+    // store each thread's result in shared memory, ensure all threads reach this point
+    iq_shared_acc[shared_idx] = iq_sum;
+    i_sq_shared_acc[shared_idx] = i_sq_sum;
+    __syncthreads();
 
+    // reduce the shared memory array to the first element
+    // Reduction #3: Sequential Addressing from NVidia Optimizing Parallel Reduction
+    for (int s = REDUCE_BLOCK_SIZE / 2; s > 0; s /= 2) {
+        if (shared_idx < s) {
+            iq_shared_acc[shared_idx] += iq_shared_acc[shared_idx + s];
+            i_sq_shared_acc[shared_idx] += i_sq_shared_acc[shared_idx + s];
+        }
+        __syncthreads();
+    }
 
-        int idx = (y * x_stride) + x;
+    // write the final result to global memory
+    if (shared_idx == 0) {
+        iq_result_arr[result_idx] = iq_shared_acc[0];
+        i_sq_result_arr[result_idx] = i_sq_shared_acc[0];
+    }
+}
 
+__global__ void CorrectDCBias(cufftComplex* data, int x_size, int y_size, float dc_i, float dc_q) {
+    const int x = threadIdx.x + blockIdx.x * blockDim.x;
+    const int y = threadIdx.y + blockIdx.y * blockDim.y;
+
+    const int idx = x + y * x_size;
+
+    if (x < x_size && y < y_size) {
+        data[idx].x -= dc_i;
+        data[idx].y -= dc_q;
+    }
+}
+
+__global__ void ApplyGainCorrection(cufftComplex* data, int x_size, int y_size, float i_gain) {
+    const int x = threadIdx.x + blockIdx.x * blockDim.x;
+    const int y = threadIdx.y + blockIdx.y * blockDim.y;
+
+    const int idx = (y * x_size) + x;
+
+    if (x < x_size && y < y_size) {
         data[idx].x /= i_gain;
-
     }
+}
 
-    __global__ void ApplyPhaseCorrection(cufftComplex *data, int x_size, int x_stride, int y_size, float sin_corr, float cos_corr) {
-        const int x = threadIdx.x + blockIdx.x * blockDim.x;
-        const int y = threadIdx.y + blockIdx.y * blockDim.y;
+__global__ void ApplyPhaseCorrection(cufftComplex* data, int x_size, int y_size, float sin_corr, float cos_corr) {
+    const int x = threadIdx.x + blockIdx.x * blockDim.x;
+    const int y = threadIdx.y + blockIdx.y * blockDim.y;
 
+    int idx = (y * x_size) + x;
 
-        int idx = (y * x_stride) + x;
+    auto pix = data[idx];
+    float i = pix.x;
+    float q = pix.y;
 
-        auto pix = data[idx];
-        float i = pix.x;
-        float q = pix.y;
+    float corr_q = (q - i * sin_corr) / cos_corr;
 
-        float corr_q = (q - i * sin_corr) / cos_corr;
-
+    if (x < x_size && y < y_size) {
         data[idx].y = corr_q;
-
     }
+}
+
+double SumSmallDeviceArray(double* d_data, int n) {
+    CHECK_BOOL(n < 100);
+    std::array<double, 100> h_data;
+    CHECK_CUDA_ERR(cudaMemcpy(h_data.data(), d_data, n * sizeof(h_data[0]), cudaMemcpyDeviceToHost));
+    return std::accumulate(h_data.begin(), h_data.begin() + n, 0.0);
+}
+
 }  // namespace
 
-#if 0
-void FormatRawIQ8(const IQ8* d_signal_in, IQ8* d_signal_out, ImgFormat img, const std::vector<uint32_t>& offsets) {
-    uint32_t* d_offsets;
-    const size_t byte_size = offsets.size() * sizeof(offsets[0]);
-    CHECK_CUDA_ERR(cudaMalloc(&d_offsets, byte_size));
-    CudaMallocCleanup cleanup(d_offsets);
-    CHECK_CUDA_ERR(cudaMemcpy(d_offsets, offsets.data(), byte_size, cudaMemcpyHostToDevice));
-    dim3 block_size(16, 16);
-    dim3 grid_size((img.range_size + 15) / 16, (img.azimuth_size + 15) / 16);
-
-    static_assert(sizeof(IQ8) == 2);
-    const int row_offset = img.data_line_offset / 2;  // accessed via IQ8*
-
-    CorrectRawKernel<<<grid_size, block_size>>>(d_signal_in, d_signal_out, img.range_size, img.azimuth_size, row_offset,
-                                                d_offsets);
-
-    CHECK_CUDA_ERR(cudaDeviceSynchronize());
-    CHECK_CUDA_ERR(cudaGetLastError());
-}
-#endif
-
-void CalculateDCBias(const IQ8 *d_signal_data, int range_size, int azimuth_size, size_t multiprocessor_count, SARResults &result) {
-    unsigned long long *d_result;
-    const size_t res_bsize = 8 * 3;
-    CHECK_CUDA_ERR(cudaMalloc(&d_result, res_bsize));
-    CudaMallocCleanup cleanup(d_result);
-    CHECK_CUDA_ERR(cudaMemset(d_result, 0, res_bsize));
-    dim3 block_size(1024);
-    dim3 grid_size(1, multiprocessor_count * 2);
-
-
-    // Accumulate I and Q over the whole dataset
-    ReduceSumRawIQData<<<grid_size, block_size>>>(d_signal_data, range_size, azimuth_size, d_result);
-
-    unsigned long long h_result[3];
-    CHECK_CUDA_ERR(cudaMemcpy(h_result, d_result, res_bsize, cudaMemcpyDeviceToHost));
-
-    //const int total_samples = h_result[2];
-
-    const int total_samples = range_size * azimuth_size;
-
-    // find the average signal value for I and Q, should be ~15.5f for 5 bit data;
-    result.dc_i = static_cast<double>(h_result[0]) / total_samples;
-    result.dc_q = static_cast<double>(h_result[1]) / total_samples;
-    printf("I/Q DC cuda = %f %f\n", result.dc_i, result.dc_q);
-    printf("bias = %f %f\n", result.dc_i - 15.5, result.dc_q - 15.5);
-    //result.total_samples = total_samples;
-
-    CHECK_CUDA_ERR(cudaDeviceSynchronize());
-    CHECK_CUDA_ERR(cudaGetLastError());
-}
-
-void ApplyDCBias(const IQ8 *d_signal_data, const SARResults &results, DevicePaddedImage &output) {
-    dim3 block_size(16, 16);
-    dim3 grid_size((output.XStride() + 15) / 16, (output.YStride() + 15) / 16);
-    ApplyDCBiasKernel<<<grid_size, block_size>>>(d_signal_data, output.XSize(), output.Data(),
-                                                 output.XSize(), output.XStride(), output.YSize(), output.YStride(),
-                                                 results.dc_i, results.dc_q);
-
-    CHECK_CUDA_ERR(cudaDeviceSynchronize());
-    CHECK_CUDA_ERR(cudaGetLastError());
-}
-
-void CalculateAndApplyGain(DevicePaddedImage &img, SARResults &results, int multiprocessor_count) {
-
-    double h_result[2];
-    double* d_result;
-    CHECK_CUDA_ERR(cudaMalloc(&d_result, sizeof(double) * 2));
-    cudaMemset(d_result, 0, 16);
-    CudaMallocCleanup clean(d_result);
+void RawDataCorrection(DevicePaddedImage& img, CorrectionParams par, SARResults& results) {
+    int n_reduce_blocks = 50;  // should be based on sm count
+    double* d_reduction_buffer1;
+    double* d_reduction_buffer2;
+    size_t red_byte_sz = sizeof(double) * n_reduce_blocks;
+    CHECK_CUDA_ERR(cudaMalloc(&d_reduction_buffer1, red_byte_sz));
+    CudaMallocCleanup clean1(d_reduction_buffer1);
+    CHECK_CUDA_ERR(cudaMalloc(&d_reduction_buffer2, red_byte_sz));
+    CudaMallocCleanup clean2(d_reduction_buffer2);
+    const int y_size = img.YSize();
+    const int x_size = img.XStride();
 
     {
-        dim3 block_size(1024);
-        dim3 grid_size(1, multiprocessor_count * 2);
-        ReduceIQGain<<<grid_size, block_size>>>(img.Data(), img.XSize(), img.XStride(), img.YSize(), d_result);
-        CHECK_CUDA_ERR(cudaMemcpy(&h_result[0], d_result, sizeof(double)*2, cudaMemcpyDeviceToHost));
+        // DC bias
 
+        double* d_i_sum = d_reduction_buffer1;
+        double* d_q_sum = d_reduction_buffer2;
+        {
+            dim3 block_sz(REDUCE_BLOCK_SIZE, 1);
+            dim3 grid_sz(1, n_reduce_blocks);
+            DCBiasReduction<<<grid_sz, block_sz>>>(img.Data(), x_size, y_size, d_i_sum, d_q_sum);
+        }
+
+        double i_dc = SumSmallDeviceArray(d_i_sum, n_reduce_blocks);
+        double q_dc = SumSmallDeviceArray(d_q_sum, n_reduce_blocks);
+        i_dc /= par.n_total_samples;
+        q_dc /= par.n_total_samples;
+
+        {
+            dim3 block_sz(16, 16);
+            dim3 grid_sz((x_size + 15) / 16, (y_size + 15) / 16);
+            CorrectDCBias<<<grid_sz, block_sz>>>(img.Data(), x_size, y_size, i_dc, q_dc);
+        }
+
+        printf("DC bias = %f %f\n", i_dc, q_dc);
+
+        results.dc_i = i_dc;
+        results.dc_q = q_dc;
     }
-
-    //printf("cuda gain results = %f %f\n", h_result[0], h_result[1]);
-    double gain = sqrt(h_result[0]/h_result[1]);
-    results.iq_gain = gain;
-    printf("I/Q Gain imbalance = %f\n", gain);
-    {
-        dim3 block_size(32, 32);
-        dim3 grid_size((img.XSize() + 31) / 32, (img.YSize() + 31) / 32);
-
-        ApplyGain<<<grid_size, block_size>>>(img.Data(), img.XSize(), img.XStride(), img.YSize(), gain);
-    }
-
-    CHECK_CUDA_ERR(cudaDeviceSynchronize());
-    CHECK_CUDA_ERR(cudaGetLastError());
-
-}
-
-void CalculateAndApplyPhaseCorrection(DevicePaddedImage &img, SARResults &results, int multiprocessor_count) {
-
-    double h_result[3];
-    double* d_result;
-    CHECK_CUDA_ERR(cudaMalloc(&d_result, sizeof(double) * 3));
-    cudaMemset(d_result, 0, 24);
-    CudaMallocCleanup clean(d_result);
 
     {
-        dim3 block_size(1024);
-        dim3 grid_size(1, multiprocessor_count * 2);
-        unsigned long long* d_cnt;
-        cudaMalloc(&d_cnt, 8);
-        cudaMemset(d_cnt, 0, 8);
-        ReduceQuadratureError<<<grid_size, block_size>>>(img.Data(), img.XSize(), img.XStride(), img.YSize(), d_result);
-        CHECK_CUDA_ERR(cudaMemcpy(&h_result[0], d_result, sizeof(double)*3, cudaMemcpyDeviceToHost));
+        // Gain correction
 
+        double i_gain = 0.0;
 
+        double* d_i_sq_sum = d_reduction_buffer1;
+        double* d_q_sq_sum = d_reduction_buffer2;
+        {
+            dim3 block_sz(REDUCE_BLOCK_SIZE, 1);
+            dim3 grid_sz(1, n_reduce_blocks);
+            GainCorrectionReduction<<<grid_sz, block_sz>>>(img.Data(), x_size, y_size, d_i_sq_sum, d_q_sq_sum);
+        }
+
+        double i_sq_sum = SumSmallDeviceArray(d_i_sq_sum, n_reduce_blocks);
+        double q_sq_sum = SumSmallDeviceArray(d_q_sq_sum, n_reduce_blocks);
+
+        i_gain = sqrt(i_sq_sum / q_sq_sum);
+        results.iq_gain = i_gain;
+
+        {
+            dim3 block_sz(16, 16);
+            dim3 grid_sz((x_size + 15) / 16, (y_size + 15) / 16);
+            ApplyGainCorrection<<<grid_sz, block_sz>>>(img.Data(), x_size, y_size, i_gain);
+        }
     }
 
-
-    double iq_mul = h_result[0];
-    double i_sq = h_result[1];
-    double q_sq = h_result[2];
-    double c0 = iq_mul / i_sq;
-    double c1 = iq_mul / q_sq;
-
-    //printf("%f %f\n", c0, c1);
-
-    double quad_misconf = asin(c0);
-
-    //printf("quadruture depart: %f\n", quad_misconf);
-
-    printf("quadrature depart = %f\n", (quad_misconf * 360.0) / (M_PI * 2));
-
-    results.quad_depart = (quad_misconf * 360.0) / (M_PI * 2);
-
-    float sin_corr = c0;
-    float cos_corr = sqrt(1 - c0 * c0);
-
-
-    //printf("cuda phase results = %f %f %f\n", h_result[0], h_result[1], h_result[2]);
     {
-        dim3 block_size(32, 32);
-        dim3 grid_size((img.XSize() + 31) / 32, (img.YSize() + 31) / 32);
+        // Phase correction
 
-        ApplyPhaseCorrection<<<grid_size, block_size>>>(img.Data(), img.XSize(), img.XStride(), img.YSize(), sin_corr, cos_corr);
+        double* d_iq_sum = d_reduction_buffer1;
+        double* d_i_sq_sum = d_reduction_buffer2;
+        {
+            dim3 block_sz(REDUCE_BLOCK_SIZE, 1);
+            dim3 grid_sz(1, n_reduce_blocks);
+            PhaseCorrectionReduction<<<grid_sz, block_sz>>>(img.Data(), x_size, y_size, d_iq_sum, d_i_sq_sum);
+        }
+
+        double iq_sum = SumSmallDeviceArray(d_iq_sum, n_reduce_blocks);
+        double i_sq_sum = SumSmallDeviceArray(d_i_sq_sum, n_reduce_blocks);
+
+        double delta_theta = iq_sum / i_sq_sum;
+        float sin_corr = delta_theta;
+        float cos_corr = (1 - delta_theta * delta_theta);
+        double quad_misconf = asin(iq_sum / i_sq_sum);
+
+        double deg_misconf = 360 * quad_misconf / (2 * M_PI);
+
+        printf("quad misconf = %f\n", deg_misconf);
+        results.phase_error = deg_misconf;
+        {
+            dim3 block_sz(16, 16);
+            dim3 grid_sz((x_size + 15) / 16, (y_size + 15) / 16);
+            ApplyPhaseCorrection<<<grid_sz, block_sz>>>(img.Data(), x_size, y_size, sin_corr, cos_corr);
+        }
     }
-
-    CHECK_CUDA_ERR(cudaDeviceSynchronize());
-    CHECK_CUDA_ERR(cudaGetLastError());
-
-}
-
-
-void iq_correct_cuda(const std::vector<IQ8> &vec, DevicePaddedImage &out) {
-
-    printf("CUDA IQ CORRECTION:\n");
-    IQ8* d_iq8;
-    size_t byte_size = vec.size() * sizeof(IQ8);
-    cudaMalloc(&d_iq8, byte_size);
-    CudaMallocCleanup  clean(d_iq8);
-    cudaMemcpy(d_iq8, vec.data(), byte_size, cudaMemcpyHostToDevice);
-
-    SARResults results;
-    CalculateDCBias(d_iq8, out.XSize(), out.YSize(), 32, results);
-    ApplyDCBias(d_iq8, results, out);
-
-
-    CalculateAndApplyGain(out, results, 32);
-
-    CalculateAndApplyPhaseCorrection(out, results, 32);
-
-
-    CHECK_CUDA_ERR(cudaDeviceSynchronize());
-    CHECK_CUDA_ERR(cudaGetLastError());
-
 }

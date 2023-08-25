@@ -49,6 +49,24 @@ namespace {
         }
     }
 
+    __global__ void NaNZeroKernel(cufftComplex* data, int x_size, int y_size) {
+        const int x = threadIdx.x + blockIdx.x * blockDim.x;
+        const int y = threadIdx.y + blockIdx.y * blockDim.y;
+
+        const int idx = x + y * x_size;
+
+        if (x < x_size && y < y_size) {
+            if(std::isnan(data[idx].x))
+            {
+                data[idx].x = 0.0f;
+            }
+            if(std::isnan(data[idx].y))
+            {
+                data[idx].y = 0.0f;
+            }
+        }
+    }
+
 // original code from with modification to use cufftComplex instead
 // https://github.com/JonathanWatkins/CUDA/blob/master/NvidiaCourse/Exercises/transpose/transpose.cu
     constexpr int TRANSPOSE_BLOCK_DIM = 16;
@@ -174,4 +192,13 @@ namespace {
         CHECK_CUDA_ERR(cudaMemcpy(h_block_sums.data(), d_block_sums, byte_size, cudaMemcpyDeviceToHost));
 
         return std::accumulate(h_block_sums.begin(), h_block_sums.end(), 0.0);
+    }
+
+    void DevicePaddedImage::ZeroNaNs()
+    {
+        dim3 block_sz(16, 16);
+        dim3 grid_sz((x_stride_ + 15) / 16, (y_stride_ + 15) / 16);
+
+        NaNZeroKernel<<<grid_sz, block_sz>>>(d_data_, x_stride_, y_stride_);
+
     }

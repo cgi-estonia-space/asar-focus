@@ -431,26 +431,26 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     sar_meta.img.range_size = range_sz;
     sar_meta.img.azimuth_size = echos.size();
 
-    img_data.resize(sar_meta.img.range_size * sar_meta.img.azimuth_size);
+    img_data.clear();
+    img_data.resize(sar_meta.img.range_size * sar_meta.img.azimuth_size, {NAN, NAN});
+
+    sar_meta.total_raw_samples = 0;
 
     for(size_t y = 0; y < echos.size(); y++)
     {
         const auto& e = echos[y];
         size_t idx = y * range_sz;
         idx += e.swst_code - min_swst;
-
-        memcpy(&img_data[idx], e.raw_data.data(), e.raw_data.size() * 8);
+        const size_t n_samples = e.raw_data.size();
+        memcpy(&img_data[idx], e.raw_data.data(), n_samples * 8);
+        sar_meta.total_raw_samples += n_samples;
     }
 
     std::cout << "SENSING START = " <<  asar_meta.sensing_start << "\n";
     std::cout << "First echo = " << MjdToPtime(echos.front().isp_sensing_time) << "\n";
 
-    for(size_t i = 0; i < 20; i ++ )
-    {
-        std::cout << MjdToPtime(echos[i].isp_sensing_time) << "\n";
-    }
 
-    //TODO init guess handling?
+    //TODO init guess handling? At the moment just
     double init_guess_lat = asar_meta.start_nadir_lat;
     double init_guess_lon = asar_meta.start_nadir_lon;
     if(asar_meta.ascending)

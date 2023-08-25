@@ -7,10 +7,9 @@
 #include "asar_lvl0_parser.h"
 
 
-struct IQ8
+struct CorrectionParams
 {
-    uint8_t i;
-    uint8_t q;
+    size_t n_total_samples;
+    //int n_sm;
 };
-
-void iq_correct_cuda(const std::vector<IQ8>& vec, DevicePaddedImage& out);
+void RawDataCorrection(DevicePaddedImage& img, CorrectionParams par, SARResults& results);

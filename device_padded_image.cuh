@@ -124,6 +124,8 @@
 
         double CalcTotalIntensity(size_t sm_count);
 
+        void ZeroNaNs();
+
         DevicePaddedImage() = default;
 
         DevicePaddedImage(const DevicePaddedImage&) = delete;

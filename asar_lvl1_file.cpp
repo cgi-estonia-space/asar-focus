@@ -33,6 +33,7 @@ namespace
             rd.calc_i_bias = sar_meta.results.dc_i;
             rd.calc_q_bias = sar_meta.results.dc_q;
             rd.calc_gain = sar_meta.results.iq_gain;
+            rd.calc_quad = sar_meta.results.phase_error;
             //todo
         }
 

@@ -38,12 +38,8 @@ inline boost::posix_time::ptime MjdToPtime(mjd m)
 
 inline mjd PtimeToMjd(boost::posix_time::ptime in)
 {
-
     boost::gregorian::date d_0(2000, 1, 1);
-
     boost::gregorian::date d_1(in.date());
-
-    std::cout << "SIIN : \n\n" << in << "\n\n";
 
     mjd r = {};
     r.days = (d_1 - d_0).days();
