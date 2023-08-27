@@ -1,84 +1,59 @@
-#include <filesystem>
 #include <stdio.h>
-#include <vector>
-#include <string>
-#include <iostream>
-//#include <boost/algorithm/algorithm.hpp>
-
-#include "processing_velocity_estimation.h"
-#include <boost/algorithm/string.hpp>
-#include <gdal/gdal_priv.h>
-
-
-#include "orbit_state_vector.h"
-#include "geo_tools.h"
-#include "cufft_plan.h"
-#include "checks.h"
 #include <complex>
+#include <filesystem>
+#include <iostream>
+#include <string>
+#include <vector>
 
-#include "fractional_doppler_centroid.cuh"
+#include <gdal/gdal_priv.h>
+#include <boost/algorithm/string.hpp>
+#include "sar/processing_velocity_estimation.h"
 
-#include "device_padded_image.cuh"
-#include "envisat_file_format.h"
-#include "asar_lvl1_file.h"
+#include "cuda_util/cufft_plan.h"
+#include "cuda_util/device_padded_image.cuh"
+#include "envisat_format/asar_lvl1_file.h"
+#include "envisat_format/envisat_file_format.h"
+#include "envisat_format/envisat_ins_file.h"
+#include "sar/fractional_doppler_centroid.cuh"
+#include "sar/iq_correction.cuh"
+#include "sar/orbit_state_vector.h"
+#include "sar/processing_velocity_estimation.h"
+#include "sar/range_compression.cuh"
+#include "sar/range_doppler_algorithm.cuh"
+#include "sar/sar_chirp.h"
+#include "util/checks.h"
+#include "util/geo_tools.h"
+#include "util/img_output.h"
+#include "util/math_utils.h"
 
-#include "sar_chirp.h"
-
-#include "range_compression.cuh"
-
-#include "img_output.h"
-
-#include "range_doppler_algorithm.cuh"
-
-#include "iq_correction.cuh"
-
-#include "envisat_ins_file.h"
-#include "math_utils.h"
-
-
-
-
-struct IQ16
-{
+struct IQ16 {
     int16_t i;
     int16_t q;
 };
 
-
 bool wif = false;
 
-void LoadMetadata(const std::string &path, SARMetadata &metadata);
-
+void LoadMetadata(const std::string& path, SARMetadata& metadata);
 
 auto time_start() { return std::chrono::steady_clock::now(); }
 
-void time_stop(std::chrono::steady_clock::time_point beg, const char *msg) {
+void time_stop(std::chrono::steady_clock::time_point beg, const char* msg) {
     auto end = std::chrono::steady_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(end - beg).count();
     std::cout << msg << " time = " << diff << " ms\n";
 }
 
-void WriteOutput(SARMetadata& meta)
-{
-
-}
-
-int main(int argc, char *argv[]) {
-
-
-
+int main(int argc, char* argv[]) {
     if (argc != 3) {
-
-        //to arg parse
+        // to arg parse
 
         printf("error: arg 1 => input file, arg 2 => aux path");
         return 1;
     }
 
-
     std::string in_path = argv[1];
     const char* aux_path = argv[2];
-    FILE *fp = fopen(in_path.c_str(), "r");
+    FILE* fp = fopen(in_path.c_str(), "r");
     if (!fp) {
         printf("failed to open ... %s\n", in_path.c_str());
         return 1;
@@ -96,18 +71,14 @@ int main(int argc, char *argv[]) {
 
     GDALAllRegister();
 
-
     SARMetadata metadata = {};
     ASARMetadata asar_meta = {};
 
     std::vector<std::complex<float>> h_data;
     ParseIMFile(data, aux_path, metadata, asar_meta, h_data);
 
-
-
     std::string wif_name_base = asar_meta.product_name;
     wif_name_base.resize(wif_name_base.size() - 3);
-
 
     int az_size = metadata.img.azimuth_size;
     int rg_size = metadata.img.range_size;
@@ -121,10 +92,8 @@ int main(int argc, char *argv[]) {
     auto az_plan_sz = fft_sizes.upper_bound(az_size);
 
     printf("azimuth FFT padding sz = %d (2 ^ %d * 3 ^ %d * 5 ^ %d * 7 ^ %d)\n", az_plan_sz->first,
-           az_plan_sz->second[0],
-           az_plan_sz->second[1], az_plan_sz->second[2], az_plan_sz->second[3]);
+           az_plan_sz->second[0], az_plan_sz->second[1], az_plan_sz->second[2], az_plan_sz->second[3]);
     int az_padded = az_plan_sz->first;
-
 
     printf("FFT paddings:\n");
     printf("rg  = %d -> %d\n", rg_size, rg_padded);
@@ -134,8 +103,7 @@ int main(int argc, char *argv[]) {
     img.InitPadded(rg_size, az_size, rg_padded, az_padded);
     img.ZeroMemory();
 
-    for(int y = 0; y < az_size; y++)
-    {
+    for (int y = 0; y < az_size; y++) {
         auto* dest = img.Data() + y * rg_padded;
         auto* src = h_data.data() + y * rg_size;
         cudaMemcpy(dest, src, rg_size * 8, cudaMemcpyHostToDevice);
@@ -145,23 +113,20 @@ int main(int argc, char *argv[]) {
 
     img.ZeroNaNs();
 
-
     metadata.results.Vr_poly = EstimateProcessingVelocity(metadata);
-
-
 
     auto chirp = GenerateChirpData(metadata.chirp, rg_padded);
 
     std::vector<float> chirp_freq;
 
-    if(wif) {
-        FILE *fpe = fopen("/tmp/chirp.cf32", "w");
+    if (wif) {
+        FILE* fpe = fopen("/tmp/chirp.cf32", "w");
         fwrite(chirp.data(), 8, chirp.size(), fpe);
         fclose(fpe);
     }
 
     // TODO
-    //iq_correct_cuda(raw_adc, img);
+    // iq_correct_cuda(raw_adc, img);
     if (wif) {
         std::string path = "/tmp/";
         path += wif_name_base + "_raw.tif";
@@ -170,19 +135,14 @@ int main(int argc, char *argv[]) {
 
     metadata.results.doppler_centroid_poly = CalculateDopplerCentroid(img, metadata.pulse_repetition_frequency);
 
-    //return 0;
-
-
+    // return 0;
 
     printf("Image GPU byte size = %f GB\n", img.TotalByteSize() / 1e9);
     printf("Estimated GPU memory usage ~%f GB\n", (img.TotalByteSize() * 2) / 1e9);
 
     CudaWorkspace d_workspace(img.TotalByteSize());
 
-
-
     RangeCompression(img, chirp, metadata.chirp.n_samples, d_workspace);
-
 
     metadata.img.range_size = img.XSize();
 
@@ -194,12 +154,9 @@ int main(int argc, char *argv[]) {
 
     DevicePaddedImage out;
 
-
     RangeDopplerAlgorithm(metadata, img, out, std::move(d_workspace));
 
-
     out.ZeroFillPaddings();
-
 
     cudaDeviceSynchronize();
 
@@ -208,15 +165,13 @@ int main(int argc, char *argv[]) {
         path += wif_name_base + "_slc.tif";
         WriteIntensityPaddedImg(out, path.c_str());
     }
-    
+
     printf("done!\n");
 
-
-
-    cufftComplex* res = new cufftComplex[out.XStride()*out.YStride()];
+    cufftComplex* res = new cufftComplex[out.XStride() * out.YStride()];
     out.CopyToHostPaddedSize(res);
 
-    //metadata.
+    // metadata.
 
     MDS mds;
 
@@ -230,7 +185,7 @@ int main(int argc, char *argv[]) {
         int range_stride = out.XStride();
         std::vector<IQ16> row(range_size);
         for (int y = 0; y < out.YSize(); y++) {
-            //printf("y = %d\n", y);
+            // printf("y = %d\n", y);
             for (int x = 0; x < out.XSize(); x++) {
                 auto pix = res[x + y * range_stride];
                 int tambov = 1000;
@@ -243,25 +198,14 @@ int main(int argc, char *argv[]) {
                 row[x] = iq16;
             }
 
-            memset(&mds.buf[y*mds.record_size], 0, 17);
-            memcpy(&mds.buf[y*mds.record_size + 17], row.data(), row.size()*4);
+            memset(&mds.buf[y * mds.record_size], 0, 17);
+            memcpy(&mds.buf[y * mds.record_size + 17], row.data(), row.size() * 4);
         }
-
     }
 
-
     cudaDeviceSynchronize();
-
-    WriteOutput(metadata);
 
     WriteLvl1(metadata, asar_meta, mds);
 
     return 0;
-
 }
-
-
-
-
-
-

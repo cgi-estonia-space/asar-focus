@@ -4,40 +4,68 @@ project(asar_focus CUDA CXX)
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CXX_STANDARD  17)
 
+
+set(ENVISAT_FORMAT_FILES
+        envisat_format/asar_constants.cpp
+        envisat_format/asar_constants.h
+        envisat_format/asar_lvl0_parser.cpp
+        envisat_format/asar_lvl0_parser.h
+        envisat_format/asar_lvl1_file.cpp
+        envisat_format/asar_lvl1_file.h
+        envisat_format/bswap_util.h
+        envisat_format/envisat_file_format.h
+        envisat_format/envisat_ins_file.cpp
+        envisat_format/envisat_ins_file.h
+        envisat_format/envisat_lvl1_dsd.h
+        envisat_format/envisat_mph.h
+        envisat_format/envisat_ph.cpp
+        envisat_format/envisat_ph.h
+        envisat_format/envisat_sph.h
+        envisat_format/envisat_types.h
+        envisat_format/envisat_utils.h
+
+        )
+
+set(SAR_SOURCES
+        sar/fractional_doppler_centroid.cu
+        sar/fractional_doppler_centroid.cuh
+        sar/iq_correction.cu
+        sar/iq_correction.cuh
+        sar/orbit_state_vector.cpp
+        sar/orbit_state_vector.h
+        sar/processing_velocity_estimation.cpp
+        sar/processing_velocity_estimation.h
+        sar/range_compression.cu
+        sar/range_compression.cuh
+        sar/range_doppler_algorithm.cu
+        sar/range_doppler_algorithm.cuh
+        sar/sar_chirp.h
+        sar/sar_metadata.h
+)
+
+set(CUDA_UTIL_SOURCES
+        cuda_util/cuda_cleanup.h
+        cuda_util/cuda_util.h
+        cuda_util/cuda_workplace.h
+        cuda_util/cufft_plan.cpp
+        cuda_util/cufft_plan.h
+        cuda_util/device_padded_image.cu
+        cuda_util/device_padded_image.cuh
+        )
+
+set(UTIL_SOURCES
+        util/checks.h
+        util/geo_tools.cpp
+        util/geo_tools.h
+        util/img_output.cpp
+        util/img_output.h
+        util/math_utils.cpp
+        util/math_utils.h
+        )
+
 set(SOURCES
-        main.cpp
-        asar_lvl0_parser.cpp
-        asar_constants.cpp
-        device_padded_image.cu
-        range_doppler_algorithm.cu
-        device_padded_image.cuh
-        cuda_workplace.h
-        cuda_util.h
-        range_compression.cu
-        cuda_cleanup.h
-        checks.h
-        cufft_plan.cpp
-        cufft_plan.h
-        img_output.cpp
-        img_output.h
-        math_utils.h
-        math_utils.cpp
-        iq_correction.cu
-        iq_correction.cuh
-        envisat_file_format.h
-        processing_velocity_estimation.h
-        processing_velocity_estimation.cpp
-        fractional_doppler_centroid.cu
-        fractional_doppler_centroid.cuh
-        envisat_lvl1_dsd.h
-        bswap_util.h
-        envisat_sph.h
-        envisat_mph.h
-        envisat_ph.cpp
-        envisat_ph.h
-        asar_lvl1_file.cpp
-        asar_lvl1_file.h
-        envisat_utils.h envisat_ins_file.cpp envisat_ins_file.h orbit_state_vector.cpp orbit_state_vector.h geo_tools.cpp geo_tools.h)
+        main.cpp ${ENVISAT_FORMAT_FILES} ${SAR_SOURCES} ${CUDA_UTIL_SOURCES} ${UTIL_SOURCES}
+)
 
 add_executable(asar_focus ${SOURCES})
 set_target_properties(asar_focus PROPERTIES
@@ -65,7 +93,7 @@ set_property(TARGET asar_focus PROPERTY CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITEC
 
 INCLUDE_DIRECTORIES(${CUDAToolkit_INCLUDE_DIRS})
 
-target_include_directories(asar_focus PRIVATE ${GDAL_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
+target_include_directories(asar_focus PRIVATE ${GDAL_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} .)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
     message("Also adding 'stdc++fs' for linking since the g++ version ${CMAKE_CXX_COMPILER_VERSION} requires it.")
     target_link_libraries(asar_focus PRIVATE gdal cufft stdc++fs)
