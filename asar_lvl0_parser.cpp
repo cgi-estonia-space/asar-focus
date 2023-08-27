@@ -149,9 +149,9 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
 
     sar_meta.osv = FindOrbits(asar_meta.sensing_start, asar_meta.sensing_stop);
     sar_meta.platform_velocity = CalcVelocity(sar_meta.osv[sar_meta.osv.size()/2]);
-    sar_meta.results.Vr = sar_meta.platform_velocity * 0.94;
+    sar_meta.results.Vr_poly = {0, 0, sar_meta.platform_velocity * 0.94};
 
-    printf("platform velocity = %f, initial Vr = %f\n", sar_meta.platform_velocity, sar_meta.results.Vr);
+    printf("platform velocity = %f, initial Vr = %f\n", sar_meta.platform_velocity, CalcVr(sar_meta, 0));
 
 
     InstrumentFile ins_file = {};

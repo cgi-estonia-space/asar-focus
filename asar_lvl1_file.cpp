@@ -98,9 +98,31 @@ namespace
             az.num_look_az = 1;
             az.to_bw_az = sar_meta.pulse_repetition_frequency * sar_meta.azimuth_bandwidth_fraction;
             CopyStrPad(az.filter_az, "NONE");
-            double Vr = sar_meta.results.Vr;
-            az.az_fm_rate[0] = -2 * (Vr * Vr) / (sar_meta.wavelength * sar_meta.slant_range_first_sample); // TODO proper polyfit?
-            az.ax_fm_origin = asar_meta.two_way_slant_range_time * 1e9;
+
+            // refit Vr polynomial to a Ka polynomial
+            // internal Vr polynimal is fitted to range index, Envisat format uses two way slant range time from first
+            //TODO potentially also use Ka Polynomial internally in azimuth compression?
+            std::vector<double> Ka_vec;
+            std::vector<double> t_vec;
+            constexpr int N = 10;
+            double t0 = asar_meta.two_way_slant_range_time;
+            for(int i = 0; i < N; i++)
+            {
+                int range_idx = (sar_meta.img.range_size * i) / N;
+                double Vr = CalcVr(sar_meta, range_idx);
+                double R0 = CalcR0(sar_meta, range_idx);
+                double Ka = -2 * (Vr * Vr) / (sar_meta.wavelength * R0);
+                double two_way_slant_time =  2 * (R0 / SOL);
+                Ka_vec.push_back(Ka);
+                t_vec.push_back(two_way_slant_time - t0);
+            }
+
+            auto poly = polyfit(t_vec, Ka_vec, 2);
+
+            az.az_fm_rate[0] = poly.at(2);
+            az.az_fm_rate[1] = poly.at(1);
+            az.az_fm_rate[2] = poly.at(0);
+            az.ax_fm_origin = t0 * 1e9;
             az.dop_amb_conf = 0.0f;
         }
 
@@ -295,9 +317,17 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
             size_t offset = offsetof(decltype(out), dop_centroid_coeffs);
             constexpr size_t size = sizeof(out.dop_centroid_coeffs);
             static_assert(size == 55);
+
+
+            //convert DC polynomial to Envisat format
+            // polynomial internally fitted to range sample index, Envisat format uses two way slant range time, starting from first sample
+            const double dt = 1/sar_meta.chirp.range_sampling_rate;
+            const auto& poly = sar_meta.results.doppler_centroid_poly;
             out.dop_centroid_coeffs.zero_doppler_time = PtimeToMjd(sar_meta.first_line_time);
-            out.dop_centroid_coeffs.slant_range_time = sar_meta.slatn_range_first_time;
-            out.dop_centroid_coeffs.dop_coef[0] = sar_meta.results.doppler_centroid;
+            out.dop_centroid_coeffs.slant_range_time = asar_meta.two_way_slant_range_time * 1e9;
+            out.dop_centroid_coeffs.dop_coef[0] = poly.at(2);
+            out.dop_centroid_coeffs.dop_coef[1] = poly.at(1) / dt;
+            out.dop_centroid_coeffs.dop_coef[2] = poly.at(0) / (dt * dt);
             out.dop_centroid_coeffs.BSwap();
             sph.dsds[3].SetInternalDSD("DOP CENTROID COEFFS ADS", 'A', offset, 1, size);
         }

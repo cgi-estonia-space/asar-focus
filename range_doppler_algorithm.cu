@@ -234,7 +234,7 @@ namespace {
 #endif
 
 
-        double Vr = metadata.results.Vr;
+        double Vr = CalcVr(metadata, metadata.img.range_size / 2);
         printf("radar velocity Vr = %f\n", Vr);
 
 
@@ -250,7 +250,9 @@ namespace {
         k_args.prf = metadata.pulse_repetition_frequency;
         //k_args.doppler_centroid = metadata.results.doppler_centroid;
         k_args.azimuth_bandwidth_fraction = 0.8;
-        k_args.dc_steps = metadata.results.doppler_centroid / (metadata.pulse_repetition_frequency / src_img.YStride());
+
+        double dc = CalcDopplerCentroid(metadata, metadata.img.range_size / 2);
+        k_args.dc_steps = dc / (metadata.pulse_repetition_frequency / src_img.YStride());
 
         if(k_args.dc_steps != 0) {
             printf("DC steps = %d\n", k_args.dc_steps);

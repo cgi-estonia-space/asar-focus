@@ -33,6 +33,7 @@
 #include "iq_correction.cuh"
 
 #include "envisat_ins_file.h"
+#include "math_utils.h"
 
 
 
@@ -145,13 +146,8 @@ int main(int argc, char *argv[]) {
     img.ZeroNaNs();
 
 
-    double Vr = EstimateProcessingVelocity(metadata);
+    metadata.results.Vr_poly = EstimateProcessingVelocity(metadata);
 
-    metadata.results.Vr = Vr;
-
-    //metadata.results.Vr = 7097.110219566418;
-
-    printf("Vr = %f\n", Vr);
 
 
     auto chirp = GenerateChirpData(metadata.chirp, rg_padded);
@@ -172,11 +168,10 @@ int main(int argc, char *argv[]) {
         WriteIntensityPaddedImg(img, path.c_str());
     }
 
+    metadata.results.doppler_centroid_poly = CalculateDopplerCentroid(img, metadata.pulse_repetition_frequency);
 
-    double dc = 0.0;
-    CalculateDopplerCentroid(img, metadata.pulse_repetition_frequency, dc);
+    //return 0;
 
-    metadata.results.doppler_centroid = dc;
 
 
     printf("Image GPU byte size = %f GB\n", img.TotalByteSize() / 1e9);

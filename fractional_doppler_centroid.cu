@@ -4,6 +4,7 @@
 
 #include "checks.h"
 #include "cuda_cleanup.h"
+#include "math_utils.h"
 
 namespace {
     constexpr int BLOCK_X_SIZE = 32;
@@ -11,17 +12,17 @@ namespace {
     constexpr int TOTAL_BLOCK_SIZE = BLOCK_X_SIZE * BLOCK_Y_SIZE;
 }  // namespace
 
-__global__ void PhaseDifference(const cufftComplex *data, cufftComplex *result, int x_size, int x_stride, int y_size) {
+__global__ void PhaseDifference(const cufftComplex *data, cufftComplex *result, int x_start, int x_end, int x_stride, int y_size) {
     __shared__ cufftComplex shared_acc[TOTAL_BLOCK_SIZE];
 
     const int y = threadIdx.y + blockDim.y * blockIdx.y;
-    const int x = threadIdx.x + blockDim.x * blockIdx.x;
+    const int x = x_start + threadIdx.x + blockDim.x * blockIdx.x;
     const int shared_idx = threadIdx.x + threadIdx.y * BLOCK_X_SIZE;
     const int result_idx = blockIdx.x + blockIdx.y * gridDim.x;
 
     // each thread calculates a single phase difference between azimuth lines
     cufftComplex diff = {};
-    if (x < x_size && y >= 1 && y < y_size) {
+    if (x < x_end && y >= 1 && y < y_size) {
         const int prev_idx = (y - 1) * x_stride + x;
         const int cur_idx = y * x_stride + x;
 
@@ -75,33 +76,68 @@ __global__ void ReduceComplexSingleBlock(cufftComplex *d_array, int n_elem) {
     }
 }
 
-void CalculateDopplerCentroid(const DevicePaddedImage &d_img, double prf, double &doppler_centroid) {
+std::vector<double> CalculateDopplerCentroid(const DevicePaddedImage &d_img, double prf) {
+
+
+    std::vector<double> dc_results;
+    std::vector<double> dc_idx;
+
+    constexpr int N_DC_CALC = 32; //TODO investigate
+    constexpr int POLY_ORDER = 2;
+
     const int azimuth_size = d_img.YSize();
-    int range_size = d_img.XSize();
+    const int range_size = d_img.XSize();
+    const int step = range_size / N_DC_CALC;
 
-    dim3 block_size(BLOCK_X_SIZE, BLOCK_Y_SIZE);
-    dim3 grid_size((range_size + block_size.x - 1) / block_size.x, (azimuth_size + block_size.y - 1) / block_size.y);
+    for(int x_begin = 0; x_begin < range_size; x_begin += step) {
 
-    const int total_blocks = grid_size.x * grid_size.y;
-    size_t bsize = total_blocks * sizeof(cufftComplex);
-    cufftComplex *d_sum;
-    CHECK_CUDA_ERR(cudaMalloc(&d_sum, bsize));
-    CudaMallocCleanup cleanup(d_sum);
-    // Each block calculates a sum of 32x32 phase differences to d_sum, to avoid floating point error accumulation
-    PhaseDifference<<<grid_size, block_size>>>(d_img.Data(), d_sum, range_size, d_img.XStride(), azimuth_size);
-    // Single thread block reducing d_sum, multistep reduction not needed
-    ReduceComplexSingleBlock<<<1, 1024>>>(d_sum, total_blocks);
 
-    // final result is at d_sum[0]
-    std::complex<float> h_res;
-    static_assert(sizeof(h_res) == sizeof(d_sum[0]));
-    CHECK_CUDA_ERR(cudaMemcpy(&h_res, d_sum, sizeof(h_res), cudaMemcpyDeviceToHost));
-    CHECK_CUDA_ERR(cudaGetLastError());
+        const int x_end = x_begin + step;
+        dim3 block_size(BLOCK_X_SIZE, BLOCK_Y_SIZE);
+        dim3 grid_size((step + block_size.x - 1) / block_size.x,
+                       (azimuth_size + block_size.y - 1) / block_size.y);
 
-    const double angle = atan2(h_res.imag(), h_res.real());
-    const double fraction = angle / (2 * M_PI);
-    doppler_centroid = prf * fraction;
-    //std::cout << "DC accumulated = " << h_res << "\n";
-    //std::cout << "DC fraction = " << fraction << "\n";
-    std::cout << "Doppler Centroid = " << doppler_centroid << " Hz\n";
+        const int total_blocks = grid_size.x * grid_size.y;
+        size_t bsize = total_blocks * sizeof(cufftComplex);
+        cufftComplex* d_sum;
+        CHECK_CUDA_ERR(cudaMalloc(&d_sum, bsize));
+        CudaMallocCleanup cleanup(d_sum);
+        // Each block calculates a sum of 32x32 phase differences to d_sum, to avoid floating point error accumulation
+
+        PhaseDifference<<<grid_size, block_size>>>(d_img.Data(), d_sum, x_begin, x_end, d_img.XStride(), azimuth_size);
+        // Single thread block reducing d_sum, multistep reduction not needed
+        ReduceComplexSingleBlock<<<1, 1024>>>(d_sum, total_blocks);
+
+        // final result is at d_sum[0]
+        std::complex<float> h_res;
+        static_assert(sizeof(h_res) == sizeof(d_sum[0]));
+        CHECK_CUDA_ERR(cudaMemcpy(&h_res, d_sum, sizeof(h_res), cudaMemcpyDeviceToHost));
+        CHECK_CUDA_ERR(cudaGetLastError());
+
+        const double angle = atan2(h_res.imag(), h_res.real());
+        const double fraction = angle / (2 * M_PI);
+        const double doppler_centroid = prf * fraction;
+
+        dc_results.push_back(doppler_centroid);
+        dc_idx.push_back((x_begin + x_end) / 2);
+    }
+
+    auto dc_poly = polyfit(dc_idx, dc_results, POLY_ORDER);
+
+    printf("Doppler Centroid result(range sample - Hz):\n");
+    for(int i = 0; i < N_DC_CALC; i++)
+    {
+        if(i && (i % 4) == 0) {
+            printf("\n");
+        }
+        printf("(%5d - %5.2f ) ", static_cast<int>(dc_idx.at(i)), dc_results.at(i));
+    }
+
+    printf("\nFitted polynomial\n");
+    for(double e : dc_poly)
+    {
+        printf("%g ", e);
+    }
+    printf("\n");
+    return dc_poly;
 }

@@ -12,6 +12,7 @@
 #include "envisat_types.h"
 #include "geo_tools.h"
 #include "orbit_state_vector.h"
+#include "math_utils.h"
 
 struct ImgDimensions
 {
@@ -35,8 +36,8 @@ struct SARResults {
     double dc_q;
     double iq_gain;
     double phase_error; // degrees
-    double Vr;
-    double doppler_centroid;
+    std::vector<double> Vr_poly; // fitted to range index
+    std::vector<double> doppler_centroid_poly; // fitted to range index
 };
 
 
@@ -129,16 +130,28 @@ inline double CalcR0(const SARMetadata& metadata, int range_pixel) {
     return metadata.slant_range_first_sample + range_pixel * metadata.range_spacing;
 }
 
+inline double CalcVr(const SARMetadata& metadata, int range_pixel)
+{
+    const auto& p = metadata.results.Vr_poly;
+    return polyval(p.data(), p.size(), range_pixel);
+}
+
+inline double CalcDopplerCentroid(const SARMetadata& metadata, int range_pixel)
+{
+    const auto& p = metadata.results.doppler_centroid_poly;
+    return polyval(p.data(), p.size(), range_pixel);
+}
+
 inline double CalcKa(const SARMetadata& metadata, int range_pixel) {
     constexpr double SOL = 299792458;
-    const double Vr = metadata.results.Vr;
+    const double Vr = CalcVr(metadata, range_pixel);
     const double R0 = CalcR0(metadata, range_pixel);
     return (2 * metadata.carrier_frequency * Vr * Vr) / (SOL * R0);
 }
 
 inline int CalcAperturePixels(const SARMetadata& metadata, int range_pixel) {
     double Ka = CalcKa(metadata, range_pixel);
-    double fmax = (metadata.results.doppler_centroid +
+    double fmax = (CalcDopplerCentroid(metadata, range_pixel) +
             (metadata.pulse_repetition_frequency * metadata.azimuth_bandwidth_fraction) / 2);
     double pixels = (fmax / Ka) * metadata.pulse_repetition_frequency;
 

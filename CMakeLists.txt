@@ -21,6 +21,7 @@ set(SOURCES
         img_output.cpp
         img_output.h
         math_utils.h
+        math_utils.cpp
         iq_correction.cu
         iq_correction.cuh
         envisat_file_format.h

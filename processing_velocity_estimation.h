@@ -3,6 +3,6 @@
 
 #include "asar_lvl0_parser.h"
 
-double EstimateProcessingVelocity(const SARMetadata& metadata);
+std::vector<double> EstimateProcessingVelocity(const SARMetadata& metadata);
 
 
