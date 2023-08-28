@@ -61,6 +61,8 @@ set(UTIL_SOURCES
         util/img_output.h
         util/math_utils.cpp
         util/math_utils.h
+        util/plot.cpp
+        util/plot.h
         )
 
 set(SOURCES

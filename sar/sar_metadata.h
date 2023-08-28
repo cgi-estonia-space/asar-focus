@@ -39,13 +39,11 @@ struct SARMetadata {
     std::vector<uint32_t> left_range_offsets;
     boost::posix_time::ptime first_orbit_time;
     double orbit_interval;
-    std::vector<OrbitInfo> orbit_state_vectors;
     std::vector<OrbitStateVector> osv;
     double pulse_repetition_frequency;
     double azimuth_bandwidth_fraction;
     double carrier_frequency;
     double wavelength;
-    OrbitInfo first_position;
     double platform_velocity;
     double range_spacing;
     double azimuth_spacing;
@@ -71,12 +69,12 @@ inline double CalcR0(const SARMetadata& metadata, int range_pixel) {
 
 inline double CalcVr(const SARMetadata& metadata, int range_pixel) {
     const auto& p = metadata.results.Vr_poly;
-    return polyval(p.data(), p.size(), range_pixel);
+    return Polyval(p.data(), p.size(), range_pixel);
 }
 
 inline double CalcDopplerCentroid(const SARMetadata& metadata, int range_pixel) {
     const auto& p = metadata.results.doppler_centroid_poly;
-    return polyval(p.data(), p.size(), range_pixel);
+    return Polyval(p.data(), p.size(), range_pixel);
 }
 
 inline double CalcKa(const SARMetadata& metadata, int range_pixel) {

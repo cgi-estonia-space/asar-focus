@@ -3,29 +3,6 @@
 
 #include "envisat_format/envisat_ph.h"
 
-OrbitInfo InterpolateOrbit(const std::vector<OrbitInfo>& osv, double time_point) {
-    int n = static_cast<int>(osv.size());
-    OrbitInfo r = {};
-    r.time_point = time_point;
-    for (int i = 0; i < n; i++) {
-        double mult = 1;
-        for (int j = 0; j < n; j++) {
-            if (i == j) continue;
-
-            mult *= (time_point - osv.at(j).time_point) / (osv.at(i).time_point - osv.at(j).time_point);
-        }
-
-        r.x_pos += mult * osv[i].x_pos;
-        r.y_pos += mult * osv[i].y_pos;
-        r.z_pos += mult * osv[i].z_pos;
-        r.x_vel += mult * osv[i].x_vel;
-        r.y_vel += mult * osv[i].y_vel;
-        r.z_vel += mult * osv[i].z_vel;
-    }
-
-    return r;
-}
-
 std::vector<OrbitStateVector> FindOrbits(boost::posix_time::ptime start, boost::posix_time::ptime stop) {
     std::vector<OrbitStateVector> osv = {
 #if 1
@@ -158,22 +135,28 @@ std::vector<OrbitStateVector> FindOrbits(boost::posix_time::ptime start, boost::
 }
 
 OrbitStateVector InterpolateOrbit(const std::vector<OrbitStateVector>& osv, boost::posix_time::ptime time) {
-    std::vector<OrbitInfo> v;
+    double time_point = (time - osv.front().time).total_microseconds() * 1e-6;
 
-    for (size_t i = 0; i < osv.size(); i++) {
-        OrbitInfo o = {};
-        o.time_point = (osv[i].time - osv.front().time).total_microseconds() / 1e6;
-        o.x_pos = osv[i].x_pos;
-        o.y_pos = osv[i].y_pos;
-        o.z_pos = osv[i].z_pos;
-        o.x_vel = osv[i].x_vel;
-        o.y_vel = osv[i].y_vel;
-        o.z_vel = osv[i].z_vel;
-        v.push_back(o);
+    OrbitStateVector r = {};
+    r.time = time;
+    const int n = osv.size();
+    for (int i = 0; i < n; i++) {
+        double mult = 1;
+        for (int j = 0; j < n; j++) {
+            if (i == j) continue;
+
+            double xj = (osv.at(j).time - osv.front().time).total_microseconds() * 1e-6;
+            double xi = (osv.at(i).time - osv.front().time).total_microseconds() * 1e-6;
+            mult *= (time_point - xj) / (xi - xj);
+        }
+
+        r.x_pos += mult * osv[i].x_pos;
+        r.y_pos += mult * osv[i].y_pos;
+        r.z_pos += mult * osv[i].z_pos;
+        r.x_vel += mult * osv[i].x_vel;
+        r.y_vel += mult * osv[i].y_vel;
+        r.z_vel += mult * osv[i].z_vel;
     }
 
-    double tp = (time - osv.front().time).total_microseconds() / 1e6;
-
-    auto res = InterpolateOrbit(v, tp);
-    return {time, res.x_pos, res.y_pos, res.z_pos, res.x_vel, res.y_vel, res.z_vel};
+    return r;
 }

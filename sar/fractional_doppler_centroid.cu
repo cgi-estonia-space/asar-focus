@@ -118,7 +118,7 @@ std::vector<double> CalculateDopplerCentroid(const DevicePaddedImage& d_img, dou
         dc_idx.push_back((x_begin + x_end) / 2);
     }
 
-    auto dc_poly = polyfit(dc_idx, dc_results, POLY_ORDER);
+    auto dc_poly = Polyfit(dc_idx, dc_results, POLY_ORDER);
 
     printf("Doppler Centroid result(range sample - Hz):\n");
     for (int i = 0; i < N_DC_CALC; i++) {

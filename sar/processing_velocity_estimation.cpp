@@ -105,7 +105,7 @@ std::vector<double> EstimateProcessingVelocity(const SARMetadata& metadata) {
         idx_vec.push_back(range_idx);
     }
 
-    auto Vr_poly = polyfit(idx_vec, Vr_results, POLY_ORDER);
+    auto Vr_poly = Polyfit(idx_vec, Vr_results, POLY_ORDER);
 
     printf("Vr result(range sample - m/s):\n");
     for (int i = 0; i < N_Vr_CALC; i++) {

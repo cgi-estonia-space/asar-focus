@@ -113,7 +113,7 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
             t_vec.push_back(two_way_slant_time - t0);
         }
 
-        auto poly = polyfit(t_vec, Ka_vec, 2);
+        auto poly = Polyfit(t_vec, Ka_vec, 2);
 
         az.az_fm_rate[0] = poly.at(2);
         az.az_fm_rate[1] = poly.at(1);

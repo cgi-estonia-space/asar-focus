@@ -4,15 +4,6 @@
 
 #include <boost/date_time/posix_time/ptime.hpp>
 
-struct OrbitInfo {
-    double time_point;
-    double x_pos;
-    double y_pos;
-    double z_pos;
-    double x_vel;
-    double y_vel;
-    double z_vel;
-};
 
 struct OrbitStateVector {
     boost::posix_time::ptime time;

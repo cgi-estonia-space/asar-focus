@@ -7,7 +7,6 @@
 
 #include <gdal/gdal_priv.h>
 #include <boost/algorithm/string.hpp>
-#include "sar/processing_velocity_estimation.h"
 
 #include "cuda_util/cufft_plan.h"
 #include "cuda_util/device_padded_image.cuh"
@@ -25,6 +24,7 @@
 #include "util/geo_tools.h"
 #include "util/img_output.h"
 #include "util/math_utils.h"
+#include "util/plot.h"
 
 struct IQ16 {
     int16_t i;
@@ -115,14 +115,45 @@ int main(int argc, char* argv[]) {
 
     metadata.results.Vr_poly = EstimateProcessingVelocity(metadata);
 
+    // if(wif)
+    {
+        PlotArgs args = {};
+        args.out_path = "/tmp/" + wif_name_base + "_Vr.html";
+        args.x_axis_title = "range index";
+        args.y_axis_title = "Vr(m/s)";
+        args.data.resize(1);
+        auto& line = args.data[0];
+        line.line_name = "Vr";
+        PolyvalRange(metadata.results.Vr_poly, 0, metadata.img.range_size, line.x, line.y);
+        Plot(args);
+    }
+
     auto chirp = GenerateChirpData(metadata.chirp, rg_padded);
 
     std::vector<float> chirp_freq;
 
-    if (wif) {
-        FILE* fpe = fopen("/tmp/chirp.cf32", "w");
-        fwrite(chirp.data(), 8, chirp.size(), fpe);
-        fclose(fpe);
+    // if (wif)
+    {
+        PlotArgs args = {};
+        args.out_path = "/tmp/" + wif_name_base + "_chirp.html";
+        args.x_axis_title = "nth sample";
+        args.y_axis_title = "Amplitude";
+        args.data.resize(2);
+        auto& i = args.data[0];
+        auto& q = args.data[1];
+        std::vector<double> n_samp;
+        int cnt = 0;
+        for (auto iq : chirp) {
+            i.y.push_back(iq.real());
+            i.x.push_back(cnt);
+            q.y.push_back(iq.imag());
+            q.x.push_back(cnt);
+            cnt++;
+        }
+
+        i.line_name = "I";
+        q.line_name = "Q";
+        Plot(args);
     }
 
     // TODO
@@ -134,6 +165,19 @@ int main(int argc, char* argv[]) {
     }
 
     metadata.results.doppler_centroid_poly = CalculateDopplerCentroid(img, metadata.pulse_repetition_frequency);
+
+    // if(wif)
+    {
+        PlotArgs args = {};
+        args.out_path = "/tmp/" + wif_name_base + "_dc.html";
+        args.x_axis_title = "range index";
+        args.y_axis_title = "Hz";
+        args.data.resize(1);
+        auto& line = args.data[0];
+        line.line_name = "Doppler centroid";
+        PolyvalRange(metadata.results.doppler_centroid_poly, 0, metadata.img.range_size, line.x, line.y);
+        Plot(args);
+    }
 
     // return 0;
 
