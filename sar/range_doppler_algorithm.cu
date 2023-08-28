@@ -64,7 +64,7 @@ __device__ float sinc(float x) {
 
 namespace {
 struct KernelArgs {
-    float Vr;  // TODO(priit) float vs double
+    //float Vr;  // TODO(priit) float vs double
     float prf;
     float lambda;
     // float doppler_centroid;
@@ -72,9 +72,22 @@ struct KernelArgs {
     // float inv_range_spacing;
     float azimuth_bandwidth_fraction;
     double slant_range;
-    int dc_steps;
+
+    float dc_poly[3];
+    float Vr_poly[3];
+
     // bool vv_vh_half_pixel_shift;
 };
+
+template <int N>
+__device__ inline float Polyval(float (&p)[N], float x) {
+    float r = 0.0f;
+    for (auto e : p) {
+        r *= x;
+        r += e;
+    }
+    return r;
+}
 
 __global__ void RangeCellMigrationCorrection(const cufftComplex* data_in, int src_x_size, int src_x_stride,
                                              int src_y_size, cufftComplex* data_out, int dst_x_stride,
@@ -87,21 +100,26 @@ __global__ void RangeCellMigrationCorrection(const cufftComplex* data_in, int sr
     }
 
     const float fft_bin_step = args.prf / src_y_size;
+
+    const float dc = Polyval(args.dc_poly, dst_x);
+    const int dc_steps = dc / fft_bin_step;
+
     // find FFT bin frequency
     float fn = 0.0f;
-    if ((dst_y < src_y_size / 2) - args.dc_steps) {
+    if ((dst_y < src_y_size / 2) - dc_steps) {
         fn = dst_y * fft_bin_step;
     } else {
         fn = (dst_y - src_y_size) * fft_bin_step;
     }
 
     // slant range at range pixel
-    double R0 = args.slant_range + dst_x * args.range_spacing;
+    const double R0 = args.slant_range + dst_x * args.range_spacing;
     // printf("KERNEL = %d %d , R0 = %f\n", dst_x, dst_y, R0);
 
-    // Range walk in meters
+    const float Vr = Polyval(args.Vr_poly, dst_x);
 
-    double dR = (args.lambda * args.lambda * fn * fn) / (8 * args.Vr * args.Vr);
+    // Range walk in meters
+    double dR = (args.lambda * args.lambda * fn * fn) / (8 * Vr * Vr);
     dR *= R0;
     // double dR = ((args.lambda * args.lambda) * R0 * fn * fn) / (8 * args.Vr * args.Vr);
 
@@ -160,18 +178,21 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
         int src_idx = dst_x + src_x_stride * dst_y;
 
         const float fft_bin_step = args.prf / src_height;
+
+        const float dc = Polyval(args.dc_poly, dst_x);
+        const int dc_steps = dc / fft_bin_step;
         // find FFT bin frequency
         float fn = 0.0f;
         // float half_pixel_shift = 0.0f;
-        if ((dst_y < src_height / 2) - args.dc_steps) {
+        if ((dst_y < src_height / 2) - dc_steps) {
             fn = dst_y * fft_bin_step;
 
         } else {
             fn = (dst_y - src_height) * fft_bin_step;
         }
 
-        const float max_freq = (src_height / 2) * fft_bin_step - args.dc_steps * fft_bin_step;
-        const float min_freq = -(src_height / 2) * fft_bin_step - args.dc_steps * fft_bin_step;
+        const float max_freq = (src_height / 2) * fft_bin_step - dc;
+        const float min_freq = -(src_height / 2) * fft_bin_step - dc;
         if (fn > args.azimuth_bandwidth_fraction * max_freq || fn < args.azimuth_bandwidth_fraction * min_freq) {
             src_data[src_idx] = {};
             return;
@@ -180,8 +201,9 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
         // slant range at range pixel
         const double R0 = args.slant_range + args.range_spacing * dst_x;
 
+        const float Vr = Polyval(args.Vr_poly, dst_x);
         // Azimuth FM rate
-        const float Ka = (2 * args.Vr * args.Vr) / (args.lambda * R0);
+        const float Ka = (2 * Vr * Vr) / (args.lambda * R0);
 
         // range Doppler domain matched filter at this frequency
         float phase = (-float_pi * fn * fn) / Ka;
@@ -234,17 +256,20 @@ void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_i
     k_args.range_spacing = metadata.range_spacing;
     // k_args.inv_range_spacing = 1 / metadata.range_spacing;
     k_args.slant_range = metadata.slant_range_first_sample;
-    k_args.Vr = Vr;
+    const auto& Vr_poly = metadata.results.Vr_poly;
+    CHECK_BOOL(Vr_poly.size() == std::size(k_args.Vr_poly));
+    std::copy(Vr_poly.begin(), Vr_poly.end(), &k_args.Vr_poly[0]);
+
+    const auto& dc_poly = metadata.results.doppler_centroid_poly;
+    CHECK_BOOL(dc_poly.size() == std::size(k_args.dc_poly));
+    std::copy(dc_poly.begin(), dc_poly.end(), &k_args.dc_poly[0]);
+
     k_args.prf = metadata.pulse_repetition_frequency;
     // k_args.doppler_centroid = metadata.results.doppler_centroid;
     k_args.azimuth_bandwidth_fraction = 0.8;
 
-    double dc = CalcDopplerCentroid(metadata, metadata.img.range_size / 2);
-    k_args.dc_steps = dc / (metadata.pulse_repetition_frequency / src_img.YStride());
+    //double dc = CalcDopplerCentroid(metadata, metadata.img.range_size / 2);
 
-    if (k_args.dc_steps != 0) {
-        printf("DC steps = %d\n", k_args.dc_steps);
-    }
     // printf("KARGS prf = %f\n", k_args.prf);
     // LOGD << "Doppler centroid steps = " << k_args.dc_steps;
 

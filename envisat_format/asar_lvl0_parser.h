@@ -19,6 +19,7 @@ struct ASARMetadata {
     std::string lvl0_file_name;
     std::string product_name;
     std::string instrument_file;
+    std::string configuration_file;
     std::string acquistion_station;
     std::string processing_station;
     boost::posix_time::ptime sensing_start;

@@ -355,7 +355,7 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
 
         sph.dsds[11].SetEmptyDSD("MDS2", 'M');
         sph.dsds[12].SetReferenceDSD("LEVEL 0 PRODUCT", asar_meta.lvl0_file_name);
-        sph.dsds[13].SetReferenceDSD("ASAR PROCESSOR CONFIG", "DUMMY FILE NAME");
+        sph.dsds[13].SetReferenceDSD("ASAR PROCESSOR CONFIG", asar_meta.configuration_file);
         sph.dsds[14].SetReferenceDSD("INSTRUMENT CHARACTERIZATION", asar_meta.instrument_file);
         sph.dsds[15].SetEmptyDSD("EXTERNAL CHARACTERIZATION", 'R');
         sph.dsds[16].SetReferenceDSD("EXTERNAL CALIBRATION", "DUMMY FILE NAME");

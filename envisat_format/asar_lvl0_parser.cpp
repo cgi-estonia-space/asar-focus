@@ -136,8 +136,10 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     printf("platform velocity = %f, initial Vr = %f\n", sar_meta.platform_velocity, CalcVr(sar_meta, 0));
 
     InstrumentFile ins_file = {};
-    FindInsFile(aux_path, asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
+    FindINSFile(aux_path, asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
 
+    ConfigurationFile conf_file = {};
+    FindCONFile(aux_path, asar_meta.sensing_start, conf_file, asar_meta.configuration_file);
     ProductHeader sph = {};
     sph.Load(MPH_SIZE, file_data.data() + MPH_SIZE, SPH_SIZE);
 

@@ -232,7 +232,8 @@ int main(int argc, char* argv[]) {
             // printf("y = %d\n", y);
             for (int x = 0; x < out.XSize(); x++) {
                 auto pix = res[x + y * range_stride];
-                int tambov = 1000;
+                float tambov = 120000/100;
+                //printf("scaling tambov = %f\n", tambov);
                 IQ16 iq16;
                 iq16.i = std::clamp<float>(pix.x * tambov, INT16_MIN, INT16_MAX);
                 iq16.q = std::clamp<float>(pix.y * tambov, INT16_MIN, INT16_MAX);
