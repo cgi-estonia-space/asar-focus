@@ -23,7 +23,8 @@ set(ENVISAT_FORMAT_FILES
         envisat_format/envisat_sph.h
         envisat_format/envisat_types.h
         envisat_format/envisat_utils.h
-
+        envisat_format/doris_orbit.cc
+        envisat_format/doris_orbit.h
         )
 
 set(SAR_SOURCES

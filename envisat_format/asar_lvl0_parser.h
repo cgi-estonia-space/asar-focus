@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string_view>
 #include <vector>
 
 #include <boost/date_time.hpp>
@@ -61,4 +62,4 @@ struct ASARMetadata {
 };
 
 void ParseIMFile(const std::vector<char>& file_data, const char* aux_pax, SARMetadata& sar_meta,
-                 ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data);
+                 ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data, std::string_view orbit_path);

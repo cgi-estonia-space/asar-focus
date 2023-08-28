@@ -109,7 +109,7 @@ double NadirLLParse(const std::string& str) {
 }
 
 void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMetadata& sar_meta,
-                 ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data) {
+                 ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data, std::string_view orbit_path) {
     ProductHeader mph = {};
 
     mph.Load(0, file_data.data(), MPH_SIZE);
@@ -129,7 +129,7 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     asar_meta.first_line_time = asar_meta.sensing_start;
     asar_meta.last_line_time = asar_meta.sensing_stop;
 
-    sar_meta.osv = FindOrbits(asar_meta.sensing_start, asar_meta.sensing_stop);
+    sar_meta.osv = FindOrbits(asar_meta.sensing_start, asar_meta.sensing_stop, orbit_path);
     sar_meta.platform_velocity = CalcVelocity(sar_meta.osv[sar_meta.osv.size() / 2]);
     sar_meta.results.Vr_poly = {0, 0, sar_meta.platform_velocity * 0.94};
 

@@ -44,15 +44,17 @@ void time_stop(std::chrono::steady_clock::time_point beg, const char* msg) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 3) {
+    if (argc != 4) {
         // to arg parse
 
-        printf("error: arg 1 => input file, arg 2 => aux path");
+        printf("Not a correct argument count, example:\n"
+               "%s [input file] [aux path] [DORIS orbit file]", argv[0]);
         return 1;
     }
 
     std::string in_path = argv[1];
     const char* aux_path = argv[2];
+    const auto orbit_path = argv[3];
     FILE* fp = fopen(in_path.c_str(), "r");
     if (!fp) {
         printf("failed to open ... %s\n", in_path.c_str());
@@ -75,7 +77,7 @@ int main(int argc, char* argv[]) {
     ASARMetadata asar_meta = {};
 
     std::vector<std::complex<float>> h_data;
-    ParseIMFile(data, aux_path, metadata, asar_meta, h_data);
+    ParseIMFile(data, aux_path, metadata, asar_meta, h_data, orbit_path);
 
     std::string wif_name_base = asar_meta.product_name;
     wif_name_base.resize(wif_name_base.size() - 3);
