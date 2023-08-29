@@ -117,7 +117,7 @@ std::vector<double> EstimateProcessingVelocity(const SARMetadata& metadata) {
 
     printf("\nFitted polynomial\n");
     for (double e : Vr_poly) {
-        printf("%.15f ", e);
+        printf("%g ", e);
     }
     printf("\n");
 

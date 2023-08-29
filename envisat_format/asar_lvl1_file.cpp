@@ -86,7 +86,7 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
 
         r.nominal_chirp[0].nom_chirp_amp[0] = 1.0;
         r.nominal_chirp[0].nom_chirp_phs[2] =
-            sar_meta.chirp.coefficient[1] / 2.0;  // TODO why is the nominal chirp div 2 in envisat files?
+            sar_meta.chirp.Kr / 2.0;  // TODO why is the nominal chirp div 2 in envisat files?
     }
 
     {
@@ -147,23 +147,50 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
     }
 }
 
+float CalcIncidenceAngle(const std::string& swath, int range_idx, int range_max) {
+    // TODO temporary hack, implement about proper incidence angle calculation from OSV and geolocation
+    float start = 19.2;
+    float end = 26.1;
+    if (swath == "IS1") {
+        start = 14.7;
+        end = 22.2;
+    } else if (swath == "IS3") {
+        start = 25.7;
+        end = 31.1;
+    } else if (swath == "IS4") {
+        start = 30.7;
+        end = 36.1;
+    } else if (swath == "IS5") {
+        start = 35.7;
+        end = 39.2;
+    } else if (swath == "IS6") {
+        start = 38.8;
+        end = 42.7;
+    } else if (swath == "IS7") {
+        start = 42.4;
+        end = 45.1;
+    }
+
+    return start + (end - start) * (static_cast<float>(range_idx) / range_max);
+}
+
 void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, const ASARMetadata& asar_meta,
                         GeoLocationADSR& geo) {
     auto first = CalcAzimuthTime(sar_meta, az_idx);
     auto last = CalcAzimuthTime(sar_meta, az_last);
-    int n = std::size(geo.first_line_tie_points.lats);
+    const int n = std::size(geo.first_line_tie_points.lats);
     geo.first_zero_doppler_time = PtimeToMjd(first);
     geo.last_zero_doppler_time = PtimeToMjd(last);
     geo.line_num = az_idx;
     geo.num_lines = az_last - az_idx;
-    int range_step = sar_meta.img.range_size / n;
+    const int range_size = sar_meta.img.range_size;
     for (int i = 0; i < n; i++) {
-        int range_samp = i * range_step;
+        const int range_samp = i * range_size / (n - 1);
         double R = sar_meta.slant_range_first_sample + sar_meta.range_spacing * range_samp;
         constexpr double c = 299792458;
         double two_way_slant_time = 2 * (R / c) * 1e9;
         {
-            auto osv = InterpolateOrbit(sar_meta.osv, first);
+            auto osv = InterpolateOrbit(sar_meta.osv, first); //TODO OSV fast time interpolation
             auto xyz = RangeDopplerGeoLocate({osv.x_vel, osv.y_vel, osv.z_vel}, {osv.x_pos, osv.y_pos, osv.z_pos},
                                              sar_meta.center_point, R);
             geo.first_line_tie_points.samp_numbers[i] = range_samp + 1;
@@ -171,8 +198,7 @@ void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, co
             geo.first_line_tie_points.lats[i] = llh.latitude * 1e6;
             geo.first_line_tie_points.longs[i] = llh.longitude * 1e6;
             geo.first_line_tie_points.slange_range_times[i] = two_way_slant_time;
-            geo.first_line_tie_points.angles[i] =
-                19.2 + ((26.1 - 19.2) * range_samp) / sar_meta.img.range_size;  // TODO proper incidence angle
+            geo.first_line_tie_points.angles[i] = CalcIncidenceAngle(asar_meta.swath, range_samp, range_size);
         }
 
         {
@@ -184,7 +210,7 @@ void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, co
             geo.last_line_tie_points.lats[i] = llh.latitude * 1e6;
             geo.last_line_tie_points.longs[i] = llh.longitude * 1e6;
             geo.last_line_tie_points.slange_range_times[i] = two_way_slant_time;
-            geo.last_line_tie_points.angles[i] = 19.2 + ((26.1 - 19.2) * range_samp) / sar_meta.img.range_size;
+            geo.last_line_tie_points.angles[i] = CalcIncidenceAngle(asar_meta.swath, range_samp, range_size);
         }
     }
 }

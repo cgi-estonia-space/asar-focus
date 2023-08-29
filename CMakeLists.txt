@@ -14,8 +14,8 @@ set(ENVISAT_FORMAT_FILES
         envisat_format/asar_lvl1_file.h
         envisat_format/bswap_util.h
         envisat_format/envisat_file_format.h
-        envisat_format/envisat_ins_file.cpp
-        envisat_format/envisat_ins_file.h
+        envisat_format/envisat_aux_file.cpp
+        envisat_format/envisat_aux_file.h
         envisat_format/envisat_lvl1_dsd.h
         envisat_format/envisat_mph.h
         envisat_format/envisat_ph.cpp

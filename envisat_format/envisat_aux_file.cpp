@@ -1,6 +1,6 @@
 
 
-#include "envisat_ins_file.h"
+#include "envisat_aux_file.h"
 
 #include "util/checks.h"
 
@@ -36,12 +36,11 @@ void FindCONFile(std::string aux_root, boost::posix_time::ptime start, Configura
     bool ok = false;
     for (auto const& dir_entry : std::filesystem::directory_iterator(ins_dir)) {
         auto fn = dir_entry.path().stem().string();
-        std::cout << fn << "\n";
         std::string start_date = fn.substr(30, 8);
         std::string end_date = fn.substr(46, 8);
 
         if (start >= YYYYMMDD(start_date) && start < YYYYMMDD(end_date)) {
-            std::cout << "Configuration file = " << fn;
+            std::cout << "Configuration file = " << fn << "\n";
             filename = fn;
 
             FILE* fp = fopen(dir_entry.path().c_str(), "r");
@@ -85,12 +84,11 @@ void FindINSFile(std::string aux_root, boost::posix_time::ptime start, Instrumen
     bool ok = false;
     for (auto const& dir_entry : std::filesystem::directory_iterator(ins_dir)) {
         auto fn = dir_entry.path().stem().string();
-        std::cout << fn << "\n";
         std::string start_date = fn.substr(30, 8);
         std::string end_date = fn.substr(46, 8);
 
         if (start >= YYYYMMDD(start_date) && start < YYYYMMDD(end_date)) {
-            std::cout << "Instrument file = " << fn;
+            std::cout << "Instrument file = " << fn << "\n";
             filename = fn;
 
             FILE* fp = fopen(dir_entry.path().c_str(), "r");

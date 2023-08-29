@@ -4,7 +4,7 @@
 #include "sar_metadata.h"
 
 inline std::vector<std::complex<float>> GenerateChirpData(const ChirpInfo& chirp, size_t padding_size) {
-    double Kr = chirp.coefficient[1];
+    double Kr = chirp.Kr;
 
     const int64_t n_samples = chirp.n_samples;
     const double dt = 1.0 / chirp.range_sampling_rate;

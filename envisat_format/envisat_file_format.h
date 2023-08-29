@@ -100,7 +100,7 @@ inline size_t extract_num(const std::string& in) {
     return 0;
 }
 
-inline std::vector<DSD_lvl0> extract_dsds(const ProductHeader& sph) {
+inline std::vector<DSD_lvl0> ExtractDSDs(const ProductHeader& sph) {
     size_t dsd_offset = SPH_SIZE - DSD_SIZE * 4;
 
     std::vector<DSD_lvl0> res;
@@ -112,7 +112,7 @@ inline std::vector<DSD_lvl0> extract_dsds(const ProductHeader& sph) {
         if (tokens.size() < 6) {
             continue;
         }
-        std::cout << tokens[0] << "\n";
+        // std::cout << tokens[0] << "\n";
         DSD_lvl0 dsd = {};
         dsd.ds_name = tokens.at(0);
         dsd.ds_type = tokens.at(1);
@@ -123,7 +123,7 @@ inline std::vector<DSD_lvl0> extract_dsds(const ProductHeader& sph) {
         dsd.dsr_size = extract_bytes(tokens.at(6));
 
         res.push_back(dsd);
-        dsd.print();
+        //dsd.print();
     }
 
     return res;

@@ -11,8 +11,8 @@
 #include "cuda_util/cufft_plan.h"
 #include "cuda_util/device_padded_image.cuh"
 #include "envisat_format/asar_lvl1_file.h"
+#include "envisat_format/envisat_aux_file.h"
 #include "envisat_format/envisat_file_format.h"
-#include "envisat_format/envisat_ins_file.h"
 #include "sar/fractional_doppler_centroid.cuh"
 #include "sar/iq_correction.cuh"
 #include "sar/orbit_state_vector.h"
@@ -52,6 +52,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    auto file_time_start = time_start();
     std::string in_path = argv[1];
     const char* aux_path = argv[2];
     const auto orbit_path = argv[3];
@@ -73,11 +74,14 @@ int main(int argc, char* argv[]) {
 
     GDALAllRegister();
 
+
     SARMetadata metadata = {};
     ASARMetadata asar_meta = {};
 
     std::vector<std::complex<float>> h_data;
     ParseIMFile(data, aux_path, metadata, asar_meta, h_data, orbit_path);
+
+    time_stop(file_time_start, "LVL0 file read + parse");
 
     std::string wif_name_base = asar_meta.product_name;
     wif_name_base.resize(wif_name_base.size() - 3);
@@ -101,6 +105,8 @@ int main(int argc, char* argv[]) {
     printf("rg  = %d -> %d\n", rg_size, rg_padded);
     printf("az = %d -> %d\n", az_size, az_padded);
 
+
+    auto gpu_transfer_start = time_start();
     DevicePaddedImage img;
     img.InitPadded(rg_size, az_size, rg_padded, az_padded);
     img.ZeroMemory();
@@ -111,11 +117,18 @@ int main(int argc, char* argv[]) {
         cudaMemcpy(dest, src, rg_size * 8, cudaMemcpyHostToDevice);
     }
 
+    time_stop(gpu_transfer_start, "GPU image formation");
+
+    auto correction_start = time_start();
     RawDataCorrection(img, {metadata.total_raw_samples}, metadata.results);
-
     img.ZeroNaNs();
+    time_stop(correction_start, "I/Q correction");
 
+
+    auto vr_start = time_start();
     metadata.results.Vr_poly = EstimateProcessingVelocity(metadata);
+    time_stop(vr_start, "Vr estimation");
+
 
     // if(wif)
     {
@@ -166,8 +179,9 @@ int main(int argc, char* argv[]) {
         WriteIntensityPaddedImg(img, path.c_str());
     }
 
+    auto dc_start = time_start();
     metadata.results.doppler_centroid_poly = CalculateDopplerCentroid(img, metadata.pulse_repetition_frequency);
-
+    time_stop(dc_start, "fractional DC estimation");
     // if(wif)
     {
         PlotArgs args = {};
@@ -188,7 +202,9 @@ int main(int argc, char* argv[]) {
 
     CudaWorkspace d_workspace(img.TotalByteSize());
 
+    auto rc_start = time_start();
     RangeCompression(img, chirp, metadata.chirp.n_samples, d_workspace);
+    time_stop(rc_start, "Range compression");
 
     metadata.img.range_size = img.XSize();
 
@@ -198,12 +214,13 @@ int main(int argc, char* argv[]) {
         WriteIntensityPaddedImg(img, path.c_str());
     }
 
+    auto az_comp_start = time_start();
     DevicePaddedImage out;
-
     RangeDopplerAlgorithm(metadata, img, out, std::move(d_workspace));
 
     out.ZeroFillPaddings();
 
+    time_stop(az_comp_start, "Azimuth compression");
     cudaDeviceSynchronize();
 
     if (wif) {
@@ -214,16 +231,18 @@ int main(int argc, char* argv[]) {
 
     printf("done!\n");
 
+    auto cpu_transfer_start = time_start();
     cufftComplex* res = new cufftComplex[out.XStride() * out.YStride()];
     out.CopyToHostPaddedSize(res);
 
+    time_stop(cpu_transfer_start, "Image GPU->CPU");
     // metadata.
 
-    MDS mds;
 
+    auto mds_formation = time_start();
+    MDS mds;
     mds.n_records = out.YSize();
     mds.record_size = out.XSize() * 4 + 12 + 1 + 4;
-
     mds.buf = new char[mds.n_records * mds.record_size];
 
     {
@@ -249,10 +268,12 @@ int main(int argc, char* argv[]) {
             memcpy(&mds.buf[y * mds.record_size + 17], row.data(), row.size() * 4);
         }
     }
+    time_stop(mds_formation, "MDS construction");
 
-    cudaDeviceSynchronize();
-
+    auto file_write = time_start();
     WriteLvl1(metadata, asar_meta, mds);
+    time_stop(file_write, "LVL1 file write");
+
 
     return 0;
 }

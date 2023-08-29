@@ -3,11 +3,12 @@
 #include "envisat_file_format.h"
 
 #include "asar_lvl0_parser.h"
-//#include "envisat_utils.h"
-#include "envisat_ins_file.h"
+// #include "envisat_utils.h"
+#include "envisat_aux_file.h"
 #include "envisat_ph.h"
 #include "sar/orbit_state_vector.h"
 
+namespace {
 template <class T>
 [[nodiscard]] const uint8_t* CopyBSwapPOD(T& dest, const uint8_t* src) {
     memcpy(&dest, src, sizeof(T));
@@ -108,14 +109,25 @@ double NadirLLParse(const std::string& str) {
     return val * 1e-6;
 }
 
+int SwathIdx(const std::string& swath) {
+    if (swath.size() == 3 && swath[0] == 'I' && swath[1] == 'S') {
+        char idx = swath[2];
+        if (idx >= '1' && idx <= '7') {
+            return idx - '1';
+        }
+    }
+    ERROR_EXIT(swath + " = unknown swath");
+}
+}  // namespace
+
 void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMetadata& sar_meta,
                  ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data, std::string_view orbit_path) {
     ProductHeader mph = {};
 
     mph.Load(0, file_data.data(), MPH_SIZE);
 
-    printf("MPH = \n");
-    mph.PrintValues();
+    //printf("MPH = \n");
+    //mph.PrintValues();
 
     asar_meta.product_name = mph.Get("PRODUCT");
 
@@ -143,8 +155,8 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     ProductHeader sph = {};
     sph.Load(MPH_SIZE, file_data.data() + MPH_SIZE, SPH_SIZE);
 
-    printf("SPH = \n");
-    sph.PrintValues();
+    //printf("SPH = \n");
+    //sph.PrintValues();
 
     asar_meta.start_nadir_lat = NadirLLParse(sph.Get("START_LAT"));
     asar_meta.start_nadir_lon = NadirLLParse(sph.Get("START_LONG"));
@@ -156,17 +168,14 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     asar_meta.product_name = mph.Get("PRODUCT");
     asar_meta.swath = sph.Get("SWATH");
 
-    int swath_idx = 1;
-    if (asar_meta.swath != "IS2") {
-        printf("Swath mode change support TODO!\n");
-        exit(1);
-    }
+    int swath_idx = SwathIdx(asar_meta.swath);
+    printf("Swath = %s , idx = %d\n", asar_meta.swath.c_str(), swath_idx);
 
     asar_meta.acquistion_station = mph.Get("ACQUISITION_STATION");
     asar_meta.processing_station = mph.Get("PROC_CENTER");
     asar_meta.polarization = sph.Get("TX_RX_POLAR");
 
-    auto dsds = extract_dsds(sph);
+    auto dsds = ExtractDSDs(sph);
 
     auto mdsr = dsds.at(0);
     size_t offset = mdsr.ds_offset;
@@ -304,19 +313,6 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
         // echos.push_back(std::move(echo_meta));
     }
 
-    // i_bias = 3.33e-4
-    // q_bias = 5.78e-4
-    printf("should be = %f %f\n", 3.33e-4, 5.78e-4);
-    printf("SUM I Q, bias !? = %f %f\n", i_sum / n_tot, q_sum / n_tot);
-
-    printf("gain = %f %f\n", i_sq / q_sq, sqrt(i_sq / q_sq));
-    // exit(1);
-
-    int idx = 0;
-    size_t prev = -1;
-
-    int x = echos.front().raw_data.size();
-    int y = echos.size();
     uint16_t min_swst = UINT16_MAX;
     uint16_t max_swst = 0;
     size_t max_samples = 0;
@@ -359,12 +355,12 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     sar_meta.chirp.pulse_bandwidth = pulse_bw;
     sar_meta.pulse_repetition_frequency = sar_meta.chirp.range_sampling_rate / echos.front().pri_code;
 
-    sar_meta.chirp.coefficient[1] = ins_file.flp.im_chirp[swath_idx].phase[2] * 2;
+    sar_meta.chirp.Kr = ins_file.flp.im_chirp[swath_idx].phase[2] * 2;  // TODO Envisat format multiply by 2?
     sar_meta.chirp.pulse_duration = ins_file.flp.im_chirp[swath_idx].duration;
     sar_meta.chirp.n_samples = sar_meta.chirp.pulse_duration / (1 / sar_meta.chirp.range_sampling_rate);
 
-    double calc_bw = sar_meta.chirp.coefficient[1] * sar_meta.chirp.pulse_duration;
-    printf("calc bw = %f , meta bw = %f\n", calc_bw, pulse_bw);
+    sar_meta.chirp.pulse_bandwidth = sar_meta.chirp.Kr * sar_meta.chirp.pulse_duration;
+    printf("Calculated chirp BW = %f , meta bw = %f\n", sar_meta.chirp.pulse_bandwidth, pulse_bw);
 
     size_t range_sz = max_samples + max_swst - min_swst;
     printf("range sz = %zu\n", range_sz);
@@ -372,7 +368,9 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     constexpr double c = 299792458;
 
     constexpr uint32_t im_idx = 0;
-    const uint32_t n_pulses_swst = ins_file.fbp.mode_timelines[im_idx].r_values[swath_idx];  // TODO INS file
+    const uint32_t n_pulses_swst = ins_file.fbp.mode_timelines[im_idx].r_values[swath_idx];
+
+    printf("n pulses SWST = %u\n", n_pulses_swst);
 
     asar_meta.swst_rank = n_pulses_swst;
 
@@ -403,6 +401,8 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
         sar_meta.total_raw_samples += n_samples;
     }
 
+    // TODO these two always seem to differ?
+    std::cout << "Dataset = " << asar_meta.product_name << "\n";
     std::cout << "SENSING START = " << asar_meta.sensing_start << "\n";
     std::cout << "First echo = " << MjdToPtime(echos.front().isp_sensing_time) << "\n";
 

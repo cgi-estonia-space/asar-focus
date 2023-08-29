@@ -19,7 +19,7 @@ struct ChirpInfo {
     double pulse_duration;
     int n_samples;
     double pulse_bandwidth;
-    double coefficient[5];
+    double Kr;
 };
 
 struct SARResults {
