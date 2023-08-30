@@ -96,11 +96,20 @@ set_property(TARGET asar_focus PROPERTY CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITEC
 
 INCLUDE_DIRECTORIES(${CUDAToolkit_INCLUDE_DIRS})
 
+include(FetchContent)
+
+FetchContent_Declare(
+    fmt
+    GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+    GIT_TAG 10.1.1
+)
+FetchContent_MakeAvailable(fmt)
+
 target_include_directories(asar_focus PRIVATE ${GDAL_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} .)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
     message("Also adding 'stdc++fs' for linking since the g++ version ${CMAKE_CXX_COMPILER_VERSION} requires it.")
-    target_link_libraries(asar_focus PRIVATE gdal cufft stdc++fs)
+    target_link_libraries(asar_focus PRIVATE gdal cufft fmt::fmt Boost::date_time stdc++fs)
 else ()
-    target_link_libraries(asar_focus PRIVATE gdal cufft fmt)
+    target_link_libraries(asar_focus PRIVATE gdal cufft fmt::fmt Boost::date_time)
 endif()
 
