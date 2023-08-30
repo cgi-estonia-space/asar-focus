@@ -7,11 +7,11 @@
 #include "envisat_types.h"
 
 template <class T>
-void bswap(T in) = delete;
+void bswap(T in) = delete; // avoid implicit conversions
 
-inline uint32_t bswap(uint32_t in) { return __builtin_bswap32(in); }
+[[nodiscard]] inline uint32_t bswap(uint32_t in) { return __builtin_bswap32(in); }
 
-inline int32_t bswap(int32_t in) {
+[[nodiscard]] inline int32_t bswap(int32_t in) {
     uint32_t tmp;
     memcpy(&tmp, &in, 4);
     tmp = __builtin_bswap32(tmp);
@@ -19,7 +19,7 @@ inline int32_t bswap(int32_t in) {
     return in;
 }
 
-inline float bswap(float in) {
+[[nodiscard]] inline float bswap(float in) {
     uint32_t tmp;
     memcpy(&tmp, &in, 4);
     tmp = __builtin_bswap32(tmp);
@@ -27,16 +27,15 @@ inline float bswap(float in) {
     return in;
 }
 
-inline uint16_t bswap(uint16_t in) { return __builtin_bswap16(in); }
+[[nodiscard]] inline uint16_t bswap(uint16_t in) { return __builtin_bswap16(in); }
 
-inline int16_t bswap(int16_t in) {
+[[nodiscard]] inline int16_t bswap(int16_t in) {
     uint16_t tmp;
     memcpy(&tmp, &in, 2);
     tmp = __builtin_bswap16(in);
     memcpy(&in, &tmp, 2);
     return in;
 }
-
 
 // Unfortunately has to be a macro, because often used for byteswapping members of packed structs
 #define BSWAP_ARR(x)                                                                             \
@@ -48,14 +47,14 @@ inline int16_t bswap(int16_t in) {
         }                                                                                        \
     }
 
-inline mjd bswap(mjd in) {
+[[nodiscard]] inline mjd bswap(mjd in) {
     in.days = bswap(in.days);
     in.seconds = bswap(in.seconds);
     in.micros = bswap(in.micros);
     return in;
 }
 
-inline FEPAnnotations bswap(FEPAnnotations in) {
+[[nodiscard]] inline FEPAnnotations bswap(FEPAnnotations in) {
     in.isp_length = bswap(in.isp_length);
     in.crcErrorCnt = bswap(in.crcErrorCnt);
     in.correctionCnt = bswap(in.correctionCnt);

@@ -102,15 +102,16 @@ __global__ void RangeCellMigrationCorrection(const cufftComplex* data_in, int sr
     const float fft_bin_step = args.prf / src_y_size;
 
     const float dc = Polyval(args.dc_poly, dst_x);
-    const int dc_steps = dc / fft_bin_step;
 
     // find FFT bin frequency
     float fn = 0.0f;
-    if ((dst_y < src_y_size / 2) - dc_steps) {
+    if ((dst_y < src_y_size / 2)) {
         fn = dst_y * fft_bin_step;
     } else {
         fn = (dst_y - src_y_size) * fft_bin_step;
     }
+
+    fn -= dc;
 
     // slant range at range pixel
     const double R0 = args.slant_range + dst_x * args.range_spacing;
@@ -180,16 +181,16 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
         const float fft_bin_step = args.prf / src_height;
 
         const float dc = Polyval(args.dc_poly, dst_x);
-        const int dc_steps = dc / fft_bin_step;
         // find FFT bin frequency
         float fn = 0.0f;
-        // float half_pixel_shift = 0.0f;
-        if ((dst_y < src_height / 2) - dc_steps) {
+        if ((dst_y < src_height / 2)) {
             fn = dst_y * fft_bin_step;
 
         } else {
             fn = (dst_y - src_height) * fft_bin_step;
         }
+
+        fn -= dc;
 
         const float max_freq = (src_height / 2) * fft_bin_step - dc;
         const float min_freq = -(src_height / 2) * fft_bin_step - dc;

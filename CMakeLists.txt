@@ -101,6 +101,6 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_
     message("Also adding 'stdc++fs' for linking since the g++ version ${CMAKE_CXX_COMPILER_VERSION} requires it.")
     target_link_libraries(asar_focus PRIVATE gdal cufft stdc++fs)
 else ()
-    target_link_libraries(asar_focus PRIVATE gdal cufft)
+    target_link_libraries(asar_focus PRIVATE gdal cufft fmt)
 endif()
 

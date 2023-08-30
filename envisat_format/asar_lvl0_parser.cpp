@@ -3,10 +3,13 @@
 #include "envisat_file_format.h"
 
 #include "asar_lvl0_parser.h"
-// #include "envisat_utils.h"
+
+#include "fmt/format.h"
+
 #include "envisat_aux_file.h"
 #include "envisat_ph.h"
 #include "sar/orbit_state_vector.h"
+
 
 namespace {
 template <class T>
@@ -142,10 +145,7 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     asar_meta.last_line_time = asar_meta.sensing_stop;
 
     sar_meta.osv = FindOrbits(asar_meta.sensing_start, asar_meta.sensing_stop, orbit_path);
-    sar_meta.platform_velocity = CalcVelocity(sar_meta.osv[sar_meta.osv.size() / 2]);
-    sar_meta.results.Vr_poly = {0, 0, sar_meta.platform_velocity * 0.94};
 
-    printf("platform velocity = %f, initial Vr = %f\n", sar_meta.platform_velocity, CalcVr(sar_meta, 0));
 
     InstrumentFile ins_file = {};
     FindINSFile(aux_path, asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
@@ -178,18 +178,12 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     auto dsds = ExtractDSDs(sph);
 
     auto mdsr = dsds.at(0);
-    size_t offset = mdsr.ds_offset;
-    const uint8_t* base = reinterpret_cast<const uint8_t*>(file_data.data()) + offset;
-    const uint8_t* it = reinterpret_cast<const uint8_t*>(file_data.data()) + offset;
+    const uint8_t* it = reinterpret_cast<const uint8_t*>(file_data.data()) + mdsr.ds_offset;
 
-    double i_sum = 0.0;
-    double q_sum = 0.0;
-    double i_sq = 0.0;
-    double q_sq = 0.0;
-    size_t n_tot = 0;
+    int echo_cnt = 0;
 
     std::vector<EchoMeta> echos;
-    for (size_t i = 0; mdsr.num_dsr; i++) {
+    for (size_t i = 0; i < mdsr.num_dsr; i++) {
         EchoMeta echo_meta = {};
         // Source: ENVISAT-1 ASAR INTERPRETATION OF SOURCE PACKET DATA
         // PO-TN-MMS-SR-0248
@@ -211,7 +205,7 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
         it = CopyBSwapPOD(datafield_length, it);
 
         if (datafield_length != 29) {
-            break;
+            ERROR_EXIT(fmt::format("DSR nr = {} ({}) parsing error. Date Field Header Length should be 29 - is {}", i, mdsr.num_dsr, datafield_length));
         }
 
         it++;
@@ -294,13 +288,7 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
                     float q_samp = ins_file.fbp.q_LUT_fbaq4[FBAQ4Idx(block_id, q_codeword)];
                     // float i_samp = ins_file.fbp.no_adc_fbaq4[FBAQ4Idx(block_id, i_codeword)];
                     // float q_samp = ins_file.fbp.no_adc_fbaq4[FBAQ4Idx(block_id, q_codeword)];
-                    echo_meta.raw_data.push_back({i_samp, q_samp});
-                    i_sum += i_samp;
-                    q_sum += q_samp;
-
-                    i_sq += i_samp * i_samp;
-                    q_sq += q_samp * q_samp;
-                    n_tot++;
+                    echo_meta.raw_data.emplace_back(i_samp, q_samp);
                     // printf("%01X %01X\n", i_sample, q_sample);
                 }
             }
@@ -310,7 +298,6 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
 
         it += (fep.isp_length - 29);
 
-        // echos.push_back(std::move(echo_meta));
     }
 
     uint16_t min_swst = UINT16_MAX;
@@ -374,7 +361,7 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
 
     asar_meta.swst_rank = n_pulses_swst;
 
-    // constexpr double rgd = 3.538883113418309e-07;
+    //TODO Range gate bias must be included in this calculation
     asar_meta.two_way_slant_range_time =
         (min_swst + n_pulses_swst * echos.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate);
 
@@ -382,7 +369,14 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     sar_meta.wavelength = c / sar_meta.carrier_frequency;
     sar_meta.range_spacing = c / (2 * sar_meta.chirp.range_sampling_rate);
 
-    sar_meta.azimuth_spacing = sar_meta.platform_velocity * 0.88 * (1 / sar_meta.pulse_repetition_frequency);
+
+    sar_meta.platform_velocity = CalcVelocity(sar_meta.osv[sar_meta.osv.size() / 2]);
+    // Ground speed ~12% less than platform velocity. 4.2.1 from "Digital processing of SAR Data"
+    //TODO should it be calculated more precisely?
+    const double Vg = sar_meta.platform_velocity * 0.88;
+    sar_meta.results.Vr_poly = {0, 0, sqrt(Vg * sar_meta.platform_velocity)};
+    printf("platform velocity = %f, initial Vr = %f\n", sar_meta.platform_velocity, CalcVr(sar_meta, 0));
+    sar_meta.azimuth_spacing = Vg * (1 / sar_meta.pulse_repetition_frequency);
 
     sar_meta.img.range_size = range_sz;
     sar_meta.img.azimuth_size = echos.size();
@@ -402,6 +396,8 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     }
 
     // TODO these two always seem to differ?
+
+    fmt::format("{}", to_iso_string(asar_meta.sensing_start));
     std::cout << "Dataset = " << asar_meta.product_name << "\n";
     std::cout << "SENSING START = " << asar_meta.sensing_start << "\n";
     std::cout << "First echo = " << MjdToPtime(echos.front().isp_sensing_time) << "\n";

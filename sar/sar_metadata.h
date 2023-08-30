@@ -19,7 +19,7 @@ struct ChirpInfo {
     double pulse_duration;
     int n_samples;
     double pulse_bandwidth;
-    double Kr;
+    double Kr; // Linear FM rate of transmitted pulse
 };
 
 struct SARResults {

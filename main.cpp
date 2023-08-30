@@ -33,8 +33,6 @@ struct IQ16 {
 
 bool wif = false;
 
-void LoadMetadata(const std::string& path, SARMetadata& metadata);
-
 auto time_start() { return std::chrono::steady_clock::now(); }
 
 void time_stop(std::chrono::steady_clock::time_point beg, const char* msg) {
@@ -114,7 +112,7 @@ int main(int argc, char* argv[]) {
     for (int y = 0; y < az_size; y++) {
         auto* dest = img.Data() + y * rg_padded;
         auto* src = h_data.data() + y * rg_size;
-        cudaMemcpy(dest, src, rg_size * 8, cudaMemcpyHostToDevice);
+        CHECK_CUDA_ERR(cudaMemcpy(dest, src, rg_size * 8, cudaMemcpyHostToDevice));
     }
 
     time_stop(gpu_transfer_start, "GPU image formation");
@@ -171,8 +169,6 @@ int main(int argc, char* argv[]) {
         Plot(args);
     }
 
-    // TODO
-    // iq_correct_cuda(raw_adc, img);
     if (wif) {
         std::string path = "/tmp/";
         path += wif_name_base + "_raw.tif";
@@ -264,7 +260,7 @@ int main(int argc, char* argv[]) {
                 row[x] = iq16;
             }
 
-            memset(&mds.buf[y * mds.record_size], 0, 17);
+            memset(&mds.buf[y * mds.record_size], 0, 17); //TODO each row mjd
             memcpy(&mds.buf[y * mds.record_size + 17], row.data(), row.size() * 4);
         }
     }
