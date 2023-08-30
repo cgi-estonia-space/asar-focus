@@ -30,7 +30,7 @@ struct DSD_lvl0 {
 class ProductHeader {
 public:
     void Load(uint32_t offset, const char* data, uint32_t n) {
-        copy_ = std::string(data, n);
+        copy_ = std::string(data + offset, n);
         std::vector<std::string> tokens;
         boost::algorithm::split(tokens, copy_, boost::is_any_of("\n"));
 

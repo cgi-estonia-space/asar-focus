@@ -13,6 +13,7 @@
 #include <string_view>
 #include <vector>
 
+#include "envisat_file_format.h"
 #include "sar/orbit_state_vector.h"
 
 namespace alus::dorisorbit {
@@ -28,8 +29,10 @@ public:
 private:
 
     Parsable() = delete;
-    Parsable(std::string dsd_records);
+    Parsable(ProductHeader mph, ProductHeader sph, std::string dsd_records);
 
+    ProductHeader _mph;
+    ProductHeader _sph;
     std::string _dsd_records;
 };
 

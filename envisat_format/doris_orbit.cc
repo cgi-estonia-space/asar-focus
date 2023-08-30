@@ -11,6 +11,7 @@
 #include "doris_orbit.h"
 
 #include <cstddef>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <locale>
@@ -21,6 +22,8 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/date_time/posix_time/posix_time_io.hpp>
 #include <boost/date_time/posix_time/ptime.hpp>
+
+#include "envisat_file_format.h"
 
 namespace {
 
@@ -42,26 +45,10 @@ namespace {
 
 namespace alus::dorisorbit {
 
-    Parsable::Parsable(std::string dsd_records) : _dsd_records{std::move(dsd_records)} {
-        //    // Find the index of the last newline character
-        //    size_t lastNewlinePos = _dsd_records.find_last_of('\n');
-        //    lastNewlinePos = _dsd_records.find_last_of('\n', lastNewlinePos - 1);
-        //
-        //    const auto n_first = _dsd_records.find_first_of('\n');
-        //    // Extract the first line
-        //    std::string firstLine = _dsd_records.substr(0, n_first);
-        //
-        //    // Extract the last line
-        //    std::string lastLine = _dsd_records.substr(lastNewlinePos + 1);
-        //
-        //    // Count the total number of rows
-        //    int rowCount = std::accumulate(_dsd_records.cbegin(), _dsd_records.cend(), 0,
-        //                                   [](int prev, char c) { return c != '\n' ? prev : prev + 1; });
-        //
-        //    // Output the results
-        //    std::cout << "First Line: " << firstLine << std::endl;
-        //    std::cout << "Last Line: " << lastLine << std::endl;
-        //    std::cout << "Total Rows: " << rowCount << std::endl;
+    Parsable::Parsable(ProductHeader mph, ProductHeader sph, std::string dsd_records) : _mph{std::move(mph)},
+                                                                                        _sph{std::move(sph)},
+                                                                                        _dsd_records{std::move(
+                                                                                                dsd_records)} {
     }
 
     std::vector<OrbitStateVector> Parsable::CreateOrbitInfo() const {
@@ -84,15 +71,7 @@ namespace alus::dorisorbit {
             stream.imbue(locale);
             boost::posix_time::ptime date;
             stream >> date;
-            boost::posix_time::time_duration td = date.time_of_day();
-            const auto h = td.hours();
-            const auto m = td.minutes();
-            const auto s = td.seconds();
-            const auto fs = td.fractional_seconds();
-            (void) h;
-            (void) m;
-            (void) s;
-            (void) fs;
+
             if (date.is_not_a_date_time()) {
                 std::cerr << "Unparseable date '" + item_datetime + "' for format: " +
                              std::string(ENVISAT_DORIS_TIMESTAMP_PATTERN) << std::endl;
@@ -113,15 +92,29 @@ namespace alus::dorisorbit {
     }
 
     Parsable Parsable::TryCreateFrom(std::string_view filename) {
+        size_t file_sz = std::filesystem::file_size(filename.data());
+        if (file_sz != ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES) {
+            std::cerr << "Expected DORIS orbit file to be " << ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES
+                      << " bytes, but actual file size is " << file_sz << " bytes" << std::endl;
+        }
+
         std::fstream in_stream;
         in_stream.exceptions(std::ifstream::failbit | std::ifstream::badbit);
         in_stream.open(filename.data(), std::ios::in);
-        in_stream.seekg(ENVISAT_DORIS_MPH_LENGTH_BYTES + ENVISAT_DORIS_SPH_LENGTH_BYTES);
 
-        std::string dsd_records(ENVISAT_DORIS_MDS_LENGTH_BYTES, 0);
-        in_stream.read(dsd_records.data(), ENVISAT_DORIS_MDS_LENGTH_BYTES);
+        std::vector<char> data(file_sz);
+        in_stream.read(data.data(), file_sz);
+        in_stream.close();
 
-        return Parsable(std::move(dsd_records));
+        ProductHeader mph = {};
+        mph.Load(0, data.data(), ENVISAT_DORIS_MPH_LENGTH_BYTES);
+        ProductHeader sph = {};
+        sph.Load(ENVISAT_DORIS_MPH_LENGTH_BYTES, data.data(), ENVISAT_DORIS_SPH_LENGTH_BYTES);
+
+        std::string dsd_records(data.cbegin() + ENVISAT_DORIS_MPH_LENGTH_BYTES + ENVISAT_DORIS_SPH_LENGTH_BYTES,
+                                data.cend());
+
+        return Parsable(std::move(mph), std::move(sph), std::move(dsd_records));
     }
 
 }  // namespace alus::dorisorbit
