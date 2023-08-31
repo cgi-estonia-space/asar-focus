@@ -129,11 +129,9 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
     }
 
     {
-        auto first_time = asar_meta.sensing_start;
-        double interval_us = (1 / sar_meta.pulse_repetition_frequency) * 1e6;
-        int step = sar_meta.img.azimuth_size / 5;
         for (int i = 0; i < 5; i++) {
-            auto time = first_time + boost::posix_time::microseconds(static_cast<uint64_t>(i * step * interval_us));
+            int az_idx = (sar_meta.img.azimuth_size * i)/4;
+            auto time = CalcAzimuthTime(sar_meta, az_idx);
             auto iosv = InterpolateOrbit(sar_meta.osv, time);
 
             out.orbit_state_vectors[i].state_vect_time = PtimeToMjd(time);
@@ -363,9 +361,10 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
 
             static_assert(size == 521);
 
-            int step = sar_meta.img.azimuth_size / n;
+
+            int step = sar_meta.img.azimuth_size / (n-1);
             for (size_t i = 0; i < n; i++) {
-                int az_idx = i * step / (n-1);
+                int az_idx = i * sar_meta.img.azimuth_size / (n-1);
                 FillGeoLocationAds(az_idx, az_idx + step - 1, sar_meta, asar_meta, out.geolocation_grid[i]);
                 out.geolocation_grid[i].BSwap();
             }

@@ -399,18 +399,22 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     fmt::print("Sensing start = {}\nFirst ISP = {}\nDiff = {} us\n", to_iso_extended_string(asar_meta.sensing_start),
                to_iso_extended_string(first_mjd), (asar_meta.sensing_start - first_mjd).total_microseconds());
 
-    // TODO init guess handling? At the moment just
-    double init_guess_lat = asar_meta.start_nadir_lat;
+    // TODO init guess handling? At the moment just a naive guess from nadir point
+    double init_guess_lat = (asar_meta.start_nadir_lat + asar_meta.stop_nadir_lat) / 2;
     double init_guess_lon = asar_meta.start_nadir_lon;
     if (asar_meta.ascending) {
-        init_guess_lat += 3.0;
-        init_guess_lon += 1.5;
+        init_guess_lon += 1.0 + 2.0 * swath_idx;
     } else {
-        init_guess_lat -= 3.0;
-        init_guess_lon -= 1.5;
+        init_guess_lon -= 1.0 + 2.0 * swath_idx;
     }
 
+    fmt::print("nadirs start {} {} - stop  {} {}\n", asar_meta.start_nadir_lat, asar_meta.start_nadir_lon,
+               asar_meta.stop_nadir_lat, asar_meta.stop_nadir_lon);
+
+    fmt::print("guess = {} {}\n", init_guess_lat, init_guess_lon);
+
     auto init_xyz = Geo2xyzWgs84(init_guess_lat, init_guess_lon, 0);
+
     double center_s = (1 / sar_meta.pulse_repetition_frequency) * sar_meta.img.azimuth_size / 2;
     auto center_time = asar_meta.sensing_start + boost::posix_time::microseconds(static_cast<uint32_t>(center_s * 1e6));
 
