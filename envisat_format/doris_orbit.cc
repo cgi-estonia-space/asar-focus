@@ -51,8 +51,14 @@ namespace alus::dorisorbit {
                                                                                                 dsd_records)} {
     }
 
-    std::vector<OrbitStateVector> Parsable::CreateOrbitInfo() const {
-        std::vector<OrbitStateVector> orbits;
+    const std::vector<OrbitStateVector>&
+    Parsable::CreateOrbitInfo(boost::posix_time::ptime start, boost::posix_time::ptime stop) {
+        _osv.clear();
+        _osv_metadata.clear();
+
+        const auto delta_minutes = boost::posix_time::minutes(5);
+        const auto start_delta = start - delta_minutes;
+        const auto end_delta = stop + delta_minutes;
 
         std::istringstream record_stream(_dsd_records);
         std::string record;
@@ -77,6 +83,11 @@ namespace alus::dorisorbit {
                              std::string(ENVISAT_DORIS_TIMESTAMP_PATTERN) << std::endl;
                 exit(1);
             }
+
+            if (date < start_delta || date > end_delta) {
+                continue;
+            }
+
             OrbitStateVector a;
             a.time = date;
             a.x_pos = strtod(items.at(4).c_str(), nullptr);
@@ -85,10 +96,15 @@ namespace alus::dorisorbit {
             a.x_vel = strtod(items.at(7).c_str(), nullptr);
             a.y_vel = strtod(items.at(8).c_str(), nullptr);
             a.z_vel = strtod(items.at(9).c_str(), nullptr);
-            orbits.push_back(a);
+            _osv.push_back(a);
+            PointEntryInfo pei;
+            pei.absolute_orbit = items.at(3);
+            pei.ut1_delta = items.at(2);
+            pei.quality = static_cast<QualityFlag>(strtoul(items.at(10).c_str(), nullptr, 10));
+            _osv_metadata.push_back(pei);
         }
 
-        return orbits;
+        return _osv;
     }
 
     Parsable Parsable::TryCreateFrom(std::string_view filename) {

@@ -10,6 +10,7 @@
 #include <map>
 #include <variant>
 
+#include "doris_orbit.h"
 #include "envisat_types.h"
 #include "sar/orbit_state_vector.h"
 #include "sar/sar_metadata.h"
@@ -66,5 +67,6 @@ struct ASARMetadata {
     bool ascending;
 };
 
-void ParseIMFile(const std::vector<char>& file_data, const char* aux_pax, SARMetadata& sar_meta,
-                 ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data, std::string_view orbit_path);
+void ParseIMFile(const std::vector<char> &file_data, const char *aux_pax, SARMetadata &sar_meta,
+                 ASARMetadata &asar_meta, std::vector<std::complex<float>> &img_data,
+                 alus::dorisorbit::Parsable &orbit_source);

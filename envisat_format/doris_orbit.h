@@ -18,22 +18,46 @@
 
 namespace alus::dorisorbit {
 
-class Parsable final {
-public:
-    static Parsable TryCreateFrom(std::string_view filename);
+    class Parsable final {
+    public:
+        static Parsable TryCreateFrom(std::string_view filename);
 
-    std::vector<OrbitStateVector> CreateOrbitInfo() const;
+        const std::vector<OrbitStateVector> &
+        CreateOrbitInfo(boost::posix_time::ptime start, boost::posix_time::ptime stop); // AssembleOsvFor()
 
-    ~Parsable() = default;
+        std::string GetDatasetName() const;
 
-private:
+        std::string GetAbsoluteOrbit() const;
 
-    Parsable() = delete;
-    Parsable(ProductHeader mph, ProductHeader sph, std::string dsd_records);
+        ~Parsable() = default;
 
-    ProductHeader _mph;
-    ProductHeader _sph;
-    std::string _dsd_records;
-};
+    private:
 
+        Parsable() = delete;
+
+        Parsable(ProductHeader mph, ProductHeader sph, std::string dsd_records);
+
+        // From https://earth.esa.int/eogateway/documents/20142/37627/Readme-file-for-Envisat-DORIS-POD.pdf chapter 2
+        enum QualityFlag : unsigned {
+            PRECISE_ADJUSTED = 3,
+            PRECISE_MANOEUVRE = 4,
+            PRECISE_TRACKING_GAP = 5,
+            PRECISE_LESS_THAN_24_HRS = 6,
+            PRELIMINARY_1_TO_2_DAYS = 7,
+            PRELIMINARY_OVER_2_DAYS_OR_MANOEUVRE = 8
+        };
+
+        struct PointEntryInfo {
+            std::string absolute_orbit;
+            std::string ut1_delta;
+            QualityFlag quality;
+        };
+
+        ProductHeader _mph;
+        ProductHeader _sph;
+        std::string _dsd_records;
+        std::vector<OrbitStateVector> _osv;
+        std::vector<PointEntryInfo> _osv_metadata;
+
+    };
 }

@@ -122,8 +122,9 @@ int SwathIdx(const std::string& swath) {
 }
 }  // namespace
 
-void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMetadata& sar_meta,
-                 ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data, std::string_view orbit_path) {
+void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMetadata &sar_meta,
+                 ASARMetadata &asar_meta, std::vector<std::complex<float>> &img_data,
+                 alus::dorisorbit::Parsable &orbit_source) {
     ProductHeader mph = {};
 
     mph.Load(file_data.data(), MPH_SIZE);
@@ -143,7 +144,24 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     asar_meta.first_line_time = asar_meta.sensing_start;
     asar_meta.last_line_time = asar_meta.sensing_stop;
 
-    sar_meta.osv = FindOrbits(asar_meta.sensing_start, asar_meta.sensing_stop, orbit_path);
+    sar_meta.osv = orbit_source.CreateOrbitInfo(asar_meta.sensing_start, asar_meta.sensing_stop);
+
+    if (sar_meta.osv.size() < 8) {
+        std::string msg = "Wrong date on orbit file?\nOSV start/end = ";
+        if (sar_meta.osv.size() > 1) {
+            msg += boost::posix_time::to_simple_string(sar_meta.osv.front().time) + " / ";
+            msg += boost::posix_time::to_simple_string(sar_meta.osv.back().time);
+        }
+        msg += " Sensing start = " + boost::posix_time::to_simple_string(asar_meta.sensing_start) + "\n";
+        ERROR_EXIT(msg);
+    }
+
+    std::cout << "SENSING START "<< asar_meta.sensing_start << "\n";
+    std::cout << "SENSIND END " << asar_meta.sensing_stop << "\n";
+    std::cout << "ORBIT vectors start " << sar_meta.osv.front().time << "\n";
+    std::cout << "ORBIT vectors end " << sar_meta.osv.back().time << "\n";
+    CHECK_BOOL(
+            asar_meta.sensing_start >= sar_meta.osv.front().time && asar_meta.sensing_stop <= sar_meta.osv.back().time);
 
     InstrumentFile ins_file = {};
     FindINSFile(aux_path, asar_meta.sensing_start, ins_file, asar_meta.instrument_file);

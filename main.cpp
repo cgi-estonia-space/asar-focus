@@ -76,8 +76,10 @@ int main(int argc, char* argv[]) {
     SARMetadata metadata = {};
     ASARMetadata asar_meta = {};
 
+    auto orbit_source = alus::dorisorbit::Parsable::TryCreateFrom(orbit_path);
+
     std::vector<std::complex<float>> h_data;
-    ParseIMFile(data, aux_path, metadata, asar_meta, h_data, orbit_path);
+    ParseIMFile(data, aux_path, metadata, asar_meta, h_data, orbit_source);
 
     time_stop(file_time_start, "LVL0 file read + parse");
 
