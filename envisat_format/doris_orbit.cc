@@ -23,12 +23,14 @@
 #include <boost/date_time/posix_time/posix_time_io.hpp>
 #include <boost/date_time/posix_time/ptime.hpp>
 
-#include "envisat_mph_sph_parser.h"
+#include "envisat_format/envisat_mph_sph_parser.h"
+#include "util/filesystem_util.h"
 
 namespace {
 
 // Following are defined in https://earth.esa.int/eogateway/documents/20142/37627/Readme-file-for-Envisat-DORIS-POD.pdf
 // chapter 2 "Doris POD data"
+    constexpr size_t ENVISAT_DORIS_FILENAME_LENGTH{61}; // DOR_VOR_AXVF-P20120424_120200_20040101_215528_20040103_002328
     constexpr size_t ENVISAT_DORIS_MPH_LENGTH_BYTES{1247};
     constexpr size_t ENVISAT_DORIS_SPH_LENGTH_BYTES{378};
     constexpr size_t ENVISAT_DORIS_MDS_LENGTH_BYTES{204981};
@@ -39,8 +41,18 @@ namespace {
     static_assert(ENVISAT_DORIS_MDSR_COUNT * ENVISAT_DORIS_MDSR_LENGTH_BYTES == ENVISAT_DORIS_MDS_LENGTH_BYTES);
     static_assert(ENVISAT_DORIS_MPH_LENGTH_BYTES + ENVISAT_DORIS_SPH_LENGTH_BYTES + ENVISAT_DORIS_MDS_LENGTH_BYTES ==
                   ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES);
-//constexpr std::string_view ENVISAT_DORIS_TIMESTAMP_PATTERN{"%d-%m-%Y %H:%M:%S"};
     constexpr std::string_view ENVISAT_DORIS_TIMESTAMP_PATTERN{"%d-%b-%Y %H:%M:%S%f"};
+    // DOR_VOR_AXVF-P20120424_120200_20040101_215528_20040103_002328
+    constexpr std::string_view ENVISAT_DORIS_TIMESTAMP_FILENAME_PATTERN{"%Y%M%d_%H%M%S"};
+
+    boost::posix_time::ptime ParseDate(const std::string &date_string, std::locale format) {
+        std::stringstream stream(date_string);
+        stream.imbue(format);
+        boost::posix_time::ptime date;
+        stream >> date;
+
+        return date;
+    }
 }  // namespace
 
 namespace alus::dorisorbit {
@@ -51,8 +63,29 @@ namespace alus::dorisorbit {
                                                                                                 dsd_records)} {
     }
 
-    const std::vector<OrbitStateVector>&
+    Parsable::Parsable(std::vector<EntryListing> listing) : _listing{std::move(listing)} {}
+
+    const std::vector<OrbitStateVector> &
     Parsable::CreateOrbitInfo(boost::posix_time::ptime start, boost::posix_time::ptime stop) {
+
+        if (_listing.size() > 0) {
+            const auto listing = _listing; // Make a copy for possible instantiation.
+            bool found{false};
+            for (const auto &l: listing) {
+                if (l.start < start && l.end > stop) {
+                    *this = CreateFromFile(l.file_path.c_str());
+                    this->_listing = listing;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                std::cerr << "Could not find orbit file entry that would cover sensing time spane of the dataset"
+                          << std::endl;
+                exit(1);
+            }
+        }
+
         _osv.clear();
         _osv_metadata.clear();
 
@@ -107,7 +140,7 @@ namespace alus::dorisorbit {
         return _osv;
     }
 
-    Parsable Parsable::TryCreateFrom(std::string_view filename) {
+    Parsable Parsable::CreateFromFile(std::string_view filename) {
         size_t file_sz = std::filesystem::file_size(filename.data());
         if (file_sz != ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES) {
             std::cerr << "Expected DORIS orbit file to be " << ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES
@@ -131,6 +164,62 @@ namespace alus::dorisorbit {
                                 data.cend());
 
         return Parsable(std::move(mph), std::move(sph), std::move(dsd_records));
+    }
+
+    Parsable Parsable::CreateFromDirectoryListing(std::string_view directory) {
+        const auto listings = alus::util::filesystem::GetFileListingRecursively(directory);
+
+        std::vector<EntryListing> doris_listing;
+        const auto *timestamp_styling = new boost::posix_time::time_input_facet(
+                ENVISAT_DORIS_TIMESTAMP_FILENAME_PATTERN.data());
+        const auto locale = std::locale(std::locale::classic(), timestamp_styling);
+        for (const auto &l: listings) {
+            const auto string_name = l.filename().string();
+            if (string_name.length() != ENVISAT_DORIS_FILENAME_LENGTH) {
+                continue;
+            }
+
+            if (std::filesystem::file_size(l) != ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES) {
+                continue;
+            }
+
+            std::vector<std::string> items;
+            boost::split(items, string_name, boost::is_any_of("_"), boost::token_compress_on);
+            // DOR_VOR_AXVF-P20120424_120200_20040101_215528_20040103_002328
+            if (items.size() != 8) {
+                continue;
+            }
+
+            if (items.front() != "DOR" || items.at(1) != "VOR" || items.at(2).length() != 14 ||
+                items.at(3).length() != 6 || items.at(4).length() != 8 || items.at(5).length() != 6 ||
+                items.at(6).length() != 8 || items.at(7).length() != 6) {
+                continue;
+            }
+
+            const auto start_date = ParseDate(items.at(4) + "_" + items.at(5), locale);
+            const auto end_date = ParseDate(items.at(6) + "_" + items.at(7), locale);
+
+            if (start_date.is_not_a_date_time() || end_date.is_not_a_date_time()) {
+                std::cerr << "Unparseable date from DORIS orbit file '" + string_name + "' for format: " +
+                             std::string(ENVISAT_DORIS_TIMESTAMP_FILENAME_PATTERN) << std::endl;
+                exit(1);
+            }
+
+            doris_listing.push_back({start_date, end_date, l});
+        }
+
+        return Parsable(std::move(doris_listing));
+    }
+
+    Parsable Parsable::TryCreateFrom(std::string_view file_or_folder) {
+        if (std::filesystem::is_regular_file(file_or_folder)) {
+            return CreateFromFile(file_or_folder);
+        } else if (std::filesystem::is_directory(file_or_folder)) {
+            return CreateFromDirectoryListing(file_or_folder);
+        } else {
+            std::cerr << "Unidentified orbit source - " << file_or_folder << std::endl;
+            exit(1);
+        }
     }
 
 }  // namespace alus::dorisorbit

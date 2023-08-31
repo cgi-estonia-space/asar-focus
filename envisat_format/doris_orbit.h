@@ -9,6 +9,7 @@
 */
 #pragma once
 
+#include <filesystem>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -20,7 +21,7 @@ namespace alus::dorisorbit {
 
     class Parsable final {
     public:
-        static Parsable TryCreateFrom(std::string_view filename);
+        static Parsable TryCreateFrom(std::string_view file_or_folder);
 
         const std::vector<OrbitStateVector> &
         CreateOrbitInfo(boost::posix_time::ptime start, boost::posix_time::ptime stop); // AssembleOsvFor()
@@ -33,9 +34,19 @@ namespace alus::dorisorbit {
 
     private:
 
+        static Parsable CreateFromFile(std::string_view filename);
+        static Parsable CreateFromDirectoryListing(std::string_view directory);
+
         Parsable() = delete;
 
         Parsable(ProductHeader mph, ProductHeader sph, std::string dsd_records);
+
+        struct EntryListing {
+            boost::posix_time::ptime start;
+            boost::posix_time::ptime end;
+            std::filesystem::path file_path;
+        };
+        Parsable(std::vector<EntryListing> listing);
 
         // From https://earth.esa.int/eogateway/documents/20142/37627/Readme-file-for-Envisat-DORIS-POD.pdf chapter 2
         enum QualityFlag : unsigned {
@@ -58,6 +69,6 @@ namespace alus::dorisorbit {
         std::string _dsd_records;
         std::vector<OrbitStateVector> _osv;
         std::vector<PointEntryInfo> _osv_metadata;
-
+        std::vector<EntryListing> _listing;
     };
 }

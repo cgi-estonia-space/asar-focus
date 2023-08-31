@@ -55,6 +55,7 @@ set(CUDA_UTIL_SOURCES
 
 set(UTIL_SOURCES
         util/checks.h
+        util/filesystem_util.cc
         util/geo_tools.cpp
         util/geo_tools.h
         util/img_output.cpp

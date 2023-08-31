@@ -46,7 +46,7 @@ int main(int argc, char* argv[]) {
         // to arg parse
 
         printf("Not a correct argument count, example:\n"
-               "%s [input file] [aux path] [DORIS orbit file]", argv[0]);
+               "%s [input file] [aux path] [DORIS orbit file/folder]", argv[0]);
         return 1;
     }
 
