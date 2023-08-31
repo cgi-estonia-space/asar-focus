@@ -6,11 +6,16 @@
 
 #include <string.h>
 
-#include "envisat_lvl1_dsd.h"
-#include "envisat_ph.h"
+#include "envisat_lvl1_ads.h"
+#include "envisat_mph_sph_str_utils.h"
 #include "util/checks.h"
 
-struct MPH {
+
+/**
+ *  Memory layout struct for Envisat LVL1 MPH, intended for file writing
+ */
+
+struct Lvl1MPH {
     uc product[73];
     uc proc_state[13];
     uc ref_doc[34];
@@ -123,9 +128,9 @@ struct MPH {
     }
 };
 
-static_assert(__builtin_offsetof(MPH, acquistion_station) == 161);
-static_assert(__builtin_offsetof(MPH, software_ver) == 265);
-static_assert(__builtin_offsetof(MPH, phase) == 464);
-static_assert(__builtin_offsetof(MPH, utc_sbt_time) == 815);
-static_assert(__builtin_offsetof(MPH, leap_utc) == 946);
-static_assert(sizeof(MPH) == 1247);
+static_assert(__builtin_offsetof(Lvl1MPH, acquistion_station) == 161);
+static_assert(__builtin_offsetof(Lvl1MPH, software_ver) == 265);
+static_assert(__builtin_offsetof(Lvl1MPH, phase) == 464);
+static_assert(__builtin_offsetof(Lvl1MPH, utc_sbt_time) == 815);
+static_assert(__builtin_offsetof(Lvl1MPH, leap_utc) == 946);
+static_assert(sizeof(Lvl1MPH) == 1247);

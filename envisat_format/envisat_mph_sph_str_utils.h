@@ -5,8 +5,15 @@
 
 #include <boost/date_time/posix_time/posix_time.hpp>
 
-#include "envisat_lvl1_dsd.h"
+#include "envisat_lvl1_ads.h"
 #include "util/checks.h"
+
+// Utility functions to generate strings for MPH and SPH
+
+// Names and sizes from
+// ENVISAT-1 PRODUCTS SPECIFICATIONS
+// ANNEX A: PRODUCT DATA CONVENTIONS
+// IDEAS+-SER-IPF-SPE-2337
 
 template <size_t N>
 void LastNewline(uc (&arr)[N]) {
@@ -172,15 +179,3 @@ inline std::string PtimeToStr(boost::posix_time::ptime time) {
     return str;
 }
 
-inline boost::posix_time::ptime StrToPtime(std::string str) {
-    boost::posix_time::time_input_facet* facet =
-        new boost::posix_time::time_input_facet("%d-%b-%Y %H:%M:%S%f");  //.%f");
-    std::stringstream date_stream(str);
-    date_stream.imbue(std::locale(std::locale::classic(), facet));
-    boost::posix_time::ptime time;
-    date_stream >> time;
-    if (time.is_not_a_date_time()) {
-        exit(1);
-    }
-    return time;
-}

@@ -8,19 +8,18 @@ set(CMAKE_CXX_STANDARD  17)
 set(ENVISAT_FORMAT_FILES
         envisat_format/asar_constants.cpp
         envisat_format/asar_constants.h
-        envisat_format/asar_lvl0_parser.cpp
-        envisat_format/asar_lvl0_parser.h
-        envisat_format/asar_lvl1_file.cpp
-        envisat_format/asar_lvl1_file.h
+        envisat_format/envisat_lvl0_parser.cpp
+        envisat_format/envisat_lvl0_parser.h
+        envisat_format/envisat_lvl1_writer.cpp
+        envisat_format/envisat_lvl1_writer.h
         envisat_format/bswap_util.h
-        envisat_format/envisat_file_format.h
+        envisat_format/envisat_mph_sph_parser.h
         envisat_format/envisat_aux_file.cpp
         envisat_format/envisat_aux_file.h
-        envisat_format/envisat_lvl1_dsd.h
-        envisat_format/envisat_mph.h
-        envisat_format/envisat_ph.cpp
-        envisat_format/envisat_ph.h
-        envisat_format/envisat_sph.h
+        envisat_format/envisat_lvl1_ads.h
+        envisat_format/envisat_lvl1_mph.h
+        envisat_format/envisat_mph_sph_str_utils.h
+        envisat_format/envisat_lvl1_sph.h
         envisat_format/envisat_types.h
         envisat_format/envisat_utils.h
         envisat_format/doris_orbit.cc

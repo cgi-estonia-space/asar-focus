@@ -2,6 +2,12 @@
 
 #include <cstdint>
 
+
+// Names and sizes from
+// ENVISAT-1 PRODUCTS SPECIFICATIONS
+// ANNEX A: PRODUCT DATA CONVENTIONS
+// IDEAS+-SER-IPF-SPE-2337
+
 using sc = int8_t;
 using uc = uint8_t;
 using ss = int16_t;

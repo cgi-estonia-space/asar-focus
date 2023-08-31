@@ -2,9 +2,13 @@
 
 #include <string>
 
-#include "envisat_ph.h"
+#include "envisat_mph_sph_str_utils.h"
 #include "util/geo_tools.h"
 
+
+/**
+ *  Memory layout struct for Envisat LVL1 SPH, intended for file writing
+ */
 struct DSD {
     uc ds_name[39];
     uc ds_type[10];

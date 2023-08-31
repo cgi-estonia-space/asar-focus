@@ -1,14 +1,14 @@
 #pragma once
 
-#include "envisat_lvl1_dsd.h"
-#include "envisat_mph.h"
-#include "envisat_ph.h"
-#include "envisat_sph.h"
+#include "envisat_lvl1_ads.h"
+#include "envisat_lvl1_mph.h"
+#include "envisat_lvl1_sph.h"
+#include "envisat_mph_sph_str_utils.h"
 
-#include "asar_lvl0_parser.h"
+#include "envisat_lvl0_parser.h"
 
 struct __attribute__((packed)) EnvisatIMS {
-    MPH mph;
+    Lvl1MPH mph;
     Lvl1SPH sph;
     SummaryQualityADS summary_quality;
     MainProcessingParametersADS main_processing_params;
@@ -18,12 +18,14 @@ struct __attribute__((packed)) EnvisatIMS {
 };
 
 struct MDS {
-    int n_records;
-    int record_size;
-
+    int n_records = 0;
+    int record_size = 0;
     char* buf = nullptr;
 
+    MDS() = default;
     ~MDS() { delete[] buf; }
+    MDS(const MDS&) = delete;
+    MDS& operator=(const MDS&) = delete;
 };
 
 void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& mds);

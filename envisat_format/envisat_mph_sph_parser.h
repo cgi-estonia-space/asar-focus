@@ -29,8 +29,8 @@ struct DSD_lvl0 {
 
 class ProductHeader {
 public:
-    void Load(uint32_t offset, const char* data, uint32_t n) {
-        copy_ = std::string(data + offset, n);
+    void Load(const char* data, uint32_t n) {
+        copy_ = std::string(data, n);
         std::vector<std::string> tokens;
         boost::algorithm::split(tokens, copy_, boost::is_any_of("\n"));
 
@@ -57,8 +57,10 @@ public:
                 return kv.value;
             }
         }
-        ERROR_EXIT(key + " not found in MPH/SPH file");
+        ERROR_EXIT(key + " not found in Lvl1MPH/SPH file");
     }
+
+    const auto& GetIdx(size_t idx) { return kv_vec_.at(idx); }
 
     void PrintValues() {
         for (const auto& e : kv_vec_) {
@@ -123,7 +125,7 @@ inline std::vector<DSD_lvl0> ExtractDSDs(const ProductHeader& sph) {
         dsd.dsr_size = extract_bytes(tokens.at(6));
 
         res.push_back(dsd);
-        //dsd.print();
+        // dsd.print();
     }
 
     return res;

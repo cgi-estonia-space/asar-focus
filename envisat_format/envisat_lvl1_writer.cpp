@@ -1,10 +1,10 @@
 
-#include "asar_lvl1_file.h"
+#include "envisat_lvl1_writer.h"
 
 #include <filesystem>
 
 #include "asar_constants.h"
-#include "envisat_ph.h"
+#include "envisat_mph_sph_str_utils.h"
 #include "sar/sar_metadata.h"
 #include "util/geo_tools.h"
 
@@ -365,7 +365,7 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
 
             int step = sar_meta.img.azimuth_size / n;
             for (size_t i = 0; i < n; i++) {
-                int az_idx = i * step;
+                int az_idx = i * step / (n-1);
                 FillGeoLocationAds(az_idx, az_idx + step - 1, sar_meta, asar_meta, out.geolocation_grid[i]);
                 out.geolocation_grid[i].BSwap();
             }

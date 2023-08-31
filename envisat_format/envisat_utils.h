@@ -40,3 +40,16 @@ inline mjd PtimeToMjd(boost::posix_time::ptime in) {
     r.micros = in.time_of_day().total_microseconds() % 1000000;
     return r;
 }
+
+inline boost::posix_time::ptime StrToPtime(std::string str) {
+    boost::posix_time::time_input_facet* facet =
+        new boost::posix_time::time_input_facet("%d-%b-%Y %H:%M:%S%f");  //.%f");
+    std::stringstream date_stream(str);
+    date_stream.imbue(std::locale(std::locale::classic(), facet));
+    boost::posix_time::ptime time;
+    date_stream >> time;
+    if (time.is_not_a_date_time()) {
+        exit(1);
+    }
+    return time;
+}

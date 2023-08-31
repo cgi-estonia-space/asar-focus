@@ -5,16 +5,11 @@
 
 #include "envisat_utils.h"
 
-using sc = int8_t;
-using uc = uint8_t;
-using ss = int16_t;
-using us = uint16_t;
-using sl = int32_t;
-using ul = uint32_t;
-using sd = int64_t;
-using ud = uint64_t;
-using fl = float;
-using do_ = double;  // do is already a keyword...
+#include "envisat_types.h"
+
+/**
+ * struct definitions for Envisat LVL1 IMS ADS intended for file writing
+ */
 
 struct __attribute__((packed)) GeneralSummary {
     mjd first_zero_doppler_time;

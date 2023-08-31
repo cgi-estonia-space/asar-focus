@@ -16,6 +16,11 @@
 #include "util/geo_tools.h"
 #include "util/math_utils.h"
 
+/**
+ * Envisat LVL0 IM file parser, ex ASA_IM__0PNPDE20040111_085939_000000182023_00179_09752_2307.N1
+ * Extracts RAW echo data and relevant metadata needed for SAR focussing
+ */
+
 struct ASARMetadata {
     std::string lvl0_file_name;
     std::string product_name;

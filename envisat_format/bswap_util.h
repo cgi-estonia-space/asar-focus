@@ -1,13 +1,19 @@
 #pragma once
 
+#include <climits>
 #include <cstdint>
 #include <cstring>
 #include <utility>
 
 #include "envisat_types.h"
 
+// Much of the byteparsing and writing code in this project written with the following assumptions
+static_assert(CHAR_BIT == 8);
+static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__);
+// if either of these asserts fail, you will want to double check all memcpyes, bswap() and member BSwap() calls
+
 template <class T>
-void bswap(T in) = delete; // avoid implicit conversions
+void bswap(T in) = delete;  // avoid implicit conversions
 
 [[nodiscard]] inline uint32_t bswap(uint32_t in) { return __builtin_bswap32(in); }
 

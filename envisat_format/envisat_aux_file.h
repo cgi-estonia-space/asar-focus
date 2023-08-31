@@ -3,9 +3,13 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <filesystem>
 #include <iostream>
-#include "asar_lvl0_parser.h"
+#include "envisat_lvl0_parser.h"
 
 #include "bswap_util.h"
+
+/**
+ * Parser for ASA_CON and ASA_INS files, auxiliary files used for metadata extractions
+ */
 
 struct NominalChirpInstrument {
     fl amplitude[4];

@@ -23,7 +23,7 @@
 #include <boost/date_time/posix_time/posix_time_io.hpp>
 #include <boost/date_time/posix_time/ptime.hpp>
 
-#include "envisat_file_format.h"
+#include "envisat_mph_sph_parser.h"
 
 namespace {
 
@@ -107,9 +107,9 @@ namespace alus::dorisorbit {
         in_stream.close();
 
         ProductHeader mph = {};
-        mph.Load(0, data.data(), ENVISAT_DORIS_MPH_LENGTH_BYTES);
+        mph.Load(data.data(), ENVISAT_DORIS_MPH_LENGTH_BYTES);
         ProductHeader sph = {};
-        sph.Load(ENVISAT_DORIS_MPH_LENGTH_BYTES, data.data(), ENVISAT_DORIS_SPH_LENGTH_BYTES);
+        sph.Load(data.data() + ENVISAT_DORIS_MPH_LENGTH_BYTES, ENVISAT_DORIS_SPH_LENGTH_BYTES);
 
         std::string dsd_records(data.cbegin() + ENVISAT_DORIS_MPH_LENGTH_BYTES + ENVISAT_DORIS_SPH_LENGTH_BYTES,
                                 data.cend());

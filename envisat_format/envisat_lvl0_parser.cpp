@@ -1,15 +1,14 @@
 
 
-#include "envisat_file_format.h"
+#include "envisat_mph_sph_parser.h"
 
-#include "asar_lvl0_parser.h"
+#include "envisat_lvl0_parser.h"
 
 #include "fmt/format.h"
 
 #include "envisat_aux_file.h"
-#include "envisat_ph.h"
+#include "envisat_mph_sph_str_utils.h"
 #include "sar/orbit_state_vector.h"
-
 
 namespace {
 template <class T>
@@ -127,10 +126,10 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
                  ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data, std::string_view orbit_path) {
     ProductHeader mph = {};
 
-    mph.Load(0, file_data.data(), MPH_SIZE);
+    mph.Load(file_data.data(), MPH_SIZE);
 
-    //printf("MPH = \n");
-    //mph.PrintValues();
+    // printf("Lvl1MPH = \n");
+    // mph.PrintValues();
 
     asar_meta.product_name = mph.Get("PRODUCT");
 
@@ -146,17 +145,16 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
 
     sar_meta.osv = FindOrbits(asar_meta.sensing_start, asar_meta.sensing_stop, orbit_path);
 
-
     InstrumentFile ins_file = {};
     FindINSFile(aux_path, asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
 
     ConfigurationFile conf_file = {};
     FindCONFile(aux_path, asar_meta.sensing_start, conf_file, asar_meta.configuration_file);
     ProductHeader sph = {};
-    sph.Load(MPH_SIZE, file_data.data() + MPH_SIZE, SPH_SIZE);
+    sph.Load(file_data.data() + MPH_SIZE, SPH_SIZE);
 
-    //printf("SPH = \n");
-    //sph.PrintValues();
+    // printf("SPH = \n");
+    // sph.PrintValues();
 
     asar_meta.start_nadir_lat = NadirLLParse(sph.Get("START_LAT"));
     asar_meta.start_nadir_lon = NadirLLParse(sph.Get("START_LONG"));
@@ -205,7 +203,8 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
         it = CopyBSwapPOD(datafield_length, it);
 
         if (datafield_length != 29) {
-            ERROR_EXIT(fmt::format("DSR nr = {} ({}) parsing error. Date Field Header Length should be 29 - is {}", i, mdsr.num_dsr, datafield_length));
+            ERROR_EXIT(fmt::format("DSR nr = {} ({}) parsing error. Date Field Header Length should be 29 - is {}", i,
+                                   mdsr.num_dsr, datafield_length));
         }
 
         it++;
@@ -297,7 +296,6 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
         }
 
         it += (fep.isp_length - 29);
-
     }
 
     uint16_t min_swst = UINT16_MAX;
@@ -361,7 +359,7 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
 
     asar_meta.swst_rank = n_pulses_swst;
 
-    //TODO Range gate bias must be included in this calculation
+    // TODO Range gate bias must be included in this calculation
     asar_meta.two_way_slant_range_time =
         (min_swst + n_pulses_swst * echos.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate);
 
@@ -369,10 +367,9 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     sar_meta.wavelength = c / sar_meta.carrier_frequency;
     sar_meta.range_spacing = c / (2 * sar_meta.chirp.range_sampling_rate);
 
-
     sar_meta.platform_velocity = CalcVelocity(sar_meta.osv[sar_meta.osv.size() / 2]);
     // Ground speed ~12% less than platform velocity. 4.2.1 from "Digital processing of SAR Data"
-    //TODO should it be calculated more precisely?
+    // TODO should it be calculated more precisely?
     const double Vg = sar_meta.platform_velocity * 0.88;
     sar_meta.results.Vr_poly = {0, 0, sqrt(Vg * sar_meta.platform_velocity)};
     printf("platform velocity = %f, initial Vr = %f\n", sar_meta.platform_velocity, CalcVr(sar_meta, 0));
@@ -397,10 +394,10 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
 
     // TODO these two always seem to differ?
 
-    fmt::format("{}", to_iso_string(asar_meta.sensing_start));
-    std::cout << "Dataset = " << asar_meta.product_name << "\n";
-    std::cout << "SENSING START = " << asar_meta.sensing_start << "\n";
-    std::cout << "First echo = " << MjdToPtime(echos.front().isp_sensing_time) << "\n";
+    auto first_mjd = MjdToPtime(echos.front().isp_sensing_time);
+
+    fmt::print("Sensing start = {}\nFirst ISP = {}\nDiff = {} us\n", to_iso_extended_string(asar_meta.sensing_start),
+               to_iso_extended_string(first_mjd), (asar_meta.sensing_start - first_mjd).total_microseconds());
 
     // TODO init guess handling? At the moment just
     double init_guess_lat = asar_meta.start_nadir_lat;
@@ -419,7 +416,7 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
 
     // TODO investigate fast time effect on geolocation
     double slant_range_center = sar_meta.slant_range_first_sample +
-                                ((sar_meta.img.range_size - sar_meta.chirp.n_samples) / 2 - 0) * sar_meta.range_spacing;
+                                ((sar_meta.img.range_size - sar_meta.chirp.n_samples) / 2) * sar_meta.range_spacing;
 
     auto osv = InterpolateOrbit(sar_meta.osv, center_time);
 
