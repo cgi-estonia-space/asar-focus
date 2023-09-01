@@ -239,7 +239,7 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
         mph.Set_SBT_Defaults();
 
         mph.SetSensingStartStop(PtimeToStr(asar_meta.sensing_start), PtimeToStr(asar_meta.sensing_stop));
-        mph.Set_ORBIT_Defaults();
+        mph.SetOrbitInfo(asar_meta);
         mph.Set_SBT_Defaults();
         mph.Set_LEAP_Defaults();
         mph.Set_PRODUCT_ERR('0');
@@ -384,7 +384,7 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
         sph.dsds[14].SetReferenceDSD("INSTRUMENT CHARACTERIZATION", asar_meta.instrument_file);
         sph.dsds[15].SetEmptyDSD("EXTERNAL CHARACTERIZATION", 'R');
         sph.dsds[16].SetReferenceDSD("EXTERNAL CALIBRATION", "DUMMY FILE NAME");
-        sph.dsds[17].SetReferenceDSD("ORBIT STATE VECTOR 1", "DUMMY FILE NAME");
+        sph.dsds[17].SetReferenceDSD("ORBIT STATE VECTOR 1", asar_meta.orbit_dataset_name);
     }
 
     std::string out_path = "/tmp/" + out_name;

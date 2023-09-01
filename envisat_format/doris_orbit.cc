@@ -43,7 +43,7 @@ namespace {
                   ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES);
     constexpr std::string_view ENVISAT_DORIS_TIMESTAMP_PATTERN{"%d-%b-%Y %H:%M:%S%f"};
     // DOR_VOR_AXVF-P20120424_120200_20040101_215528_20040103_002328
-    constexpr std::string_view ENVISAT_DORIS_TIMESTAMP_FILENAME_PATTERN{"%Y%M%d_%H%M%S"};
+    constexpr std::string_view ENVISAT_DORIS_TIMESTAMP_FILENAME_PATTERN{"%Y%m%d_%H%M%S"};
 
     boost::posix_time::ptime ParseDate(const std::string &date_string, std::locale format) {
         std::stringstream stream(date_string);
@@ -80,7 +80,7 @@ namespace alus::dorisorbit {
                 }
             }
             if (!found) {
-                std::cerr << "Could not find orbit file entry that would cover sensing time spane of the dataset"
+                std::cerr << "Could not find orbit file entry that would cover sensing time span of the dataset"
                           << std::endl;
                 exit(1);
             }
@@ -89,7 +89,8 @@ namespace alus::dorisorbit {
         _osv.clear();
         _osv_metadata.clear();
 
-        const auto delta_minutes = boost::posix_time::minutes(5);
+        constexpr size_t ORBIT_DELTA_MINUTE_COUNT{5};
+        const auto delta_minutes = boost::posix_time::minutes(ORBIT_DELTA_MINUTE_COUNT);
         const auto start_delta = start - delta_minutes;
         const auto end_delta = stop + delta_minutes;
 
@@ -106,11 +107,7 @@ namespace alus::dorisorbit {
                 exit(1);
             }
             const auto item_datetime = items.front() + " " + items.at(1);//.substr(0, 8);
-            std::stringstream stream(item_datetime);
-            stream.imbue(locale);
-            boost::posix_time::ptime date;
-            stream >> date;
-
+            auto date = ParseDate(item_datetime, locale);
             if (date.is_not_a_date_time()) {
                 std::cerr << "Unparseable date '" + item_datetime + "' for format: " +
                              std::string(ENVISAT_DORIS_TIMESTAMP_PATTERN) << std::endl;
@@ -131,11 +128,20 @@ namespace alus::dorisorbit {
             a.z_vel = strtod(items.at(9).c_str(), nullptr);
             _osv.push_back(a);
             PointEntryInfo pei;
-            pei.absolute_orbit = items.at(3);
-            pei.ut1_delta = items.at(2);
+            pei.absolute_orbit = strtoul(items.at(3).c_str(), nullptr, 10);
+            pei.ut1_delta = strtod(items.at(2).c_str(), nullptr);
             pei.quality = static_cast<QualityFlag>(strtoul(items.at(10).c_str(), nullptr, 10));
             _osv_metadata.push_back(pei);
         }
+
+        if (_osv.size() < ORBIT_DELTA_MINUTE_COUNT * 2) {
+            std::cerr << "There were less than required " << ORBIT_DELTA_MINUTE_COUNT * 2 << " entries parsed from"
+                      << " orbit file (over a timespan of " << ORBIT_DELTA_MINUTE_COUNT * 2 << " minutes)," <<
+                      " probably a corrupt orbit dataset or implementation error." << std::endl;
+            exit(1);
+        }
+
+        UpdateMetadataForL1Product(start, stop);
 
         return _osv;
     }
@@ -145,6 +151,7 @@ namespace alus::dorisorbit {
         if (file_sz != ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES) {
             std::cerr << "Expected DORIS orbit file to be " << ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES
                       << " bytes, but actual file size is " << file_sz << " bytes" << std::endl;
+            exit(1);
         }
 
         std::fstream in_stream;
@@ -220,6 +227,47 @@ namespace alus::dorisorbit {
             std::cerr << "Unidentified orbit source - " << file_or_folder << std::endl;
             exit(1);
         }
+    }
+
+    void Parsable::UpdateMetadataForL1Product(boost::posix_time::ptime start, boost::posix_time::ptime stop) {
+
+        bool found{false};
+        const auto filtered_osv_count = _osv.size();
+        for (size_t i{}; i < filtered_osv_count; i++) {
+            const auto& osv = _osv.at(i);
+            // Based on observed results of the blueprints, the last state vector that is before start-stop is fetched.
+            if (osv.time > start - boost::posix_time::minutes(1 )) {
+                _l1_product_metadata.delta_ut1 = _osv_metadata.at(i).ut1_delta;
+                _l1_product_metadata.abs_orbit = _osv_metadata.at(i).absolute_orbit;
+
+                _l1_product_metadata.state_vector_time = osv.time;
+                _l1_product_metadata.x_position = osv.x_pos;
+                _l1_product_metadata.y_position = osv.y_pos;
+                _l1_product_metadata.z_position = osv.z_pos;
+                _l1_product_metadata.x_velocity = osv.x_vel;
+                _l1_product_metadata.y_velocity = osv.y_vel;
+                _l1_product_metadata.z_velocity = osv.z_vel;
+
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            std::cerr << "Failed to construct L1 product metadata from orbit source, probably corrupt orbit file."
+                      << std::endl;
+            exit(1);
+        }
+
+        _l1_product_metadata.orbit_name = _mph.Get("PRODUCT");
+        const auto vector_source_long = _sph.Get("DS_NAME");
+        if (vector_source_long.find("DORIS PRECISE") != std::string::npos) {
+            _l1_product_metadata.vector_source = "DP";
+        } else {
+            _l1_product_metadata.vector_source = "??";
+        }
+        _l1_product_metadata.phase = _mph.Get("PHASE").front();
+        _l1_product_metadata.cycle = strtoul(_mph.Get("CYCLE").c_str(), nullptr, 10);
     }
 
 }  // namespace alus::dorisorbit

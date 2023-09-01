@@ -81,6 +81,22 @@ int main(int argc, char* argv[]) {
     std::vector<std::complex<float>> h_data;
     ParseIMFile(data, aux_path, metadata, asar_meta, h_data, orbit_source);
 
+    {
+        const auto& orbit_l1_metadata = orbit_source.GetL1ProductMetadata();
+        asar_meta.orbit_metadata.vector_source = orbit_l1_metadata.vector_source;
+        asar_meta.orbit_metadata.x_position = orbit_l1_metadata.x_position;
+        asar_meta.orbit_metadata.y_position = orbit_l1_metadata.y_position;
+        asar_meta.orbit_metadata.z_position = orbit_l1_metadata.z_position;
+        asar_meta.orbit_metadata.x_velocity = orbit_l1_metadata.x_velocity;
+        asar_meta.orbit_metadata.y_velocity = orbit_l1_metadata.y_velocity;
+        asar_meta.orbit_metadata.z_velocity = orbit_l1_metadata.z_velocity;
+        asar_meta.orbit_metadata.state_vector_time = orbit_l1_metadata.state_vector_time;
+        asar_meta.orbit_metadata.phase = orbit_l1_metadata.phase;
+        asar_meta.orbit_metadata.cycle = orbit_l1_metadata.cycle;
+        asar_meta.orbit_metadata.abs_orbit = orbit_l1_metadata.abs_orbit;
+        asar_meta.orbit_metadata.orbit_name = orbit_l1_metadata.orbit_name;
+    }
+
     time_stop(file_time_start, "LVL0 file read + parse");
 
     std::string wif_name_base = asar_meta.product_name;

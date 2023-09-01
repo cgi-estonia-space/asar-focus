@@ -88,7 +88,11 @@ inline std::string ToAdo73(double val) {
 
 inline std::string ToAdo46(double val) {
     char buf[20];
-    snprintf(buf, 20, "%c%011.6f", val >= 0 ? '+' : '-', val);
+    if (val >= 0) {
+        snprintf(buf, 20, "+%011.6f", val);
+    } else {
+        snprintf(buf, 20, "%011.6f", val);
+    }
     return buf;
 }
 

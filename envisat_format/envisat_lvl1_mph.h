@@ -6,6 +6,7 @@
 
 #include <string.h>
 
+#include "envisat_lvl0_parser.h"
 #include "envisat_lvl1_ads.h"
 #include "envisat_mph_sph_str_utils.h"
 #include "util/checks.h"
@@ -88,21 +89,22 @@ struct Lvl1MPH {
         SetStr(sensing_stop, "SENSING_STOP", stop);
     }
 
-    void Set_ORBIT_Defaults() {
-        SetChar(phase, "PHASE", 'X');
-        SetAc(cycle, "CYCLE", 0);
-        SetAs(rel_orbit, "REL_ORBIT", 0);
-        SetAs(abs_orbit, "ABS_ORBIT", 0);
-        SetStr(state_vector_time, "STATE_VECTOR_TIME", "");
+    void SetOrbitInfo(const ASARMetadata& md) {
+        SetChar(phase, "PHASE", md.orbit_metadata.phase);
+        SetAc(cycle, "CYCLE", md.orbit_metadata.cycle);
+        SetAs(rel_orbit, "REL_ORBIT", md.orbit_metadata.rel_orbit);
+        SetAs(abs_orbit, "ABS_ORBIT", md.orbit_metadata.abs_orbit);
+        SetStr(state_vector_time, "STATE_VECTOR_TIME", PtimeToStr(md.orbit_metadata.state_vector_time));
+
         strcpy((char*)&delta_ut1[0], "DELTA_UT1=+.281903<s>");  // TODO
         delta_ut1[sizeof(delta_ut1) - 1] = '\n';
-        SetAdo73(x_position, "X_POSITION", 0.0, "<m>");
-        SetAdo73(y_position, "Y_POSITION", 0.0, "<m>");
-        SetAdo73(z_position, "Z_POSITION", 0.0, "<m>");
-        SetAdo46(x_velocity, "X_VELOCITY", 0.0, "<m/s>");
-        SetAdo46(y_velocity, "Y_VELOCITY", 0.0, "<m/s>");
-        SetAdo46(z_velocity, "Z_VELOCITY", 0.0, "<m/s>");
-        SetStr(vector_source, "VECTOR_SOURCE", "PC");
+        SetAdo73(x_position, "X_POSITION", md.orbit_metadata.x_position, "<m>");
+        SetAdo73(y_position, "Y_POSITION", md.orbit_metadata.y_position, "<m>");
+        SetAdo73(z_position, "Z_POSITION", md.orbit_metadata.z_position, "<m>");
+        SetAdo46(x_velocity, "X_VELOCITY", md.orbit_metadata.x_velocity, "<m/s>");
+        SetAdo46(y_velocity, "Y_VELOCITY", md.orbit_metadata.y_velocity, "<m/s>");
+        SetAdo46(z_velocity, "Z_VELOCITY", md.orbit_metadata.z_velocity, "<m/s>");
+        SetStr(vector_source, "VECTOR_SOURCE", md.orbit_metadata.vector_source);
     }
 
     void Set_SBT_Defaults() {
