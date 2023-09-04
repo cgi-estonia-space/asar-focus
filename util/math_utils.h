@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <numeric>
@@ -74,4 +75,10 @@ inline void PolyvalRange(const std::vector<double>& p, int x_start, int x_end, s
     for (size_t i = 0; i < x.size(); i++) {
         y[i] = Polyval(p.data(), p.size(), x[i]);
     }
+}
+template<class T>
+inline void fftshift(T begin, T end)
+{
+    int center = (end - begin)/2;
+    std::rotate(begin, begin + center, end);
 }

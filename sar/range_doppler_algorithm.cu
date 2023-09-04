@@ -4,7 +4,9 @@
 #include "cuda_util/cufft_plan.h"
 #include "util/checks.h"
 
-#define INPLACE_AZIMUTH_FFT 0  // 0 -> transpose + range FFT + transpose, 1 -> azimuth FFT
+#include "util/plot.h"
+
+#define INPLACE_AZIMUTH_FFT 1  // 0 -> transpose + range FFT + transpose, 1 -> azimuth FFT
 
 // 0 -> Nearest neighbor / no interpolator
 //  -> 8 point windowed sinc interpolator
@@ -110,9 +112,8 @@ __global__ void RangeCellMigrationCorrection(const cufftComplex* data_in, int sr
         fn = (dst_y - src_y_size) * fft_bin_step;
     }
 
-
-    //TODO investigate doppler centroid usage
-    // RCMC should be using the absolute value?
+    // TODO investigate doppler centroid usage
+    //  RCMC should be using the absolute value?
     const float half_prf = args.prf * 0.5f;
     if (dc < 0.0f) {
         if (fn > half_prf + dc) {
@@ -201,10 +202,13 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
             fn = (dst_y - src_height) * fft_bin_step;
         }
 
+        //;
 
-
-        //TODO investigate doppler centroid usage
-        // Ref multiply should be using the baseband value?
+        if(dst_x == 2500 && (dst_y % 1000) == 0) {
+            //printf("y = %d f = %f\n", dst_y, fn);
+        }
+        // TODO investigate doppler centroid usage
+        //  Ref multiply should be using the baseband value?
         const float half = args.prf * 0.5f;
         const float half_cutoff = half * args.azimuth_bandwidth_fraction;
         float cutoff_high = half_cutoff + dc;
@@ -229,6 +233,23 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
             }
         }
 
+        clear = false;
+
+
+
+
+        if(fn > 300000) { //&& fn < 400) {
+
+            clear = true;
+        }
+        else {
+            clear = false;
+        }
+
+        if(dst_x == 2500 && (dst_y % 1000) == 0) {
+            printf("fn = %f , clear = %d\n", fn, clear);
+        }
+
         if (clear) {
             src_data[src_idx] = {};
             return;
@@ -237,16 +258,16 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
         // slant range at range pixel
         const double R0 = args.slant_range + args.range_spacing * dst_x;
 
-        const float Vr = Polyval(args.Vr_poly, dst_x);
+        const double Vr = Polyval(args.Vr_poly, dst_x);
         // Azimuth FM rate
-        const float Ka = (2 * Vr * Vr) / (args.lambda * R0);
+        const double Ka = (2 * Vr * Vr) / (args.lambda * R0);
 
         // range Doppler domain matched filter at this frequency
-        float phase = (-float_pi * fn * fn) / Ka;
+        double phase = (-float_pi * fn * fn) / Ka;
 
         cufftComplex val;
-        float sin_val;
-        float cos_val;
+        double sin_val;
+        double cos_val;
         sincos(phase, &sin_val, &cos_val);
         val.x = cos_val;
         val.y = sin_val;
@@ -316,6 +337,48 @@ void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_i
                                                             src_img.YStride(), out_img.Data(), out_img.XStride(),
                                                             k_args);
 
+    {
+        int h = out_img.YStride();
+        int w = out_img.XStride();
+        cufftComplex* p = new cufftComplex[w * h];
+        out_img.CopyToHostPaddedSize(p);
+
+        std::vector<double> x;
+        std::vector<double> y_mag;
+        std::vector<double> y_fr;
+        for (int i = 0; i < h; i++) {
+            int offset = 2500;
+            cufftComplex d = p[i * w + offset];
+            float v = (d.x * d.x + d.y * d.y);
+            x.push_back(i);
+            y_mag.push_back(v);
+            if (i < h / 2) {
+                y_fr.push_back(i * metadata.pulse_repetition_frequency / h);
+            } else {
+                y_fr.push_back((i - h) * metadata.pulse_repetition_frequency / h);
+            }
+        }
+
+        fftshift(y_mag.begin(), y_mag.end());
+        fftshift(y_fr.begin(), y_fr.end());
+
+        PlotArgs a = {};
+        Scatter s = {};
+        s.x = x;
+        s.y = y_mag;
+        s.line_name = "AZ FFT mag";
+        a.data.push_back(s);
+
+        s.y = y_fr;
+        s.line_name = "AZ FFT freq";
+        a.data.push_back(s);
+        a.graph_name = "AZ FFT";
+        a.out_path = "/tmp/fft.html";
+        a.x_axis_title = "bin";
+        a.y_axis_title = "fft mag";
+
+        Plot(a);
+    }
     // Azimuth Compression step
     AzimuthReferenceMultiply<<<grid_size, block_size>>>(out_img.Data(), out_img.XSize(), out_img.YStride(),
                                                         out_img.XStride(), k_args);

@@ -445,7 +445,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     sar_meta.center_point = RangeDopplerGeoLocate({osv.x_vel, osv.y_vel, osv.z_vel}, {osv.x_pos, osv.y_pos, osv.z_pos},
                                                   init_xyz, slant_range_center);
     sar_meta.center_time = center_time;
-    sar_meta.first_line_time = asar_meta.sensing_start;
+    sar_meta.first_line_time = MjdToPtime(echos.front().isp_sensing_time);//asar_meta.sensing_start;
     sar_meta.azimuth_bandwidth_fraction = 0.8f;
     auto llh = xyz2geoWGS84(sar_meta.center_point);
     printf("center point = %f %f\n", llh.latitude, llh.longitude);

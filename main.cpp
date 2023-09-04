@@ -237,12 +237,13 @@ int main(int argc, char* argv[]) {
     time_stop(az_comp_start, "Azimuth compression");
     cudaDeviceSynchronize();
 
-    if (wif) {
+    if (wif || true) {
         std::string path = "/tmp/";
         path += wif_name_base + "_slc.tif";
         WriteIntensityPaddedImg(out, path.c_str());
     }
 
+    return 0;
     printf("done!\n");
 
     auto cpu_transfer_start = time_start();
