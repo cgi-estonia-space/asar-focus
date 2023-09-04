@@ -222,6 +222,18 @@ int main(int argc, char* argv[]) {
 
     metadata.img.range_size = img.XSize();
 
+    auto src_start = time_start();
+    SecondaryRangeCompression(img, metadata, d_workspace);
+    time_stop(src_start, "Secondary Range compression");
+
+    if (wif || true) {
+        std::string path = "/tmp/";
+        path += wif_name_base + "_src.tif";
+        WriteIntensityPaddedImg(img, path.c_str());
+    }
+
+
+
     if (wif) {
         std::string path = "/tmp/";
         path += wif_name_base + "_rc.tif";
@@ -232,16 +244,18 @@ int main(int argc, char* argv[]) {
     DevicePaddedImage out;
     RangeDopplerAlgorithm(metadata, img, out, std::move(d_workspace));
 
+
     out.ZeroFillPaddings();
 
     time_stop(az_comp_start, "Azimuth compression");
     cudaDeviceSynchronize();
 
-    if (wif) {
+    if (wif || true) {
         std::string path = "/tmp/";
         path += wif_name_base + "_slc.tif";
         WriteIntensityPaddedImg(out, path.c_str());
     }
+    return 0;
 
     printf("done!\n");
 

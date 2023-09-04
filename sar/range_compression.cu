@@ -6,7 +6,7 @@
 #include "cuda_util/cuda_util.h"
 #include "cuda_util/cufft_plan.h"
 #include "util/checks.h"
-//#include "math_utils.h"
+// #include "math_utils.h"
 
 __global__ void FrequencyDomainMultiply(cufftComplex* data_fft, const cufftComplex* chirp_fft, int range_fft_size,
                                         int azimuth_size) {
@@ -94,4 +94,89 @@ void RangeCompression(DevicePaddedImage& data, const std::vector<std::complex<fl
 
     CHECK_CUDA_ERR(cudaDeviceSynchronize());  // not needed at this point, but helps with debugging
     CHECK_CUDA_ERR(cudaGetLastError());
+}
+
+namespace {
+struct SRCArgs {
+    // float Kr;
+    float Vr;
+    float carrier_frequency;
+    float rsr;
+    float prf;
+    double R;
+    float lambda;
+};
+
+__global__ void SRCKernel(cufftComplex* data_2dfft, int range_size, int azimuth_size, SRCArgs args) {
+    const int x = threadIdx.x + blockDim.x * blockIdx.x;
+    const int y = threadIdx.y + blockDim.y * blockIdx.y;
+    const int data_idx = y * range_size + x;
+
+    float range_bin_step = args.rsr / range_size;
+    float azimuth_bin_step = args.prf / azimuth_size;
+
+    float fr = 0.0f;
+    if (y < (range_size / 2)) {
+        fr = y * range_bin_step;
+
+    } else {
+        fr = (y - range_size) * range_bin_step;
+    }
+
+    float fn = 0.0f;
+    if (y < (azimuth_size / 2)) {
+        fn = y * azimuth_bin_step;
+
+    } else {
+        fn = (y - azimuth_size) * azimuth_bin_step;
+    }
+
+    float term = (args.lambda * args.lambda * fn * fn) / (4 * args.Vr * args.Vr);
+    float D = sqrtf(1 - term);
+    float f0 = args.carrier_frequency;
+    double Ksrc = 2 * args.Vr * args.Vr * f0 * f0 * f0 * D * D * D;
+    Ksrc /= (SOL * args.R * fn * fn);
+
+    double phase = -M_PI * fr * fr / Ksrc;
+
+    cufftComplex val;
+    float sin_val;
+    float cos_val;
+    sincos(phase, &sin_val, &cos_val);
+    val.x = cos_val;
+    val.y = sin_val;
+
+    data_2dfft[data_idx] = cuCmulf(data_2dfft[data_idx], val);
+}
+
+}  // namespace
+
+void SecondaryRangeCompression(DevicePaddedImage& img, const SARMetadata& sar_meta, CudaWorkspace& d_workspace) {
+    cufftComplex* d_data = img.Data();
+    int rg_size = img.XStride();
+    int az_size = img.YStride();
+    cufftHandle fft2d = Plan2DFFT(rg_size, az_size);
+
+    CufftPlanCleanup fft_cleanup(fft2d);
+
+    CHECK_CUFFT_ERR(cufftSetWorkArea(fft2d, d_workspace.Get()));
+    CHECK_CUFFT_ERR(cufftExecC2C(fft2d, d_data, d_data, CUFFT_FORWARD));
+
+    dim3 block_size(16, 16);
+    dim3 grid_size((rg_size + 15) / 16, (az_size + 15) / 16);
+    SRCArgs args = {};
+
+    args.Vr = CalcVr(sar_meta, rg_size / 2);
+    args.lambda = sar_meta.wavelength;
+    args.carrier_frequency = sar_meta.carrier_frequency;
+    args.prf = sar_meta.pulse_repetition_frequency;
+    args.R = CalcR0(sar_meta, rg_size / 2);
+    args.rsr = sar_meta.chirp.range_sampling_rate;
+    SRCKernel<<<grid_size, block_size>>>(d_data, rg_size, az_size, args);
+
+    CHECK_CUFFT_ERR(cufftExecC2C(fft2d, d_data, d_data, CUFFT_INVERSE));
+
+    //img.MultiplyData(1.0f/(rg_size * az_size));
+
+    cudaDeviceSynchronize();
 }

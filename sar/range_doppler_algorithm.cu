@@ -64,8 +64,11 @@ __device__ float sinc(float x) {
 
 namespace {
 struct KernelArgs {
+    // float Vr;  // TODO(priit) float vs double
+    bool secondary_range_compression;
     float prf;
     float lambda;
+    float carrier_frequency;
     // float doppler_centroid;
     double range_spacing;
     // float inv_range_spacing;
@@ -74,8 +77,6 @@ struct KernelArgs {
 
     float dc_poly[3];
     float Vr_poly[3];
-
-    // bool vv_vh_half_pixel_shift;
 };
 
 template <int N>
@@ -110,9 +111,8 @@ __global__ void RangeCellMigrationCorrection(const cufftComplex* data_in, int sr
         fn = (dst_y - src_y_size) * fft_bin_step;
     }
 
-
-    //TODO investigate doppler centroid usage
-    // RCMC should be using the absolute value?
+    // TODO investigate doppler centroid usage
+    //  RCMC should be using the absolute value?
     const float half_prf = args.prf * 0.5f;
     if (dc < 0.0f) {
         if (fn > half_prf + dc) {
@@ -130,10 +130,20 @@ __global__ void RangeCellMigrationCorrection(const cufftComplex* data_in, int sr
     const float Vr = Polyval(args.Vr_poly, dst_x);
 
     // Range walk in meters
-    double dR = (args.lambda * args.lambda * fn * fn) / (8 * Vr * Vr);
-    dR *= R0;
-    // double dR = ((args.lambda * args.lambda)    // printf("KERNEL = %d %d , R0 = %f\n", dst_x, dst_y, R0); * R0 * fn
-    // * fn) / (8 * args.Vr * args.Vr);
+    double dR = 0.0;
+    if (!args.secondary_range_compression) {
+        dR = (args.lambda * args.lambda * fn * fn) / (8 * Vr * Vr);
+        dR *= R0;
+    }
+
+    else {
+        double term = (double)args.lambda * args.lambda * fn * fn;
+        term /= (4 * Vr * Vr);
+
+        double D = sqrt(1 - term);
+
+        dR = R0 * ((1 - D) / D);
+    }
 
     // range walk in pixels
     const float shift = dR / args.range_spacing;
@@ -201,10 +211,8 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
             fn = (dst_y - src_height) * fft_bin_step;
         }
 
-
-
-        //TODO investigate doppler centroid usage
-        // Ref multiply should be using the baseband value?
+        // TODO investigate doppler centroid usage
+        //  Ref multiply should be using the baseband value?
         const float half = args.prf * 0.5f;
         const float half_cutoff = half * args.azimuth_bandwidth_fraction;
         float cutoff_high = half_cutoff + dc;
@@ -242,14 +250,30 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
         const float Ka = (2 * Vr * Vr) / (args.lambda * R0);
 
         // range Doppler domain matched filter at this frequency
-        float phase = (-float_pi * fn * fn) / Ka;
 
-        cufftComplex val;
-        float sin_val;
-        float cos_val;
-        sincos(phase, &sin_val, &cos_val);
-        val.x = cos_val;
-        val.y = sin_val;
+        cufftComplex val = {};
+
+        if (!args.secondary_range_compression) {
+            float phase = (-float_pi * fn * fn) / Ka;
+            float sin_val;
+            float cos_val;
+            sincos(phase, &sin_val, &cos_val);
+            val.x = cos_val;
+            val.y = sin_val;
+        } else {
+            constexpr double c = 299792458;
+            double term = (double)args.lambda * args.lambda * fn * fn;
+            term /= (4 * Vr * Vr);
+
+            double D = sqrt(1 - term);
+            double phase = (double)4 * float_pi * args.carrier_frequency * R0 * D;
+            phase /= c;
+            double sin_val;
+            double cos_val;
+            sincos(phase, &sin_val, &cos_val);
+            val.x = cos_val;
+            val.y = sin_val;
+        }
 
         // application via f domain multiplication
         src_data[src_idx] = cuCmulf(src_data[src_idx], val);
@@ -288,7 +312,9 @@ void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_i
     printf("radar velocity Vr = %f\n", Vr);
 
     KernelArgs k_args = {};
+    k_args.secondary_range_compression = true;
     k_args.lambda = metadata.wavelength;
+    k_args.carrier_frequency = metadata.carrier_frequency;
     k_args.range_spacing = metadata.range_spacing;
     // k_args.inv_range_spacing = 1 / metadata.range_spacing;
     k_args.slant_range = metadata.slant_range_first_sample;
