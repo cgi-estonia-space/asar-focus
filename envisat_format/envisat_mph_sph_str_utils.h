@@ -58,48 +58,52 @@ void SetChar(uc (&arr)[N], const char* keyword, char value) {
 
 inline std::string ToAs(int val) {
     char buf[20];
-    snprintf(buf, 20, "%c%05d", val >= 0 ? '+' : '-', val);
+    snprintf(buf, 20, "%+06d", val); // Sign specifier counts as additional integer part count.
     return buf;
 }
 
 inline std::string ToAl(int val) {
     char buf[20];
-    snprintf(buf, 20, "%c%010d", val >= 0 ? '+' : '-', val);
+    snprintf(buf, 20, "%+011d", val); // Sign specifier counts as additional integer part count.
     return buf;
 }
 
 inline std::string ToAc(int val) {
     char buf[20];
-    snprintf(buf, 20, "%c%03d", val >= 0 ? '+' : '-', val);
+    snprintf(buf, 20, "%+04d", val); // Sign specifier counts as additional integer part count.
     return buf;
 }
 
 inline std::string ToAd(int64_t val) {
     char buf[30];
-    snprintf(buf, 30, "%c%020ld", val >= 0 ? '+' : '-', val);
+    snprintf(buf, 30, "%+021ld", val); // Sign specifier counts as additional integer part count.
+    return buf;
+}
+
+inline std::string ToAdo06(double val) {
+    // TODO - Something should check if integer part is 0 actually.
+    char buf[10]; // printf() somehow always inserts the integer part as well.
+    snprintf(buf, 10, "%+.6f", val);
+    memcpy(buf + 1, buf + 2, 8); // Replace integer part
     return buf;
 }
 
 inline std::string ToAdo73(double val) {
     char buf[20];
-    snprintf(buf, 20, "%c%011.3f", val >= 0 ? '+' : '-', val);
+    snprintf(buf, 20, "%+012.3f", val); // Sign specifier counts as additional integer part count.
     return buf;
 }
 
 inline std::string ToAdo46(double val) {
     char buf[20];
-    if (val >= 0) {
-        snprintf(buf, 20, "+%011.6f", val);
-    } else {
-        snprintf(buf, 20, "%011.6f", val);
-    }
+    snprintf(buf, 20, "%+012.6f", val); // Sign specifier counts as additional integer part count.
     return buf;
 }
 
 inline std::string ToAfl(float val) {
     char buf[20];
     float exp = log10f(val);
-    snprintf(buf, 20, "%c%.8E", val >= 0 ? '+' : '-', val);
+    snprintf(buf, 20, "%+.8E", val);
     return buf;
 }
 
@@ -138,6 +142,16 @@ void SetAd(uc (&arr)[N], const char* keyword, int64_t val, const char* unit = ""
     std::string buf = keyword;
     buf += "=";
     buf += ToAd(val);
+    buf += unit;
+    buf += '\n';
+    CopyStr(arr, buf);
+}
+
+template <size_t N>
+void SetAdo06(uc (&arr)[N], const char* keyword, double val, const char* unit = "") {
+    std::string buf = keyword;
+    buf += "=";
+    buf += ToAdo06(val);
     buf += unit;
     buf += '\n';
     CopyStr(arr, buf);

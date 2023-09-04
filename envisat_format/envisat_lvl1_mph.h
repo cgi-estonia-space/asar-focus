@@ -95,9 +95,7 @@ struct Lvl1MPH {
         SetAs(rel_orbit, "REL_ORBIT", md.orbit_metadata.rel_orbit);
         SetAs(abs_orbit, "ABS_ORBIT", md.orbit_metadata.abs_orbit);
         SetStr(state_vector_time, "STATE_VECTOR_TIME", PtimeToStr(md.orbit_metadata.state_vector_time));
-
-        strcpy((char*)&delta_ut1[0], "DELTA_UT1=+.281903<s>");  // TODO
-        delta_ut1[sizeof(delta_ut1) - 1] = '\n';
+        SetAdo06(delta_ut1, "DELTA_UT1", md.orbit_metadata.delta_ut1, "<s>");
         SetAdo73(x_position, "X_POSITION", md.orbit_metadata.x_position, "<m>");
         SetAdo73(y_position, "Y_POSITION", md.orbit_metadata.y_position, "<m>");
         SetAdo73(z_position, "Z_POSITION", md.orbit_metadata.z_position, "<m>");

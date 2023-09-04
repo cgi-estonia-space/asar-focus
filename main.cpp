@@ -95,6 +95,8 @@ int main(int argc, char* argv[]) {
         asar_meta.orbit_metadata.cycle = orbit_l1_metadata.cycle;
         asar_meta.orbit_metadata.abs_orbit = orbit_l1_metadata.abs_orbit;
         asar_meta.orbit_metadata.orbit_name = orbit_l1_metadata.orbit_name;
+        asar_meta.orbit_metadata.delta_ut1 = orbit_l1_metadata.delta_ut1;
+        asar_meta.orbit_dataset_name = orbit_l1_metadata.orbit_name;
     }
 
     time_stop(file_time_start, "LVL0 file read + parse");
