@@ -64,7 +64,6 @@ __device__ float sinc(float x) {
 
 namespace {
 struct KernelArgs {
-    //float Vr;  // TODO(priit) float vs double
     float prf;
     float lambda;
     // float doppler_centroid;
@@ -111,18 +110,30 @@ __global__ void RangeCellMigrationCorrection(const cufftComplex* data_in, int sr
         fn = (dst_y - src_y_size) * fft_bin_step;
     }
 
-    fn -= dc;
+
+    //TODO investigate doppler centroid usage
+    // RCMC should be using the absolute value?
+    const float half_prf = args.prf * 0.5f;
+    if (dc < 0.0f) {
+        if (fn > half_prf + dc) {
+            fn -= args.prf;
+        }
+    } else if (dc > 0.0f) {
+        if (fn < -half_prf + dc) {
+            fn += args.prf;
+        }
+    }
 
     // slant range at range pixel
     const double R0 = args.slant_range + dst_x * args.range_spacing;
-    // printf("KERNEL = %d %d , R0 = %f\n", dst_x, dst_y, R0);
 
     const float Vr = Polyval(args.Vr_poly, dst_x);
 
     // Range walk in meters
     double dR = (args.lambda * args.lambda * fn * fn) / (8 * Vr * Vr);
     dR *= R0;
-    // double dR = ((args.lambda * args.lambda) * R0 * fn * fn) / (8 * args.Vr * args.Vr);
+    // double dR = ((args.lambda * args.lambda)    // printf("KERNEL = %d %d , R0 = %f\n", dst_x, dst_y, R0); * R0 * fn
+    // * fn) / (8 * args.Vr * args.Vr);
 
     // range walk in pixels
     const float shift = dR / args.range_spacing;
@@ -190,11 +201,35 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
             fn = (dst_y - src_height) * fft_bin_step;
         }
 
-        fn -= dc;
 
-        const float max_freq = (src_height / 2) * fft_bin_step - dc;
-        const float min_freq = -(src_height / 2) * fft_bin_step - dc;
-        if (fn > args.azimuth_bandwidth_fraction * max_freq || fn < args.azimuth_bandwidth_fraction * min_freq) {
+
+        //TODO investigate doppler centroid usage
+        // Ref multiply should be using the baseband value?
+        const float half = args.prf * 0.5f;
+        const float half_cutoff = half * args.azimuth_bandwidth_fraction;
+        float cutoff_high = half_cutoff + dc;
+        float cutoff_low = -half_cutoff + dc;
+
+        if (cutoff_high > half) {
+            cutoff_high -= args.prf;
+        }
+
+        if (cutoff_low < -half) {
+            cutoff_low += args.prf;
+        }
+
+        bool clear = false;
+        if (cutoff_high > cutoff_low) {
+            if (fn > cutoff_high || fn < cutoff_low) {
+                clear = true;
+            }
+        } else {
+            if (fn > cutoff_high && fn < cutoff_low) {
+                clear = true;
+            }
+        }
+
+        if (clear) {
             src_data[src_idx] = {};
             return;
         }
@@ -266,13 +301,7 @@ void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_i
     std::copy(dc_poly.begin(), dc_poly.end(), &k_args.dc_poly[0]);
 
     k_args.prf = metadata.pulse_repetition_frequency;
-    // k_args.doppler_centroid = metadata.results.doppler_centroid;
     k_args.azimuth_bandwidth_fraction = 0.8;
-
-    //double dc = CalcDopplerCentroid(metadata, metadata.img.range_size / 2);
-
-    // printf("KARGS prf = %f\n", k_args.prf);
-    // LOGD << "Doppler centroid steps = " << k_args.dc_steps;
 
     // give d_workspace memory to out_img
     out_img.InitExtPtr(src_img.XSize(), src_img.YSize(), src_img.XStride(), src_img.YStride(), d_workspace);
