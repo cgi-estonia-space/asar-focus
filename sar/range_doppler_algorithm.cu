@@ -64,7 +64,7 @@ __device__ float sinc(float x) {
 
 namespace {
 struct KernelArgs {
-    //float Vr;  // TODO(priit) float vs double
+    // float Vr;  // TODO(priit) float vs double
     float prf;
     float lambda;
     // float doppler_centroid;
@@ -111,11 +111,21 @@ __global__ void RangeCellMigrationCorrection(const cufftComplex* data_in, int sr
         fn = (dst_y - src_y_size) * fft_bin_step;
     }
 
-    fn -= dc;
+    // example: doppler centroid -300Hz, prf 2000Hz, positive frequencies: 0-1000Hz,
+    //  frequency +800Hz baseband would be an alias to absolute -1200Hz
+    const float half_prf = args.prf * 0.5f;
+    if (dc < 0.0f) {
+        if (fn > half_prf + dc) {
+            fn -= args.prf;
+        }
+    } else if (dc > 0.0f) {
+        if (fn < -half_prf + dc) {
+            fn += args.prf;
+        }
+    }
 
     // slant range at range pixel
     const double R0 = args.slant_range + dst_x * args.range_spacing;
-    // printf("KERNEL = %d %d , R0 = %f\n", dst_x, dst_y, R0);
 
     const float Vr = Polyval(args.Vr_poly, dst_x);
 
@@ -174,30 +184,55 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
     int dst_x = threadIdx.x + blockIdx.x * blockDim.x;
     int dst_y = threadIdx.y + blockIdx.y * blockDim.y;
 
-    const float float_pi = M_PI;
     if ((dst_x < src_width && dst_y < src_height)) {
         int src_idx = dst_x + src_x_stride * dst_y;
 
         const float fft_bin_step = args.prf / src_height;
 
         const float dc = Polyval(args.dc_poly, dst_x);
+
+        const float dc_offset = std::roundf(dc / fft_bin_step) * fft_bin_step;
         // find FFT bin frequency
-        float fn = 0.0f;
+        float bin_freq = 0.0f;
         if ((dst_y < src_height / 2)) {
-            fn = dst_y * fft_bin_step;
+            bin_freq = dst_y * fft_bin_step;
 
         } else {
-            fn = (dst_y - src_height) * fft_bin_step;
+            bin_freq = (dst_y - src_height) * fft_bin_step;
         }
 
-        fn -= dc;
+        // TODO doppler centroid usage is broken, current code shifts result in time domain
+        const float half_prf = args.prf * 0.5f;
+        float abs_freq = bin_freq;
+        if (dc < 0.0f) {
+            if (bin_freq > half_prf + dc) {
+                abs_freq -= args.prf;
+            }
+        } else if (dc > 0.0f) {
+            if (abs_freq < -half_prf + dc) {
+                abs_freq += args.prf;
+            }
+        }
 
-        const float max_freq = (src_height / 2) * fft_bin_step - dc;
-        const float min_freq = -(src_height / 2) * fft_bin_step - dc;
-        if (fn > args.azimuth_bandwidth_fraction * max_freq || fn < args.azimuth_bandwidth_fraction * min_freq) {
+        const float cutoff_hi = half_prf * args.azimuth_bandwidth_fraction + dc_offset;
+        const float cutoff_lo = -half_prf * args.azimuth_bandwidth_fraction + dc_offset;
+
+
+        if(abs_freq < cutoff_lo || abs_freq > cutoff_hi) {
+            // frequency in the throwaway region
+            // ex prf = 2000Hz, dc = -600Hz, fraction = 0.8 => cut low = +-1400Hz, cut high = +200Hz
             src_data[src_idx] = {};
             return;
         }
+
+        float fn = bin_freq + dc_offset;
+        // Azimuth reference multiply must be in baseband!
+        if (fn > half_prf) {
+            fn -= args.prf;
+        } else if (fn < -half_prf) {
+            fn += args.prf;
+        }
+
 
         // slant range at range pixel
         const double R0 = args.slant_range + args.range_spacing * dst_x;
@@ -207,6 +242,7 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
         const float Ka = (2 * Vr * Vr) / (args.lambda * R0);
 
         // range Doppler domain matched filter at this frequency
+        const float float_pi = M_PI;
         float phase = (-float_pi * fn * fn) / Ka;
 
         cufftComplex val;
@@ -215,14 +251,12 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
         sincos(phase, &sin_val, &cos_val);
         val.x = cos_val;
         val.y = sin_val;
-
+        
         // application via f domain multiplication
         src_data[src_idx] = cuCmulf(src_data[src_idx], val);
     }
 }
 }  // namespace
-
-#define INPLACE_AZIMUTH_FFT 0
 
 void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_img, DevicePaddedImage& out_img,
                            CudaWorkspace d_workspace) {
@@ -241,16 +275,14 @@ void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_i
     }
 #else
     {
-        auto azimuth_fft = palsar::PlanAzimuthFFT(src_img.XSize(), src_img.YStride(), src_img.XStride(), false);
-        palsar::CufftPlanCleanup fft_cleanup(azimuth_fft);
+        auto azimuth_fft = PlanAzimuthFFT(src_img.XSize(), src_img.YStride(), src_img.XStride(), false);
+        CufftPlanCleanup fft_cleanup(azimuth_fft);
         CheckCufftSize(d_workspace.ByteSize(), azimuth_fft);
         CHECK_CUFFT_ERR(cufftSetWorkArea(azimuth_fft, d_workspace.Get()));
         CHECK_CUFFT_ERR(cufftExecC2C(azimuth_fft, src_img.Data(), src_img.Data(), CUFFT_FORWARD));
     }
 #endif
 
-    double Vr = CalcVr(metadata, metadata.img.range_size / 2);
-    printf("radar velocity Vr = %f\n", Vr);
 
     KernelArgs k_args = {};
     k_args.lambda = metadata.wavelength;
@@ -269,7 +301,7 @@ void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_i
     // k_args.doppler_centroid = metadata.results.doppler_centroid;
     k_args.azimuth_bandwidth_fraction = 0.8;
 
-    //double dc = CalcDopplerCentroid(metadata, metadata.img.range_size / 2);
+    // double dc = CalcDopplerCentroid(metadata, metadata.img.range_size / 2);
 
     // printf("KARGS prf = %f\n", k_args.prf);
     // LOGD << "Doppler centroid steps = " << k_args.dc_steps;
@@ -308,8 +340,8 @@ void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_i
     }
 #else
     {
-        auto azimuth_fft = palsar::PlanAzimuthFFT(out_img.XSize(), out_img.YStride(), out_img.XStride(), false);
-        palsar::CufftPlanCleanup fft_cleanup(azimuth_fft);
+        auto azimuth_fft = PlanAzimuthFFT(out_img.XSize(), out_img.YStride(), out_img.XStride(), false);
+        CufftPlanCleanup fft_cleanup(azimuth_fft);
         CheckCufftSize(d_workspace.ByteSize(), azimuth_fft);
         CHECK_CUFFT_ERR(cufftSetWorkArea(azimuth_fft, d_workspace.Get()));
         CHECK_CUFFT_ERR(cufftExecC2C(azimuth_fft, out_img.Data(), out_img.Data(), CUFFT_INVERSE));

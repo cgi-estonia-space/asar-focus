@@ -91,14 +91,10 @@ std::vector<double> EstimateProcessingVelocity(const SARMetadata& metadata) {
     const int range_start = 0;
     const int range_end = (metadata.img.range_size - metadata.chirp.n_samples);
 
-    printf("n _ samp = %d\n", metadata.chirp.n_samples);
-    printf("range end = %d\n", range_end);
-
     const int step = (range_end - range_start) / N_Vr_CALC;
 
     std::vector<double> Vr_results;
     std::vector<double> idx_vec;
-    int range_idx = range_start;
     for (int range_idx = range_start; range_idx < range_end; range_idx += step) {
         double Vr = EstimateVrAtRange(metadata, az_idx, range_idx);
         Vr_results.push_back(Vr);

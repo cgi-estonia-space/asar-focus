@@ -45,8 +45,10 @@ int main(int argc, char* argv[]) {
     if (argc != 4) {
         // to arg parse
 
-        printf("Not a correct argument count, example:\n"
-               "%s [input file] [aux path] [DORIS orbit file/folder]", argv[0]);
+        printf(
+            "Not a correct argument count, example:\n"
+            "%s [input file] [aux path] [DORIS orbit file/folder]",
+            argv[0]);
         return 1;
     }
 
@@ -71,7 +73,6 @@ int main(int argc, char* argv[]) {
     fclose(fp);
 
     GDALAllRegister();
-
 
     SARMetadata metadata = {};
     ASARMetadata asar_meta = {};
@@ -123,7 +124,6 @@ int main(int argc, char* argv[]) {
     printf("rg  = %d -> %d\n", rg_size, rg_padded);
     printf("az = %d -> %d\n", az_size, az_padded);
 
-
     auto gpu_transfer_start = time_start();
     DevicePaddedImage img;
     img.InitPadded(rg_size, az_size, rg_padded, az_padded);
@@ -142,14 +142,11 @@ int main(int argc, char* argv[]) {
     img.ZeroNaNs();
     time_stop(correction_start, "I/Q correction");
 
-
     auto vr_start = time_start();
     metadata.results.Vr_poly = EstimateProcessingVelocity(metadata);
     time_stop(vr_start, "Vr estimation");
 
-
-    // if(wif)
-    {
+    if (wif) {
         PlotArgs args = {};
         args.out_path = "/tmp/" + wif_name_base + "_Vr.html";
         args.x_axis_title = "range index";
@@ -165,8 +162,7 @@ int main(int argc, char* argv[]) {
 
     std::vector<float> chirp_freq;
 
-    // if (wif)
-    {
+    if (wif) {
         PlotArgs args = {};
         args.out_path = "/tmp/" + wif_name_base + "_chirp.html";
         args.x_axis_title = "nth sample";
@@ -198,8 +194,7 @@ int main(int argc, char* argv[]) {
     auto dc_start = time_start();
     metadata.results.doppler_centroid_poly = CalculateDopplerCentroid(img, metadata.pulse_repetition_frequency);
     time_stop(dc_start, "fractional DC estimation");
-    // if(wif)
-    {
+    if (wif) {
         PlotArgs args = {};
         args.out_path = "/tmp/" + wif_name_base + "_dc.html";
         args.x_axis_title = "range index";
@@ -210,8 +205,6 @@ int main(int argc, char* argv[]) {
         PolyvalRange(metadata.results.doppler_centroid_poly, 0, metadata.img.range_size, line.x, line.y);
         Plot(args);
     }
-
-    // return 0;
 
     printf("Image GPU byte size = %f GB\n", img.TotalByteSize() / 1e9);
     printf("Estimated GPU memory usage ~%f GB\n", (img.TotalByteSize() * 2) / 1e9);
@@ -245,15 +238,11 @@ int main(int argc, char* argv[]) {
         WriteIntensityPaddedImg(out, path.c_str());
     }
 
-    printf("done!\n");
-
     auto cpu_transfer_start = time_start();
     cufftComplex* res = new cufftComplex[out.XStride() * out.YStride()];
     out.CopyToHostPaddedSize(res);
 
     time_stop(cpu_transfer_start, "Image GPU->CPU");
-    // metadata.
-
 
     auto mds_formation = time_start();
     MDS mds;
@@ -269,8 +258,8 @@ int main(int argc, char* argv[]) {
             // printf("y = %d\n", y);
             for (int x = 0; x < out.XSize(); x++) {
                 auto pix = res[x + y * range_stride];
-                float tambov = 120000/100;
-                //printf("scaling tambov = %f\n", tambov);
+                float tambov = 120000 / 100;
+                // printf("scaling tambov = %f\n", tambov);
                 IQ16 iq16;
                 iq16.i = std::clamp<float>(pix.x * tambov, INT16_MIN, INT16_MAX);
                 iq16.q = std::clamp<float>(pix.y * tambov, INT16_MIN, INT16_MAX);
@@ -280,7 +269,7 @@ int main(int argc, char* argv[]) {
                 row[x] = iq16;
             }
 
-            memset(&mds.buf[y * mds.record_size], 0, 17); //TODO each row mjd
+            memset(&mds.buf[y * mds.record_size], 0, 17);  // TODO each row mjd
             memcpy(&mds.buf[y * mds.record_size + 17], row.data(), row.size() * 4);
         }
     }
@@ -289,7 +278,6 @@ int main(int argc, char* argv[]) {
     auto file_write = time_start();
     WriteLvl1(metadata, asar_meta, mds);
     time_stop(file_write, "LVL1 file write");
-
 
     return 0;
 }
