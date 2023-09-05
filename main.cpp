@@ -52,6 +52,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    printf("asar-focus version 0.1\n");
     auto file_time_start = time_start();
     std::string in_path = argv[1];
     const char* aux_path = argv[2];
