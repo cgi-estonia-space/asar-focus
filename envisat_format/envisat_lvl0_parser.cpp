@@ -358,13 +358,17 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
 
     sar_meta.chirp.Kr = ins_file.flp.im_chirp[swath_idx].phase[2] * 2;  // TODO Envisat format multiply by 2?
     sar_meta.chirp.pulse_duration = ins_file.flp.im_chirp[swath_idx].duration;
-    sar_meta.chirp.n_samples = sar_meta.chirp.pulse_duration / (1 / sar_meta.chirp.range_sampling_rate);
+    sar_meta.chirp.n_samples = std::round(sar_meta.chirp.pulse_duration / (1 / sar_meta.chirp.range_sampling_rate));
 
     sar_meta.chirp.pulse_bandwidth = sar_meta.chirp.Kr * sar_meta.chirp.pulse_duration;
-    printf("Calculated chirp BW = %f , meta bw = %f\n", sar_meta.chirp.pulse_bandwidth, pulse_bw);
+    fmt::print("Chirp Kr = {}, n_samp = {}\n", sar_meta.chirp.Kr, sar_meta.chirp.n_samples);
+    fmt::print("tx pulse calc dur = {}\n", asar_meta.tx_pulse_len_code * (1 / sar_meta.chirp.range_sampling_rate));
+    fmt::print("Nominal chirp duration = {}\n", sar_meta.chirp.pulse_duration);
+    fmt::print("Calculated chirp BW = {} , meta bw = {}\n", sar_meta.chirp.pulse_bandwidth, pulse_bw);
 
-    size_t range_sz = max_samples + max_swst - min_swst;
-    printf("range sz = %zu\n", range_sz);
+    const size_t range_samples = max_samples + max_swst - min_swst;
+    fmt::print("range samples = {}, minimum range padded size = {}\n", range_samples,
+               range_samples + sar_meta.chirp.n_samples);
 
     constexpr double c = 299792458;
 
@@ -396,7 +400,7 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     printf("platform velocity = %f, initial Vr = %f\n", sar_meta.platform_velocity, CalcVr(sar_meta, 0));
     sar_meta.azimuth_spacing = Vg * (1 / sar_meta.pulse_repetition_frequency);
 
-    sar_meta.img.range_size = range_sz;
+    sar_meta.img.range_size = range_samples;
     sar_meta.img.azimuth_size = echos.size();
 
     img_data.clear();
@@ -406,7 +410,7 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
 
     for (size_t y = 0; y < echos.size(); y++) {
         const auto& e = echos[y];
-        size_t idx = y * range_sz;
+        size_t idx = y * range_samples;
         idx += e.swst_code - min_swst;
         const size_t n_samples = e.raw_data.size();
         memcpy(&img_data[idx], e.raw_data.data(), n_samples * 8);
@@ -457,5 +461,4 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     sar_meta.azimuth_bandwidth_fraction = 0.8f;
     auto llh = xyz2geoWGS84(sar_meta.center_point);
     printf("center point = %f %f\n", llh.latitude, llh.longitude);
-    printf("tx pulse calc dur = %f\n", asar_meta.tx_pulse_len_code / (1 / sar_meta.chirp.range_sampling_rate));
 }

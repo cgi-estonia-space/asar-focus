@@ -1,5 +1,5 @@
 
-# ENVISAT and ERS ASAR instrument GPU focusser
+# ENVISAT and ERS (A)SAR instrument GPU focusser
 
 Developed during [IDEAS-QA4EO](https://qa4eo.org/) service operations lead by Telespazio VEGA UK, software development by CGI Estonia AS.
 

@@ -110,7 +110,7 @@ int main(int argc, char* argv[]) {
     int rg_size = metadata.img.range_size;
     auto fft_sizes = GetOptimalFFTSizes();
 
-    auto rg_plan_sz = fft_sizes.upper_bound(rg_size);
+    auto rg_plan_sz = fft_sizes.upper_bound(rg_size + metadata.chirp.n_samples);
     printf("range FFT padding sz = %d (2 ^ %d * 3 ^ %d * 5 ^ %d * 7 ^ %d)\n", rg_plan_sz->first, rg_plan_sz->second[0],
            rg_plan_sz->second[1], rg_plan_sz->second[2], rg_plan_sz->second[3]);
     int rg_padded = rg_plan_sz->first;
