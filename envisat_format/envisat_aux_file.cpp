@@ -3,23 +3,12 @@
 #include "envisat_aux_file.h"
 
 #include "util/checks.h"
-
-namespace {
-boost::posix_time::ptime YYYYMMDD(std::string str) {
-    auto* facet = new boost::posix_time::time_input_facet("%Y%m%d");
-    std::stringstream date_stream(str);
-    date_stream.imbue(std::locale(std::locale::classic(), facet));
-    boost::posix_time::ptime time;
-    date_stream >> time;
-    return time;
-}
-
-}  // namespace
+#include "util/date_time_util.h"
 
 // TODO functions are pretty much copy-paste, refactor it?
 
-void FindCONFile(std::string aux_root, boost::posix_time::ptime start, ConfigurationFile& conf_file,
-                 std::string& filename) {
+void FindCONFile(std::string aux_root, boost::posix_time::ptime start, ConfigurationFile &conf_file,
+                 std::string &filename) {
     std::filesystem::path ins_dir(aux_root);
     ins_dir /= "ASA_CON_AX";
 
@@ -34,16 +23,16 @@ void FindCONFile(std::string aux_root, boost::posix_time::ptime start, Configura
     std::vector<uint8_t> conf_data(CONF_FILE_SIZE);
 
     bool ok = false;
-    for (auto const& dir_entry : std::filesystem::directory_iterator(ins_dir)) {
+    for (auto const &dir_entry: std::filesystem::directory_iterator(ins_dir)) {
         auto fn = dir_entry.path().stem().string();
         std::string start_date = fn.substr(30, 8);
         std::string end_date = fn.substr(46, 8);
 
-        if (start >= YYYYMMDD(start_date) && start < YYYYMMDD(end_date)) {
+        if (start >= alus::util::date_time::YYYYMMDD(start_date) && start < alus::util::date_time::YYYYMMDD(end_date)) {
             std::cout << "Configuration file = " << fn << "\n";
             filename = fn;
 
-            FILE* fp = fopen(dir_entry.path().c_str(), "r");
+            FILE *fp = fopen(dir_entry.path().c_str(), "r");
             auto total = fread(conf_data.data(), 1, CONF_FILE_SIZE, fp);
 
             if (total != CONF_FILE_SIZE) {
@@ -66,10 +55,15 @@ void FindCONFile(std::string aux_root, boost::posix_time::ptime start, Configura
     conf_file.BSwap();
 }
 
-void FindINSFile(std::string aux_root, boost::posix_time::ptime start, InstrumentFile& ins_file,
-                 std::string& filename) {
+void FindINSFile(std::string aux_root, boost::posix_time::ptime start, InstrumentFile &ins_file,
+                 std::string &filename) {
     std::filesystem::path ins_dir(aux_root);
     ins_dir /= "ASA_INS_AX";
+
+    if (!std::filesystem::exists(ins_dir)) {
+        std::cerr << "There is no '" << "ASA_INS_AX" << "' inside auxiliary folder - " << aux_root << std::endl;
+        exit(1);
+    }
 
     // ASA_INS_AXVIEC20020308_112323_20020301_000000_20021231_000000
 
@@ -82,16 +76,16 @@ void FindINSFile(std::string aux_root, boost::posix_time::ptime start, Instrumen
     std::vector<uint8_t> ins_data(INS_FILE_SIZE);
 
     bool ok = false;
-    for (auto const& dir_entry : std::filesystem::directory_iterator(ins_dir)) {
+    for (auto const &dir_entry: std::filesystem::directory_iterator(ins_dir)) {
         auto fn = dir_entry.path().stem().string();
         std::string start_date = fn.substr(30, 8);
         std::string end_date = fn.substr(46, 8);
 
-        if (start >= YYYYMMDD(start_date) && start < YYYYMMDD(end_date)) {
+        if (start >= alus::util::date_time::YYYYMMDD(start_date) && start < alus::util::date_time::YYYYMMDD(end_date)) {
             std::cout << "Instrument file = " << fn << "\n";
             filename = fn;
 
-            FILE* fp = fopen(dir_entry.path().c_str(), "r");
+            FILE *fp = fopen(dir_entry.path().c_str(), "r");
             auto total = fread(ins_data.data(), 1, INS_FILE_SIZE, fp);
 
             if (total != INS_FILE_SIZE) {

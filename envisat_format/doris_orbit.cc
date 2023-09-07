@@ -30,17 +30,28 @@ namespace {
 
 // Following are defined in https://earth.esa.int/eogateway/documents/20142/37627/Readme-file-for-Envisat-DORIS-POD.pdf
 // chapter 2 "Doris POD data"
+// Currently known ERS DORIS orbit files to be used 'POD_REAPER_v1_071991_062003' are having extra HHMMSS in filename
+// and has more MDSR items, all other aspects are technically similar and therefore no distinction is made for other
+// properties like MPH and SPH sizes.
     constexpr size_t ENVISAT_DORIS_FILENAME_LENGTH{61}; // DOR_VOR_AXVF-P20120424_120200_20040101_215528_20040103_002328
+    constexpr size_t ERS_DORIS_FILENAME_LENGTH{
+            68}; // DOR_VOR_AXVF-P19950503_210000_19950503_210000_210000_19950505_030000
     constexpr size_t ENVISAT_DORIS_MPH_LENGTH_BYTES{1247};
     constexpr size_t ENVISAT_DORIS_SPH_LENGTH_BYTES{378};
     constexpr size_t ENVISAT_DORIS_MDS_LENGTH_BYTES{204981};
+    constexpr size_t ERS_DORIS_MDS_LENGTH_BYTES{232329};
     constexpr size_t ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES{206606};
+    constexpr size_t ERS_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES{233954};
     constexpr size_t ENVISAT_DORIS_MDSR_LENGTH_BYTES{129};
     constexpr size_t ENVISAT_DORIS_MDSR_COUNT{1589};
+    constexpr size_t ERS_DORIS_MDSR_COUNT{1801};
     constexpr size_t ENVISAT_DORIS_MDSR_ITEM_COUNT{11};  // Date and time are considered separate
     static_assert(ENVISAT_DORIS_MDSR_COUNT * ENVISAT_DORIS_MDSR_LENGTH_BYTES == ENVISAT_DORIS_MDS_LENGTH_BYTES);
     static_assert(ENVISAT_DORIS_MPH_LENGTH_BYTES + ENVISAT_DORIS_SPH_LENGTH_BYTES + ENVISAT_DORIS_MDS_LENGTH_BYTES ==
                   ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES);
+    static_assert(ERS_DORIS_MDSR_COUNT * ENVISAT_DORIS_MDSR_LENGTH_BYTES == ERS_DORIS_MDS_LENGTH_BYTES);
+    static_assert(ENVISAT_DORIS_MPH_LENGTH_BYTES + ENVISAT_DORIS_SPH_LENGTH_BYTES + ERS_DORIS_MDS_LENGTH_BYTES ==
+                  ERS_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES);
     constexpr std::string_view ENVISAT_DORIS_TIMESTAMP_PATTERN{"%d-%b-%Y %H:%M:%S%f"};
     // DOR_VOR_AXVF-P20120424_120200_20040101_215528_20040103_002328
     constexpr std::string_view ENVISAT_DORIS_TIMESTAMP_FILENAME_PATTERN{"%Y%m%d_%H%M%S"};
@@ -147,10 +158,12 @@ namespace alus::dorisorbit {
     }
 
     Parsable Parsable::CreateFromFile(std::string_view filename) {
-        size_t file_sz = std::filesystem::file_size(filename.data());
-        if (file_sz != ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES) {
+        const auto file_size = std::filesystem::file_size(filename);
+        if (file_size != ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES &&
+            file_size != ERS_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES) {
             std::cerr << "Expected DORIS orbit file to be " << ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES
-                      << " bytes, but actual file size is " << file_sz << " bytes" << std::endl;
+                      << " bytes for ENVISAT or " << ERS_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES << " bytes for ERS,"
+                      << " but actual file size is " << file_size << " bytes" << std::endl;
             exit(1);
         }
 
@@ -158,8 +171,8 @@ namespace alus::dorisorbit {
         in_stream.exceptions(std::ifstream::failbit | std::ifstream::badbit);
         in_stream.open(filename.data(), std::ios::in);
 
-        std::vector<char> data(file_sz);
-        in_stream.read(data.data(), file_sz);
+        std::vector<char> data(file_size);
+        in_stream.read(data.data(), file_size);
         in_stream.close();
 
         ProductHeader mph = {};
@@ -182,29 +195,55 @@ namespace alus::dorisorbit {
         const auto locale = std::locale(std::locale::classic(), timestamp_styling);
         for (const auto &l: listings) {
             const auto string_name = l.filename().string();
-            if (string_name.length() != ENVISAT_DORIS_FILENAME_LENGTH) {
+            const auto filename_length = string_name.length();
+            if (filename_length != ENVISAT_DORIS_FILENAME_LENGTH && filename_length != ERS_DORIS_FILENAME_LENGTH) {
                 continue;
             }
 
-            if (std::filesystem::file_size(l) != ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES) {
+            bool is_envisat_doris = filename_length == ENVISAT_DORIS_FILENAME_LENGTH;
+
+            const auto file_size = std::filesystem::file_size(l);
+            if (is_envisat_doris && file_size != ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES) {
+                continue;
+            }
+            if (!is_envisat_doris && file_size != ERS_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES) {
                 continue;
             }
 
             std::vector<std::string> items;
             boost::split(items, string_name, boost::is_any_of("_"), boost::token_compress_on);
             // DOR_VOR_AXVF-P20120424_120200_20040101_215528_20040103_002328
-            if (items.size() != 8) {
+            if (is_envisat_doris && items.size() != 8) {
+                continue;
+            }
+            // DOR_VOR_AXVF-P19950503_210000_19950503_210000_210000_19950505_030000
+            if (!is_envisat_doris && items.size() != 9) {
                 continue;
             }
 
-            if (items.front() != "DOR" || items.at(1) != "VOR" || items.at(2).length() != 14 ||
-                items.at(3).length() != 6 || items.at(4).length() != 8 || items.at(5).length() != 6 ||
-                items.at(6).length() != 8 || items.at(7).length() != 6) {
-                continue;
+            auto end_date_index_yymmdd{6u};
+            auto end_date_index_hhmmss{7u};
+            if (is_envisat_doris) {
+                if (items.front() != "DOR" || items.at(1) != "VOR" || items.at(2).length() != 14 ||
+                    items.at(3).length() != 6 || items.at(4).length() != 8 || items.at(5).length() != 6 ||
+                    items.at(6).length() != 8 || items.at(7).length() != 6) {
+                    continue;
+                }
+            }
+
+            if (!is_envisat_doris) {
+                if (items.front() != "DOR" || items.at(1) != "VOR" || items.at(2).length() != 14 ||
+                    items.at(3).length() != 6 || items.at(4).length() != 8 || items.at(5).length() != 6 ||
+                    items.at(6).length() != 6 || items.at(7).length() != 8 || items.at(8).length() != 6) {
+                    continue;
+                }
+                end_date_index_yymmdd += 1;
+                end_date_index_hhmmss += 1;
             }
 
             const auto start_date = ParseDate(items.at(4) + "_" + items.at(5), locale);
-            const auto end_date = ParseDate(items.at(6) + "_" + items.at(7), locale);
+            const auto end_date = ParseDate(items.at(end_date_index_yymmdd) + "_" + items.at(end_date_index_hhmmss),
+                                            locale);
 
             if (start_date.is_not_a_date_time() || end_date.is_not_a_date_time()) {
                 std::cerr << "Unparseable date from DORIS orbit file '" + string_name + "' for format: " +
@@ -234,9 +273,9 @@ namespace alus::dorisorbit {
         bool found{false};
         const auto filtered_osv_count = _osv.size();
         for (size_t i{}; i < filtered_osv_count; i++) {
-            const auto& osv = _osv.at(i);
+            const auto &osv = _osv.at(i);
             // Based on observed results of the blueprints, the last state vector that is before start-stop is fetched.
-            if (osv.time > start - boost::posix_time::minutes(1 )) {
+            if (osv.time > start - boost::posix_time::minutes(1)) {
                 _l1_product_metadata.delta_ut1 = _osv_metadata.at(i).ut1_delta;
                 _l1_product_metadata.abs_orbit = _osv_metadata.at(i).absolute_orbit;
 
@@ -263,6 +302,8 @@ namespace alus::dorisorbit {
         const auto vector_source_long = _sph.Get("DS_NAME");
         if (vector_source_long.find("DORIS PRECISE") != std::string::npos) {
             _l1_product_metadata.vector_source = "DP";
+        } else if (vector_source_long.find("REAPER ORBIT") != std::string::npos) {
+            _l1_product_metadata.vector_source = "RO";
         } else {
             _l1_product_metadata.vector_source = "??";
         }

@@ -4,6 +4,7 @@
 
 #include <array>
 
+#include <boost/algorithm/string/predicate.hpp>
 
 // PO-TN-MMS-SR-0248 - conversion tables
 
@@ -64,4 +65,17 @@ float AuxTxMonitorConversion(uint16_t aux_tx)
 
     return lut.at(aux_tx);
 
+}
+
+namespace alus::asar::specification {
+
+    ProductTypes GetProductTypeFrom(std::string_view product_name) {
+        if (boost::algorithm::starts_with(product_name, PRODUCT_NAME_ASA_IM0)) {
+            return ProductTypes::ASA_IM0;
+        } else if (boost::algorithm::starts_with(product_name, PRODUCT_NAME_SAR_IM0)) {
+            return ProductTypes::SAR_IM0;
+        } else {
+            return ProductTypes::UNIDENTIFIED;
+        }
+    }
 }

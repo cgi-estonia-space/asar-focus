@@ -6,125 +6,127 @@
 
 #include "fmt/format.h"
 
+#include "asar_constants.h"
 #include "envisat_aux_file.h"
 #include "envisat_mph_sph_str_utils.h"
+#include "ers_aux_file.h"
 #include "sar/orbit_state_vector.h"
 
 namespace {
-template <class T>
-[[nodiscard]] const uint8_t* CopyBSwapPOD(T& dest, const uint8_t* src) {
-    memcpy(&dest, src, sizeof(T));
-    dest = bswap(dest);
-    return src + sizeof(T);
-}
-
-struct EchoMeta {
-    mjd isp_sensing_time;
-    uint8_t mode_id;
-    uint64_t onboard_time;
-    uint32_t mode_count;
-    uint8_t antenna_beam_set_no;
-    uint8_t comp_ratio;
-    bool echo_flag;
-    bool noise_flag;
-    bool cal_flag;
-    bool cal_type;
-    uint16_t cycle_count;
-
-    uint16_t pri_code;
-    uint16_t swst_code;
-    uint16_t echo_window_code;
-    uint8_t upconverter_raw;
-    uint8_t downconverter_raw;
-    bool tx_pol;
-    bool rx_pol;
-    uint8_t cal_row_number;
-    uint16_t tx_pulse_code;
-    uint8_t beam_adj_delta;
-    uint8_t chirp_pulse_bw_code;
-    uint8_t aux_tx_monitor_level;
-    uint16_t resampling_factor;
-
-    std::vector<std::complex<float>> raw_data;
-};
-
-int FBAQ4Idx(int block, int idx) {
-    switch (idx) {
-        case 0b1111:
-            idx = 0;
-            break;
-        case 0b1110:
-            idx = 1;
-            break;
-        case 0b1101:
-            idx = 2;
-            break;
-        case 0b1100:
-            idx = 3;
-            break;
-        case 0b1011:
-            idx = 4;
-            break;
-        case 0b1010:
-            idx = 5;
-            break;
-        case 0b1001:
-            idx = 6;
-            break;
-        case 0b1000:
-            idx = 7;
-            break;
-        case 0b0000:
-            idx = 8;
-            break;
-        case 0b0001:
-            idx = 9;
-            break;
-        case 0b0010:
-            idx = 10;
-            break;
-        case 0b0011:
-            idx = 11;
-            break;
-        case 0b0100:
-            idx = 12;
-            break;
-        case 0b0101:
-            idx = 13;
-            break;
-        case 0b0110:
-            idx = 14;
-            break;
-        case 0b0111:
-            idx = 15;
-            break;
+    template<class T>
+    [[nodiscard]] const uint8_t *CopyBSwapPOD(T &dest, const uint8_t *src) {
+        memcpy(&dest, src, sizeof(T));
+        dest = bswap(dest);
+        return src + sizeof(T);
     }
 
-    return 256 * idx + block;
-}
+    struct EchoMeta {
+        mjd isp_sensing_time;
+        uint8_t mode_id;
+        uint64_t onboard_time;
+        uint32_t mode_count;
+        uint8_t antenna_beam_set_no;
+        uint8_t comp_ratio;
+        bool echo_flag;
+        bool noise_flag;
+        bool cal_flag;
+        bool cal_type;
+        uint16_t cycle_count;
 
-double NadirLLParse(const std::string& str) {
-    auto val = std::stol(str.substr(3, 8));
-    if (str.at(0) == '-') {
-        val = -val;
-    }
-    return val * 1e-6;
-}
+        uint16_t pri_code;
+        uint16_t swst_code;
+        uint16_t echo_window_code;
+        uint8_t upconverter_raw;
+        uint8_t downconverter_raw;
+        bool tx_pol;
+        bool rx_pol;
+        uint8_t cal_row_number;
+        uint16_t tx_pulse_code;
+        uint8_t beam_adj_delta;
+        uint8_t chirp_pulse_bw_code;
+        uint8_t aux_tx_monitor_level;
+        uint16_t resampling_factor;
 
-int SwathIdx(const std::string& swath) {
-    if (swath.size() == 3 && swath[0] == 'I' && swath[1] == 'S') {
-        char idx = swath[2];
-        if (idx >= '1' && idx <= '7') {
-            return idx - '1';
+        std::vector<std::complex<float>> raw_data;
+    };
+
+    int FBAQ4Idx(int block, int idx) {
+        switch (idx) {
+            case 0b1111:
+                idx = 0;
+                break;
+            case 0b1110:
+                idx = 1;
+                break;
+            case 0b1101:
+                idx = 2;
+                break;
+            case 0b1100:
+                idx = 3;
+                break;
+            case 0b1011:
+                idx = 4;
+                break;
+            case 0b1010:
+                idx = 5;
+                break;
+            case 0b1001:
+                idx = 6;
+                break;
+            case 0b1000:
+                idx = 7;
+                break;
+            case 0b0000:
+                idx = 8;
+                break;
+            case 0b0001:
+                idx = 9;
+                break;
+            case 0b0010:
+                idx = 10;
+                break;
+            case 0b0011:
+                idx = 11;
+                break;
+            case 0b0100:
+                idx = 12;
+                break;
+            case 0b0101:
+                idx = 13;
+                break;
+            case 0b0110:
+                idx = 14;
+                break;
+            case 0b0111:
+                idx = 15;
+                break;
         }
+
+        return 256 * idx + block;
     }
-    ERROR_EXIT(swath + " = unknown swath");
-}
+
+    double NadirLLParse(const std::string &str) {
+        auto val = std::stol(str.substr(3, 8));
+        if (str.at(0) == '-') {
+            val = -val;
+        }
+        return val * 1e-6;
+    }
+
+    int SwathIdx(const std::string &swath) {
+        if (swath.size() == 3 && swath[0] == 'I' && swath[1] == 'S') {
+            char idx = swath[2];
+            if (idx >= '1' && idx <= '7') {
+                return idx - '1';
+            }
+        }
+        ERROR_EXIT(swath + " = unknown swath");
+    }
 }  // namespace
 
-void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMetadata& sar_meta,
-                 ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data,
-                 alus::dorisorbit::Parsable& orbit_source) {
+void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMetadata &sar_meta,
+                 ASARMetadata &asar_meta, std::vector<std::complex<float>> &img_data,
+                 alus::dorisorbit::Parsable &orbit_source) {
     ProductHeader mph = {};
 
     mph.Load(file_data.data(), MPH_SIZE);
@@ -134,8 +136,11 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
 
     asar_meta.product_name = mph.Get("PRODUCT");
 
-    if (!boost::algorithm::starts_with(asar_meta.product_name, "ASA_IM__0")) {
-        ERROR_EXIT("Envisat IM lvl 0 files only at this point!");
+    alus::asar::specification::ProductTypes product_type = alus::asar::specification::GetProductTypeFrom(
+            asar_meta.product_name);
+
+    if (product_type == alus::asar::specification::ProductTypes::UNIDENTIFIED) {
+        ERROR_EXIT("This product is not supported - " + asar_meta.product_name);
     }
 
     asar_meta.sensing_start = StrToPtime(mph.Get("SENSING_START"));
@@ -165,7 +170,14 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
                asar_meta.sensing_stop <= sar_meta.osv.back().time);
 
     InstrumentFile ins_file = {};
-    FindINSFile(aux_path, asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
+    if (product_type == alus::asar::specification::ProductTypes::ASA_IM0) {
+        FindINSFile(aux_path, asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
+    } else if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
+        alus::asar::envisat_format::FindINSFile(aux_path, asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
+    } else {
+        std::cerr << "WAT?" << std::endl;
+        exit(1);
+    }
 
     ConfigurationFile conf_file = {};
     FindCONFile(aux_path, asar_meta.sensing_start, conf_file, asar_meta.configuration_file);
@@ -195,7 +207,7 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     auto dsds = ExtractDSDs(sph);
 
     auto mdsr = dsds.at(0);
-    const uint8_t* it = reinterpret_cast<const uint8_t*>(file_data.data()) + mdsr.ds_offset;
+    const uint8_t *it = reinterpret_cast<const uint8_t *>(file_data.data()) + mdsr.ds_offset;
 
     int echo_cnt = 0;
 
@@ -296,7 +308,7 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
             size_t n_blocks = data_len / 64;
 
             for (size_t i = 0; i < n_blocks; i++) {
-                const uint8_t* block_data = it + i * 64;
+                const uint8_t *block_data = it + i * 64;
                 uint8_t block_id = block_data[0];
                 for (size_t j = 0; j < 63; j++) {
                     uint8_t i_codeword = block_data[1 + j] >> 4;
@@ -336,7 +348,7 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     asar_meta.last_sbt = echos.back().onboard_time;
 
     std::vector<float> v;
-    for (auto& e : echos) {
+    for (auto &e: echos) {
         if (prev_swst != e.swst_code) {
             prev_swst = e.swst_code;
             swst_changes++;
@@ -381,7 +393,7 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
 
     // TODO Range gate bias must be included in this calculation
     asar_meta.two_way_slant_range_time =
-        (min_swst + n_pulses_swst * echos.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate);
+            (min_swst + n_pulses_swst * echos.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate);
 
     sar_meta.slant_range_first_sample = asar_meta.two_way_slant_range_time * c / 2;
     sar_meta.wavelength = c / sar_meta.carrier_frequency;
@@ -409,7 +421,7 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     sar_meta.total_raw_samples = 0;
 
     for (size_t y = 0; y < echos.size(); y++) {
-        const auto& e = echos[y];
+        const auto &e = echos[y];
         size_t idx = y * range_samples;
         idx += e.swst_code - min_swst;
         const size_t n_samples = e.raw_data.size();
