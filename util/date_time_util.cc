@@ -15,6 +15,16 @@
 #include <boost/date_time/posix_time/ptime.hpp>
 
 namespace alus::util::date_time {
+
+    boost::posix_time::ptime ParseDate(const std::string &date_string, std::locale format) {
+        std::stringstream stream(date_string);
+        stream.imbue(format);
+        boost::posix_time::ptime date;
+        stream >> date;
+
+        return date;
+    }
+
     boost::posix_time::ptime YYYYMMDD(std::string str) {
         auto* facet = new boost::posix_time::time_input_facet("%Y%m%d");
         std::stringstream date_stream(str);

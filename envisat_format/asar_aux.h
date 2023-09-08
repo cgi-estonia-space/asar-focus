@@ -13,8 +13,14 @@
 
 #include <boost/date_time/posix_time/ptime.hpp>
 
-namespace alus::util::date_time {
+namespace alus::asar::aux {
 
-    boost::posix_time::ptime YYYYMMDD(std::string str);
-    boost::posix_time::ptime ParseDate(const std::string &date_string, std::locale format);
+    enum class Type {
+        PROCESSOR_CONFIGURATION,
+        INSTRUMENT_CHARACTERIZATION,
+        EXTERNAL_CALIBRATION,
+        EXTERNAL_CHARACTERIZATION
+    };
+
+    std::string GetPathFrom(std::string aux_root, boost::posix_time::ptime ds_start, Type t);
 }

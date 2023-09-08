@@ -1,6 +1,7 @@
 
 
 #include "envisat_aux_file.h"
+#include "envisat_format/asar_aux.h"
 
 #include "util/checks.h"
 #include "util/date_time_util.h"
@@ -57,11 +58,16 @@ void FindCONFile(std::string aux_root, boost::posix_time::ptime start, Configura
 
 void FindINSFile(std::string aux_root, boost::posix_time::ptime start, InstrumentFile &ins_file,
                  std::string &filename) {
-    std::filesystem::path ins_dir(aux_root);
-    ins_dir /= "ASA_INS_AX";
 
-    if (!std::filesystem::exists(ins_dir)) {
-        std::cerr << "There is no '" << "ASA_INS_AX" << "' inside auxiliary folder - " << aux_root << std::endl;
+    if (!std::filesystem::exists(aux_root)) {
+        std::cerr << "The auxiliary folder - " << aux_root << " - does not exist." << std::endl;
+        exit(1);
+    }
+
+    const auto file_path = alus::asar::aux::GetPathFrom(aux_root, start,
+                                                        alus::asar::aux::Type::INSTRUMENT_CHARACTERIZATION);
+    if (file_path.empty()) {
+        std::cerr << "Could not find INS file for ENVISAT in " << aux_root << std::endl;
         exit(1);
     }
 
@@ -75,36 +81,18 @@ void FindINSFile(std::string aux_root, boost::posix_time::ptime start, Instrumen
 
     std::vector<uint8_t> ins_data(INS_FILE_SIZE);
 
-    bool ok = false;
-    for (auto const &dir_entry: std::filesystem::directory_iterator(ins_dir)) {
-        auto fn = dir_entry.path().stem().string();
-        std::string start_date = fn.substr(30, 8);
-        std::string end_date = fn.substr(46, 8);
+    std::cout << "Instrument file = " << file_path << "\n";
+    FILE *fp = fopen(file_path.c_str(), "r");
+    auto total = fread(ins_data.data(), 1, INS_FILE_SIZE, fp);
 
-        if (start >= alus::util::date_time::YYYYMMDD(start_date) && start < alus::util::date_time::YYYYMMDD(end_date)) {
-            std::cout << "Instrument file = " << fn << "\n";
-            filename = fn;
-
-            FILE *fp = fopen(dir_entry.path().c_str(), "r");
-            auto total = fread(ins_data.data(), 1, INS_FILE_SIZE, fp);
-
-            if (total != INS_FILE_SIZE) {
-                ERROR_EXIT("Instrument file incorrect size?");
-            }
-            fclose(fp);
-
-            ok = true;
-
-            break;
-        }
+    if (total != INS_FILE_SIZE) {
+        ERROR_EXIT("Instrument file incorrect size?");
     }
-
-    if (!ok) {
-        ERROR_EXIT("No instruments file found!?");
-    }
+    fclose(fp);
 
     ins_data.erase(ins_data.begin(), ins_data.begin() + MPH_SPH_SIZE);
 
     memcpy(&ins_file, ins_data.data(), ins_data.size());
     ins_file.BSwap();
+    filename = file_path;
 }

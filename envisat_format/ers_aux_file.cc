@@ -17,6 +17,7 @@
 
 namespace alus::asar::envisat_format {
 
+    // Generalize this auxiliary file find code.
     void FindINSFile(std::string aux_root, boost::posix_time::ptime start, InstrumentFile &ins_file,
                      std::string &filename) {
         std::filesystem::path ins_dir(aux_root);
