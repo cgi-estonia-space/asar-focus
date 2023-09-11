@@ -18,4 +18,6 @@
 namespace alus::asar::envisat_format {
     void FindINSFile(std::string aux_root, boost::posix_time::ptime start, InstrumentFile& ins_file,
                      std::string& filename);
+    void FindCONFile(std::string aux_root, boost::posix_time::ptime start, ConfigurationFile& conf_file,
+                     std::string& filename);
 }

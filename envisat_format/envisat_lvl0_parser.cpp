@@ -170,17 +170,18 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
                asar_meta.sensing_stop <= sar_meta.osv.back().time);
 
     InstrumentFile ins_file = {};
+    ConfigurationFile conf_file = {};
     if (product_type == alus::asar::specification::ProductTypes::ASA_IM0) {
         FindINSFile(aux_path, asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
+        FindCONFile(aux_path, asar_meta.sensing_start, conf_file, asar_meta.configuration_file);
     } else if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
         alus::asar::envisat_format::FindINSFile(aux_path, asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
+        alus::asar::envisat_format::FindCONFile(aux_path, asar_meta.sensing_start, conf_file, asar_meta.configuration_file);
     } else {
         std::cerr << "WAT?" << std::endl;
         exit(1);
     }
 
-    ConfigurationFile conf_file = {};
-    FindCONFile(aux_path, asar_meta.sensing_start, conf_file, asar_meta.configuration_file);
     ProductHeader sph = {};
     sph.Load(file_data.data() + MPH_SIZE, SPH_SIZE);
 
@@ -205,8 +206,11 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     asar_meta.polarization = sph.Get("TX_RX_POLAR");
 
     auto dsds = ExtractDSDs(sph);
+    if (dsds.size() < 1) {
+        ERROR_EXIT("Expected DSD to contain echos, none found");
+    }
 
-    auto mdsr = dsds.at(0);
+    auto mdsr = dsds.front();
     const uint8_t *it = reinterpret_cast<const uint8_t *>(file_data.data()) + mdsr.ds_offset;
 
     int echo_cnt = 0;
@@ -221,109 +225,133 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
         FEPAnnotations fep;
         it = CopyBSwapPOD(fep, it);
 
-        uint16_t packet_id;
-        it = CopyBSwapPOD(packet_id, it);
+        if (product_type == alus::asar::specification::ProductTypes::ASA_IM0) {
+            uint16_t packet_id;
+            it = CopyBSwapPOD(packet_id, it);
 
-        uint16_t sequence_control;
-        it = CopyBSwapPOD(sequence_control, it);
+            uint16_t sequence_control;
+            it = CopyBSwapPOD(sequence_control, it);
 
-        uint16_t packet_length;
-        it = CopyBSwapPOD(packet_length, it);
+            uint16_t packet_length;
+            it = CopyBSwapPOD(packet_length, it);
 
-        uint16_t datafield_length;
-        it = CopyBSwapPOD(datafield_length, it);
+            uint16_t datafield_length;
+            it = CopyBSwapPOD(datafield_length, it);
 
-        if (datafield_length != 29) {
-            ERROR_EXIT(fmt::format("DSR nr = {} ({}) parsing error. Date Field Header Length should be 29 - is {}", i,
-                                   mdsr.num_dsr, datafield_length));
-        }
-
-        it++;
-        echo_meta.mode_id = *it;
-        it++;
-
-        if (echo_meta.mode_id != 0x54) {
-            printf("mode id = %02X - not IM mode!\n", echo_meta.mode_id);
-            exit(1);
-        }
-        echo_meta.onboard_time = 0;
-        echo_meta.onboard_time |= static_cast<uint64_t>(it[0]) << 32;
-        echo_meta.onboard_time |= static_cast<uint64_t>(it[1]) << 24;
-        echo_meta.onboard_time |= static_cast<uint64_t>(it[2]) << 16;
-        echo_meta.onboard_time |= static_cast<uint64_t>(it[3]) << 8;
-        echo_meta.onboard_time |= static_cast<uint64_t>(it[4]) << 0;
-
-        it += 5;
-        it++;  // spare byte after 40 bit onboard time
-
-        echo_meta.mode_count = 0;
-        echo_meta.mode_count |= static_cast<uint32_t>(it[0]) << 16;
-        echo_meta.mode_count |= static_cast<uint32_t>(it[1]) << 8;
-        echo_meta.mode_count |= static_cast<uint32_t>(it[2]) << 0;
-        it += 3;
-
-        echo_meta.antenna_beam_set_no = *it >> 2;
-        echo_meta.comp_ratio = *it & 0x3;
-        it++;
-
-        echo_meta.echo_flag = *it & 0x80;
-        echo_meta.noise_flag = *it & 0x40;
-        echo_meta.cal_flag = *it & 0x20;
-        echo_meta.cal_type = *it & 0x10;
-        echo_meta.cycle_count = 0;
-        echo_meta.cycle_count |= (it[0] & 0xF) << 8;
-        echo_meta.cycle_count |= it[1] << 0;
-        it += 2;
-
-        it = CopyBSwapPOD(echo_meta.pri_code, it);
-        it = CopyBSwapPOD(echo_meta.swst_code, it);
-        it = CopyBSwapPOD(echo_meta.echo_window_code, it);
-
-        {
-            uint16_t data;
-            it = CopyBSwapPOD(data, it);
-            echo_meta.upconverter_raw = data >> 12;
-            echo_meta.downconverter_raw = (data >> 7) & 0x1F;
-            echo_meta.tx_pol = data & 0x40;
-            echo_meta.rx_pol = data & 0x20;
-            echo_meta.cal_row_number = data & 0x1F;
-        }
-        {
-            uint16_t data = -1;
-            it = CopyBSwapPOD(data, it);
-            echo_meta.tx_pulse_code = data >> 6;
-            echo_meta.beam_adj_delta = data & 0x3F;
-        }
-
-        echo_meta.chirp_pulse_bw_code = it[0];
-        echo_meta.aux_tx_monitor_level = it[1];
-        it += 2;
-
-        it = CopyBSwapPOD(echo_meta.resampling_factor, it);
-
-        size_t data_len = packet_length - 29;
-
-        if (echo_meta.echo_flag) {
-            echo_meta.raw_data.reserve(echo_meta.echo_window_code);
-            size_t n_blocks = data_len / 64;
-
-            for (size_t i = 0; i < n_blocks; i++) {
-                const uint8_t *block_data = it + i * 64;
-                uint8_t block_id = block_data[0];
-                for (size_t j = 0; j < 63; j++) {
-                    uint8_t i_codeword = block_data[1 + j] >> 4;
-                    uint8_t q_codeword = block_data[1 + j] & 0xF;
-
-                    float i_samp = ins_file.fbp.i_LUT_fbaq4[FBAQ4Idx(block_id, i_codeword)];
-                    float q_samp = ins_file.fbp.q_LUT_fbaq4[FBAQ4Idx(block_id, q_codeword)];
-                    echo_meta.raw_data.emplace_back(i_samp, q_samp);
-                }
+            if (datafield_length != 29) {
+                ERROR_EXIT(fmt::format("DSR nr = {} ({}) parsing error. Date Field Header Length should be 29 - is {}", i,
+                                       mdsr.num_dsr, datafield_length));
             }
 
-            echos.push_back(std::move(echo_meta));
+            it++;
+            echo_meta.mode_id = *it;
+            it++;
+
+            if (echo_meta.mode_id != 0x54) {
+                printf("mode id = %02X - not IM mode!\n", echo_meta.mode_id);
+                exit(1);
+            }
+            echo_meta.onboard_time = 0;
+            echo_meta.onboard_time |= static_cast<uint64_t>(it[0]) << 32;
+            echo_meta.onboard_time |= static_cast<uint64_t>(it[1]) << 24;
+            echo_meta.onboard_time |= static_cast<uint64_t>(it[2]) << 16;
+            echo_meta.onboard_time |= static_cast<uint64_t>(it[3]) << 8;
+            echo_meta.onboard_time |= static_cast<uint64_t>(it[4]) << 0;
+
+            it += 5;
+            it++;  // spare byte after 40 bit onboard time
+
+            echo_meta.mode_count = 0;
+            echo_meta.mode_count |= static_cast<uint32_t>(it[0]) << 16;
+            echo_meta.mode_count |= static_cast<uint32_t>(it[1]) << 8;
+            echo_meta.mode_count |= static_cast<uint32_t>(it[2]) << 0;
+            it += 3;
+
+            echo_meta.antenna_beam_set_no = *it >> 2;
+            echo_meta.comp_ratio = *it & 0x3;
+            it++;
+
+            echo_meta.echo_flag = *it & 0x80;
+            echo_meta.noise_flag = *it & 0x40;
+            echo_meta.cal_flag = *it & 0x20;
+            echo_meta.cal_type = *it & 0x10;
+            echo_meta.cycle_count = 0;
+            echo_meta.cycle_count |= (it[0] & 0xF) << 8;
+            echo_meta.cycle_count |= it[1] << 0;
+            it += 2;
+
+            it = CopyBSwapPOD(echo_meta.pri_code, it);
+            it = CopyBSwapPOD(echo_meta.swst_code, it);
+            it = CopyBSwapPOD(echo_meta.echo_window_code, it);
+
+            {
+                uint16_t data;
+                it = CopyBSwapPOD(data, it);
+                echo_meta.upconverter_raw = data >> 12;
+                echo_meta.downconverter_raw = (data >> 7) & 0x1F;
+                echo_meta.tx_pol = data & 0x40;
+                echo_meta.rx_pol = data & 0x20;
+                echo_meta.cal_row_number = data & 0x1F;
+            }
+            {
+                uint16_t data = -1;
+                it = CopyBSwapPOD(data, it);
+                echo_meta.tx_pulse_code = data >> 6;
+                echo_meta.beam_adj_delta = data & 0x3F;
+            }
+
+            echo_meta.chirp_pulse_bw_code = it[0];
+            echo_meta.aux_tx_monitor_level = it[1];
+            it += 2;
+
+            it = CopyBSwapPOD(echo_meta.resampling_factor, it);
+
+            size_t data_len = packet_length - 29;
+
+            if (echo_meta.echo_flag) {
+                echo_meta.raw_data.reserve(echo_meta.echo_window_code);
+                size_t n_blocks = data_len / 64;
+
+                for (size_t i = 0; i < n_blocks; i++) {
+                    const uint8_t *block_data = it + i * 64;
+                    uint8_t block_id = block_data[0];
+                    for (size_t j = 0; j < 63; j++) {
+                        uint8_t i_codeword = block_data[1 + j] >> 4;
+                        uint8_t q_codeword = block_data[1 + j] & 0xF;
+
+                        float i_samp = ins_file.fbp.i_LUT_fbaq4[FBAQ4Idx(block_id, i_codeword)];
+                        float q_samp = ins_file.fbp.q_LUT_fbaq4[FBAQ4Idx(block_id, q_codeword)];
+                        echo_meta.raw_data.emplace_back(i_samp, q_samp);
+                    }
+                }
+
+                echos.push_back(std::move(echo_meta));
+            }
+
+            it += (fep.isp_length - 29);
+        } else if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
+            uint32_t dr_no{};
+            it = CopyBSwapPOD(dr_no, it);
+
+            uint8_t packet_counter = it[0];
+
+            uint8_t subcommutation_counter = it[1];
+            it += 2;
+
+            it += 8;
+            uint8_t fixed_code = it [0];
+            it += 1;
+            it += 11;
+            uint16_t swst{};
+            it = CopyBSwapPOD(swst, it);
+            uint16_t pri{};
+            it = CopyBSwapPOD(pri, it);
+            it += 11232 + 194 + 10;
+        } else {
+            std::cerr << "WAT?" << std::endl;
+            exit(1);
         }
 
-        it += (fep.isp_length - 29);
     }
 
     uint16_t min_swst = UINT16_MAX;
