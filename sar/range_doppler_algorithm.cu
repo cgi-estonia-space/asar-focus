@@ -111,8 +111,8 @@ __global__ void RangeCellMigrationCorrection(const cufftComplex* data_in, int sr
         fn = (dst_y - src_y_size) * fft_bin_step;
     }
 
-    // example: doppler centroid -300Hz, prf 2000Hz, positive frequencies: 0-1000Hz,
-    //  frequency +800Hz baseband would be an alias to absolute -1200Hz
+    // example: doppler centroid -300Hz, prf 2000Hz, positive frequencies: 0-1000Hz =>
+    //  frequency +800Hz baseband would be an alias to the actual frequency of -1200Hz
     const float half_prf = args.prf * 0.5f;
     if (dc < 0.0f) {
         if (fn > half_prf + dc) {
@@ -191,7 +191,8 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
 
         const float dc = Polyval(args.dc_poly, dst_x);
 
-        const float dc_offset = std::roundf(dc / fft_bin_step) * fft_bin_step;
+        const float dc_steps = std::roundf(dc / fft_bin_step);
+        const float dc_offset = dc_steps * fft_bin_step;
         // find FFT bin frequency
         float bin_freq = 0.0f;
         if ((dst_y < src_height / 2)) {
@@ -201,7 +202,12 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
             bin_freq = (dst_y - src_height) * fft_bin_step;
         }
 
-        // TODO doppler centroid usage is broken, current code shifts result in time domain
+        // TODO is this usage of the doppler centroid correct?
+        // Multiple issues at play here:
+        // throw away bin locations
+        // matched filter center vs zero frequency - otherwise ghost in azimuth direction
+        // the resulting azimuth time domain shift and it's undoing by a linear ramp shift
+        // needs further investigation
         const float half_prf = args.prf * 0.5f;
         float abs_freq = bin_freq;
         if (dc < 0.0f) {
@@ -217,22 +223,20 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
         const float cutoff_hi = half_prf * args.azimuth_bandwidth_fraction + dc_offset;
         const float cutoff_lo = -half_prf * args.azimuth_bandwidth_fraction + dc_offset;
 
-
-        if(abs_freq < cutoff_lo || abs_freq > cutoff_hi) {
+        if (abs_freq < cutoff_lo || abs_freq > cutoff_hi) {
             // frequency in the throwaway region
             // ex prf = 2000Hz, dc = -600Hz, fraction = 0.8 => cut low = +-1400Hz, cut high = +200Hz
             src_data[src_idx] = {};
             return;
         }
 
-        float fn = bin_freq + dc_offset;
-        // Azimuth reference multiply must be in baseband!
-        if (fn > half_prf) {
-            fn -= args.prf;
-        } else if (fn < -half_prf) {
-            fn += args.prf;
+        // Adjust center frequency by doppler centroid, however keep the values in +- prf/2 for the matched filter
+        float fn_center = bin_freq - dc_offset;
+        if (fn_center > half_prf) {
+            fn_center -= args.prf;
+        } else if (fn_center < -half_prf) {
+            fn_center += args.prf;
         }
-
 
         // slant range at range pixel
         const double R0 = args.slant_range + args.range_spacing * dst_x;
@@ -243,17 +247,35 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
 
         // range Doppler domain matched filter at this frequency
         const float float_pi = M_PI;
-        float phase = (-float_pi * fn * fn) / Ka;
+        float mf_phase = (float_pi * fn_center * fn_center) / Ka;
 
-        cufftComplex val;
-        float sin_val;
-        float cos_val;
-        sincos(phase, &sin_val, &cos_val);
-        val.x = cos_val;
-        val.y = sin_val;
-        
+        // exp((-1j* pi * fn * fn) / Ka)
+        cufftComplex mf_val;
+        {
+            float sin_val;
+            float cos_val;
+            sincos(mf_phase, &sin_val, &cos_val);
+            mf_val.x = cos_val;
+            mf_val.y = -sin_val;
+        }
+
+        // the previous matched filter is not centered around zero due to doppler centroid
+        // a linear phase ramp should put this back to 0Hz, aka zero doppler position
+        // exp(-1j * 2 * pi * dt * fn)
+        cufftComplex shift;
+        {
+            float shift_phase = 2 * float_pi * (dc_offset / Ka) * bin_freq;  // bin freq or dc offset frequency?
+            float sin_val;
+            float cos_val;
+            sincos(shift_phase, &sin_val, &cos_val);
+            shift.x = cos_val;
+            shift.y = -sin_val;
+        }
+
+        mf_val = cuCmulf(mf_val, shift);
+
         // application via f domain multiplication
-        src_data[src_idx] = cuCmulf(src_data[src_idx], val);
+        src_data[src_idx] = cuCmulf(src_data[src_idx], mf_val);
     }
 }
 }  // namespace
@@ -282,7 +304,6 @@ void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_i
         CHECK_CUFFT_ERR(cufftExecC2C(azimuth_fft, src_img.Data(), src_img.Data(), CUFFT_FORWARD));
     }
 #endif
-
 
     KernelArgs k_args = {};
     k_args.lambda = metadata.wavelength;
