@@ -330,23 +330,61 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
 
             it += (fep.isp_length - 29);
         } else if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
+            static uint32_t last_data_record_no{0};
             uint32_t dr_no{};
             it = CopyBSwapPOD(dr_no, it);
+            if (last_data_record_no + 1 != dr_no) {
+                std::cout << "There are discrepancies between ERS data packets. Last no. " << last_data_record_no
+                          << " current no. " << dr_no << std::endl;
+            } else {
+                last_data_record_no = dr_no;
+            }
 
             uint8_t packet_counter = it[0];
-
             uint8_t subcommutation_counter = it[1];
             it += 2;
 
             it += 8;
-            uint8_t fixed_code = it [0];
+            if (it[0] != 0xAA) {
+                std::cerr << "ERS data packet's auxiliary section shall start with 0xAA, instead " << std::hex << it[0]
+                          << " was found" << std::endl;
+                exit(1);
+            }
             it += 1;
-            it += 11;
-            uint16_t swst{};
-            it = CopyBSwapPOD(swst, it);
-            uint16_t pri{};
-            it = CopyBSwapPOD(pri, it);
-            it += 11232 + 194 + 10;
+            it += 1; // OGRC/OBRC flag and Orbit ID code
+            echo_meta.onboard_time = 0;
+            echo_meta.onboard_time |= static_cast<uint64_t>(it[0]) << 24;
+            echo_meta.onboard_time |= static_cast<uint64_t>(it[1]) << 16;
+            echo_meta.onboard_time |= static_cast<uint64_t>(it[2]) << 8;
+            echo_meta.onboard_time |= static_cast<uint64_t>(it[3]) << 0;
+            it += 4;
+            it += 6; // activity task and image format counter;
+            it = CopyBSwapPOD(echo_meta.swst_code, it);
+            it = CopyBSwapPOD(echo_meta.pri_code, it);
+            // https://earth.esa.int/eogateway/documents/20142/37627/ERS-products-specification-with-Envisat-format.pdf
+            // https://asf.alaska.edu/wp-content/uploads/2019/03/ers_ceos.pdf mixed between two.
+            it += 194 + 10;
+            echo_meta.raw_data.reserve(11232);
+            uint64_t i_avg_cumulative{0};
+            uint64_t q_avg_cumulative{0};
+            for (size_t r_i{0}; r_i < 5616; r_i++) {
+                uint8_t i_sample = it[r_i * 2 + 0];
+                i_avg_cumulative += i_sample;
+                uint8_t q_sample = it[r_i * 2 + 1];
+                q_avg_cumulative += q_sample;
+                echo_meta.raw_data.emplace_back(static_cast<float>(i_sample), static_cast<float>(q_sample));
+                // it += 2;
+            }
+            double i_avg = i_avg_cumulative / 5616.0;
+            double q_avg = q_avg_cumulative / 5616.0;
+            if (i_avg > 16.0 || i_avg < 15.0) {
+                std::cout << "average for i at MSDR no. " << i << " is OOL " << i_avg << std::endl;
+            }
+            if (q_avg > 16.0 || q_avg < 15.0) {
+                std::cout << "average for q at MSDR no. " << i << " is OOL " << q_avg << std::endl;
+            }
+            it += 11232;
+            echos.push_back(std::move(echo_meta));
         } else {
             std::cerr << "WAT?" << std::endl;
             exit(1);
@@ -376,15 +414,18 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     asar_meta.last_sbt = echos.back().onboard_time;
 
     std::vector<float> v;
+    uint64_t mean_swst_rolling{0};
     for (auto &e: echos) {
         if (prev_swst != e.swst_code) {
             prev_swst = e.swst_code;
             swst_changes++;
         }
+        mean_swst_rolling += e.swst_code;
         min_swst = std::min(min_swst, e.swst_code);
         max_swst = std::max(max_swst, e.swst_code);
         max_samples = std::max(max_samples, e.raw_data.size());
     }
+    const auto mean_swst = mean_swst_rolling / static_cast<double>(echos.size());
 
     asar_meta.swst_changes = swst_changes;
 
@@ -394,7 +435,6 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     sar_meta.chirp.range_sampling_rate = ins_file.flp.radar_sampling_rate;
 
     sar_meta.chirp.pulse_bandwidth = pulse_bw;
-    sar_meta.pulse_repetition_frequency = sar_meta.chirp.range_sampling_rate / echos.front().pri_code;
 
     sar_meta.chirp.Kr = ins_file.flp.im_chirp[swath_idx].phase[2] * 2;  // TODO Envisat format multiply by 2?
     sar_meta.chirp.pulse_duration = ins_file.flp.im_chirp[swath_idx].duration;
@@ -419,11 +459,38 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
 
     asar_meta.swst_rank = n_pulses_swst;
 
+    double twoway_a{};
     // TODO Range gate bias must be included in this calculation
-    asar_meta.two_way_slant_range_time =
-            (min_swst + n_pulses_swst * echos.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate);
+    if (product_type == alus::asar::specification::ProductTypes::ASA_IM0) {
+        sar_meta.pulse_repetition_frequency = sar_meta.chirp.range_sampling_rate / echos.front().pri_code;
+        asar_meta.two_way_slant_range_time =
+                (min_swst + n_pulses_swst * echos.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate);
+    } else if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
+        const auto delay_time = 6.622e-6;
+        //const auto delay_time = 0.620e-6;
+        // ISCE2 uses 210.943006e-9, but
+        // ERS-1-Satellite-to-Ground-Segment-Interface-Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05
+        // note 5 in 4.4:28 specifies 210.94 ns, which draws more similar results to PF-ERS results.
+        const auto pri = (echos.front().pri_code + 2.0) * 210.94e-9;
+        sar_meta.pulse_repetition_frequency = 1 / pri;
+
+        if (sar_meta.pulse_repetition_frequency < 1640 || sar_meta.pulse_repetition_frequency > 1720) {
+            std::cout << "PRF value '" << sar_meta.pulse_repetition_frequency << "'"
+                      << "is out of the specification (ERS-1-Satellite-to-Ground-Segment-Interface-"
+                      << "Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05) range [1640, 1720] Hz" << std::endl;
+        }
+
+        asar_meta.two_way_slant_range_time =
+                (echos.front().swst_code + n_pulses_swst * (echos.front().pri_code + 2.0)) * (4 / sar_meta.chirp.range_sampling_rate);
+        twoway_a = 9 * pri + echos.front().swst_code * 4 / sar_meta.chirp.range_sampling_rate - delay_time;
+//        startingRange = (9*pulseInterval + self._imageFileData['minSwst']*4/rangeSamplingRate-self.constants['delayTime'])*Const.c/2.0
+    } else {
+        std::cerr << "WTF? " << __FUNCTION__  << " " << __LINE__ << std::endl;
+        exit(1);
+    }
 
     sar_meta.slant_range_first_sample = asar_meta.two_way_slant_range_time * c / 2;
+    const auto srfs = twoway_a * c / 2;
     sar_meta.wavelength = c / sar_meta.carrier_frequency;
     sar_meta.range_spacing = c / (2 * sar_meta.chirp.range_sampling_rate);
 
