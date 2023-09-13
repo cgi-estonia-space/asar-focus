@@ -59,7 +59,7 @@ namespace alus::asar::envisat_format {
 
         memcpy(&ins_file, ins_data.data(), ins_data.size());
         ins_file.BSwap();
-        filename = file_path;
+        filename = std::filesystem::path(file_path).filename();
     }
 
 
@@ -85,6 +85,6 @@ namespace alus::asar::envisat_format {
         conf_data.erase(conf_data.begin(), conf_data.begin() + MPH_SPH_SIZE);
         memcpy(&conf_file, conf_data.data(), conf_data.size());
         conf_file.BSwap();
-        filename = file_path;
+        filename = std::filesystem::path(file_path).filename();
     }
 }

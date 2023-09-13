@@ -44,7 +44,7 @@ void FindCONFile(std::string aux_root, boost::posix_time::ptime start, Configura
     conf_data.erase(conf_data.begin(), conf_data.begin() + MPH_SPH_SIZE);
     memcpy(&conf_file, conf_data.data(), conf_data.size());
     conf_file.BSwap();
-    filename = file_path;
+    filename = std::filesystem::path(file_path).filename();
 }
 
 void FindINSFile(std::string aux_root, boost::posix_time::ptime start, InstrumentFile &ins_file,
@@ -74,5 +74,5 @@ void FindINSFile(std::string aux_root, boost::posix_time::ptime start, Instrumen
 
     memcpy(&ins_file, ins_data.data(), ins_data.size());
     ins_file.BSwap();
-    filename = file_path;
+    filename = std::filesystem::path(file_path).filename();
 }
