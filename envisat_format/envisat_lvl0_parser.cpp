@@ -340,6 +340,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
             if (last_data_record_no + 1 != dr_no) {
                 std::cout << "There are discrepancies between ERS data packets. Last no. " << last_data_record_no
                           << " current no. " << dr_no << std::endl;
+                
             } else {
                 last_data_record_no = dr_no;
             }
@@ -377,16 +378,15 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
                 uint8_t q_sample = it[r_i * 2 + 1];
                 q_avg_cumulative += q_sample;
                 echo_meta.raw_data.emplace_back(static_cast<float>(i_sample), static_cast<float>(q_sample));
-                // it += 2;
             }
             double i_avg = i_avg_cumulative / 5616.0;
             double q_avg = q_avg_cumulative / 5616.0;
-            if (i_avg > 16.0 || i_avg < 15.0) {
-                std::cout << "average for i at MSDR no. " << i << " is OOL " << i_avg << std::endl;
-            }
-            if (q_avg > 16.0 || q_avg < 15.0) {
-                std::cout << "average for q at MSDR no. " << i << " is OOL " << q_avg << std::endl;
-            }
+//            if (i_avg > 16.0 || i_avg < 15.0) {
+//                std::cout << "average for i at MSDR no. " << i << " is OOL " << i_avg << std::endl;
+//            }
+//            if (q_avg > 16.0 || q_avg < 15.0) {
+//                std::cout << "average for q at MSDR no. " << i << " is OOL " << q_avg << std::endl;
+//            }
             it += 11232;
             echos.push_back(std::move(echo_meta));
         } else {
@@ -479,15 +479,13 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
 
     asar_meta.swst_rank = n_pulses_swst;
 
-    double twoway_a{};
     // TODO Range gate bias must be included in this calculation
     if (product_type == alus::asar::specification::ProductTypes::ASA_IM0) {
         sar_meta.pulse_repetition_frequency = sar_meta.chirp.range_sampling_rate / echos.front().pri_code;
         asar_meta.two_way_slant_range_time =
                 (min_swst + n_pulses_swst * echos.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate);
     } else if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
-        const auto delay_time = 6.622e-6; // Constant from instrument file's range_gate_bias property.
-        //const auto delay_time = 0.620e-6;
+        const auto delay_time = ins_file.flp.range_gate_bias;
         // ISCE2 uses 210.943006e-9, but
         // ERS-1-Satellite-to-Ground-Segment-Interface-Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05
         // note 5 in 4.4:28 specifies 210.94 ns, which draws more similar results to PF-ERS results.
@@ -500,17 +498,13 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
                       << "Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05) range [1640, 1720] Hz" << std::endl;
         }
 
-        //asar_meta.two_way_slant_range_time =
-        //        (min_swst + n_pulses_swst * (echos.front().pri_code + 2.0)) * (4 / sar_meta.chirp.range_sampling_rate);
         asar_meta.two_way_slant_range_time = n_pulses_swst * pri + min_swst * swst_multiplier / sar_meta.chirp.range_sampling_rate - delay_time;
-//        startingRange = (9*pulseInterval + self._imageFileData['minSwst']*4/rangeSamplingRate-self.constants['delayTime'])*Const.c/2.0
     } else {
         std::cerr << "WTF? " << __FUNCTION__  << " " << __LINE__ << std::endl;
         exit(1);
     }
 
     sar_meta.slant_range_first_sample = asar_meta.two_way_slant_range_time * c / 2;
-    //const auto srfs = twoway_a * c / 2;
     sar_meta.wavelength = c / sar_meta.carrier_frequency;
     sar_meta.range_spacing = c / (2 * sar_meta.chirp.range_sampling_rate);
 

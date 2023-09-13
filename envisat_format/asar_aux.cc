@@ -17,6 +17,7 @@
 #include <boost/date_time/posix_time/posix_time_io.hpp>
 #include <boost/date_time/posix_time/ptime.hpp>
 
+#include "util/checks.h"
 #include "util/date_time_util.h"
 #include "util/filesystem_util.h"
 
@@ -36,6 +37,8 @@ namespace {
                 return PROCESSOR_CONFIGURATION_ID;
             case alus::asar::aux::Type::INSTRUMENT_CHARACTERIZATION:
                 return INSTRUMENT_CHARACTERIZATION_ID;
+            default:
+                ERROR_EXIT("Should not reach here");
         }
     }
 
