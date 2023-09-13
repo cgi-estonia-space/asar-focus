@@ -214,6 +214,10 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     const uint8_t *it = reinterpret_cast<const uint8_t *>(file_data.data()) + mdsr.ds_offset;
 
     int echo_cnt = 0;
+    int swst_multiplier{1};
+    if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
+        swst_multiplier = 4;
+    }
 
     std::vector<EchoMeta> echos;
     for (size_t i = 0; i < mdsr.num_dsr; i++) {
@@ -414,18 +418,34 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     asar_meta.last_sbt = echos.back().onboard_time;
 
     std::vector<float> v;
-    uint64_t mean_swst_rolling{0};
-    for (auto &e: echos) {
-        if (prev_swst != e.swst_code) {
-            prev_swst = e.swst_code;
-            swst_changes++;
+    if (product_type == alus::asar::specification::ProductTypes::ASA_IM0) {
+        for (auto &e: echos) {
+            if (prev_swst != e.swst_code) {
+                prev_swst = e.swst_code;
+                swst_changes++;
+            }
+            min_swst = std::min(min_swst, e.swst_code);
+            max_swst = std::max(max_swst, e.swst_code);
+            max_samples = std::max(max_samples, e.raw_data.size());
         }
-        mean_swst_rolling += e.swst_code;
-        min_swst = std::min(min_swst, e.swst_code);
-        max_swst = std::max(max_swst, e.swst_code);
-        max_samples = std::max(max_samples, e.raw_data.size());
+    } else if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
+        for (auto &e: echos) {
+            if (prev_swst != e.swst_code) {
+                if ((e.swst_code < 500) || (e.swst_code > 1500) || ((prev_swst - e.swst_code) % 22 != 0)) {
+                    e.swst_code = prev_swst;
+                    continue;
+                }
+                prev_swst = e.swst_code;
+                swst_changes++;
+            }
+            min_swst = std::min(min_swst, e.swst_code);
+            max_swst = std::max(max_swst, e.swst_code);
+            max_samples = std::max(max_samples, e.raw_data.size());
+        }
+    } else {
+        std::cerr << "WTF?!" << std::endl;
+        exit(1);
     }
-    const auto mean_swst = mean_swst_rolling / static_cast<double>(echos.size());
 
     asar_meta.swst_changes = swst_changes;
 
@@ -446,7 +466,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     fmt::print("Nominal chirp duration = {}\n", sar_meta.chirp.pulse_duration);
     fmt::print("Calculated chirp BW = {} , meta bw = {}\n", sar_meta.chirp.pulse_bandwidth, pulse_bw);
 
-    const size_t range_samples = max_samples + max_swst - min_swst;
+    const size_t range_samples = max_samples + swst_multiplier * (max_swst - min_swst);
     fmt::print("range samples = {}, minimum range padded size = {}\n", range_samples,
                range_samples + sar_meta.chirp.n_samples);
 
@@ -466,7 +486,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
         asar_meta.two_way_slant_range_time =
                 (min_swst + n_pulses_swst * echos.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate);
     } else if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
-        const auto delay_time = 6.622e-6;
+        const auto delay_time = 6.622e-6; // Constant from instrument file's range_gate_bias property.
         //const auto delay_time = 0.620e-6;
         // ISCE2 uses 210.943006e-9, but
         // ERS-1-Satellite-to-Ground-Segment-Interface-Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05
@@ -480,9 +500,9 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
                       << "Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05) range [1640, 1720] Hz" << std::endl;
         }
 
-        asar_meta.two_way_slant_range_time =
-                (echos.front().swst_code + n_pulses_swst * (echos.front().pri_code + 2.0)) * (4 / sar_meta.chirp.range_sampling_rate);
-        twoway_a = 9 * pri + echos.front().swst_code * 4 / sar_meta.chirp.range_sampling_rate - delay_time;
+        //asar_meta.two_way_slant_range_time =
+        //        (min_swst + n_pulses_swst * (echos.front().pri_code + 2.0)) * (4 / sar_meta.chirp.range_sampling_rate);
+        asar_meta.two_way_slant_range_time = n_pulses_swst * pri + min_swst * swst_multiplier / sar_meta.chirp.range_sampling_rate - delay_time;
 //        startingRange = (9*pulseInterval + self._imageFileData['minSwst']*4/rangeSamplingRate-self.constants['delayTime'])*Const.c/2.0
     } else {
         std::cerr << "WTF? " << __FUNCTION__  << " " << __LINE__ << std::endl;
@@ -490,7 +510,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     }
 
     sar_meta.slant_range_first_sample = asar_meta.two_way_slant_range_time * c / 2;
-    const auto srfs = twoway_a * c / 2;
+    //const auto srfs = twoway_a * c / 2;
     sar_meta.wavelength = c / sar_meta.carrier_frequency;
     sar_meta.range_spacing = c / (2 * sar_meta.chirp.range_sampling_rate);
 
@@ -518,7 +538,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     for (size_t y = 0; y < echos.size(); y++) {
         const auto &e = echos[y];
         size_t idx = y * range_samples;
-        idx += e.swst_code - min_swst;
+        idx += swst_multiplier * (e.swst_code - min_swst);
         const size_t n_samples = e.raw_data.size();
         memcpy(&img_data[idx], e.raw_data.data(), n_samples * 8);
         sar_meta.total_raw_samples += n_samples;
