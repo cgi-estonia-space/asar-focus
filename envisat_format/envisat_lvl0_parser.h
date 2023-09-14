@@ -101,6 +101,17 @@ struct ASARMetadata {
         double y_velocity;
         double z_velocity;
     } orbit_metadata;
+
+    struct {
+        std::string echo_method;
+        std::string echo_ratio;
+        std::string init_cal_method;
+        std::string init_cal_ratio;
+        std::string per_cal_method;
+        std::string per_cal_ratio;
+        std::string noise_method;
+        std::string noise_ratio;
+    } compression_metadata;
 };
 
 void ParseIMFile(const std::vector<char> &file_data, const char *aux_pax, SARMetadata &sar_meta,

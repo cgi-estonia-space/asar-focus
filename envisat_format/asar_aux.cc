@@ -69,9 +69,7 @@ namespace alus::asar::aux {
 
             const auto &current_sat_id = items.front();
             if (current_sat_id != satellite_id) {
-                std::cerr << "There are mixed satellite auxiliary files in the supplied aux folder - " << aux_root
-                          << std::endl;
-                exit(1);
+                ERROR_EXIT("There are mixed satellite auxiliary files in the supplied aux folder - " + aux_root);
             }
 
             if (items.at(1) != id_string) {
@@ -81,17 +79,13 @@ namespace alus::asar::aux {
             const auto start_str = items.at(4) + " " + items.at(5);
             auto start_date = util::date_time::ParseDate(start_str, locale);
             if (start_date.is_not_a_date_time()) {
-                std::cerr << "Unparseable date '" + start_str + "' for format: " +
-                             std::string(DATE_PATTERN) << std::endl;
-                exit(1);
+                ERROR_EXIT("Unparseable date '" + start_str + "' for format: " + std::string(DATE_PATTERN));
             }
 
             const auto end_str = items.at(6) + " " + items.at(7);
             auto end_date = util::date_time::ParseDate(end_str, locale);
             if (end_date.is_not_a_date_time()) {
-                std::cerr << "Unparseable date '" + end_str + "' for format: " +
-                             std::string(DATE_PATTERN) << std::endl;
-                exit(1);
+                ERROR_EXIT("Unparseable date '" + end_str + "' for format: " + std::string(DATE_PATTERN));
             }
 
             if (start > start_date && start < end_date) {

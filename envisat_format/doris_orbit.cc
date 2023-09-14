@@ -24,6 +24,7 @@
 #include <boost/date_time/posix_time/ptime.hpp>
 
 #include "envisat_format/envisat_mph_sph_parser.h"
+#include "util/checks.h"
 #include "util/filesystem_util.h"
 
 namespace {
@@ -91,9 +92,7 @@ namespace alus::dorisorbit {
                 }
             }
             if (!found) {
-                std::cerr << "Could not find orbit file entry that would cover sensing time span of the dataset"
-                          << std::endl;
-                exit(1);
+                ERROR_EXIT("Could not find orbit file entry that would cover sensing time span of the dataset");
             }
         }
 
@@ -114,15 +113,13 @@ namespace alus::dorisorbit {
             std::vector<std::string> items;
             boost::split(items, record, boost::is_any_of(" \n"), boost::token_compress_on);
             if (items.size() != ENVISAT_DORIS_MDSR_ITEM_COUNT) {
-                std::cerr << "MDSR COUNT is not a standard one for orbit file" << std::endl;
-                exit(1);
+                ERROR_EXIT("MDSR COUNT is not a standard one for orbit file");
             }
             const auto item_datetime = items.front() + " " + items.at(1);//.substr(0, 8);
             auto date = ParseDate(item_datetime, locale);
             if (date.is_not_a_date_time()) {
-                std::cerr << "Unparseable date '" + item_datetime + "' for format: " +
-                             std::string(ENVISAT_DORIS_TIMESTAMP_PATTERN) << std::endl;
-                exit(1);
+                ERROR_EXIT("Unparseable date '" + item_datetime + "' for format: " +
+                           std::string(ENVISAT_DORIS_TIMESTAMP_PATTERN));
             }
 
             if (date < start_delta || date > end_delta) {
@@ -146,10 +143,10 @@ namespace alus::dorisorbit {
         }
 
         if (_osv.size() < ORBIT_DELTA_MINUTE_COUNT * 2) {
-            std::cerr << "There were less than required " << ORBIT_DELTA_MINUTE_COUNT * 2 << " entries parsed from"
-                      << " orbit file (over a timespan of " << ORBIT_DELTA_MINUTE_COUNT * 2 << " minutes)," <<
-                      " probably a corrupt orbit dataset or implementation error." << std::endl;
-            exit(1);
+            ERROR_EXIT("There were less than required " + std::to_string(ORBIT_DELTA_MINUTE_COUNT * 2) +
+                        " entries parsed from orbit file (over a timespan of " +
+                        std::to_string(ORBIT_DELTA_MINUTE_COUNT * 2) + " minutes), probably a corrupt orbit dataset " +
+                        "or implementation error.");
         }
 
         UpdateMetadataForL1Product(start, stop);
@@ -161,10 +158,10 @@ namespace alus::dorisorbit {
         const auto file_size = std::filesystem::file_size(filename);
         if (file_size != ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES &&
             file_size != ERS_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES) {
-            std::cerr << "Expected DORIS orbit file to be " << ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES
-                      << " bytes for ENVISAT or " << ERS_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES << " bytes for ERS,"
-                      << " but actual file size is " << file_size << " bytes" << std::endl;
-            exit(1);
+            ERROR_EXIT("Expected DORIS orbit file to be " +
+                        std::to_string(ENVISAT_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES) + " bytes for ENVISAT or " +
+                        std::to_string(ERS_DORIS_ORBIT_DETERMINATION_FILE_SIZE_BYTES) + " bytes for ERS, but actual " +
+                        "file size is " + std::to_string(file_size) + " bytes");
         }
 
         std::fstream in_stream;
@@ -246,9 +243,8 @@ namespace alus::dorisorbit {
                                             locale);
 
             if (start_date.is_not_a_date_time() || end_date.is_not_a_date_time()) {
-                std::cerr << "Unparseable date from DORIS orbit file '" + string_name + "' for format: " +
-                             std::string(ENVISAT_DORIS_TIMESTAMP_FILENAME_PATTERN) << std::endl;
-                exit(1);
+                ERROR_EXIT("Unparseable date from DORIS orbit file '" + string_name + "' for format: " +
+                           std::string(ENVISAT_DORIS_TIMESTAMP_FILENAME_PATTERN));
             }
 
             doris_listing.push_back({start_date, end_date, l});
@@ -263,8 +259,7 @@ namespace alus::dorisorbit {
         } else if (std::filesystem::is_directory(file_or_folder)) {
             return CreateFromDirectoryListing(file_or_folder);
         } else {
-            std::cerr << "Unidentified orbit source - " << file_or_folder << std::endl;
-            exit(1);
+            ERROR_EXIT("Unidentified orbit source - " + std::string(file_or_folder));
         }
     }
 
@@ -293,9 +288,7 @@ namespace alus::dorisorbit {
         }
 
         if (!found) {
-            std::cerr << "Failed to construct L1 product metadata from orbit source, probably corrupt orbit file."
-                      << std::endl;
-            exit(1);
+            ERROR_EXIT("Failed to construct L1 product metadata from orbit source, probably corrupt orbit file.");
         }
 
         _l1_product_metadata.orbit_name = _mph.Get("PRODUCT");

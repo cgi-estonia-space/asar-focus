@@ -124,8 +124,14 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
 
     {
         auto& comp = out.data_compression_information;
-        CopyStrPad(comp.echo_comp, "FBAQ");
-        CopyStrPad(comp.echo_comp_ratio, "8/4");
+        CopyStrPad(comp.echo_comp, asar_meta.compression_metadata.echo_method);
+        CopyStrPad(comp.echo_comp_ratio, asar_meta.compression_metadata.echo_ratio);
+        CopyStrPad(comp.init_cal_comp, asar_meta.compression_metadata.init_cal_method);
+        CopyStrPad(comp.init_cal_ratio, asar_meta.compression_metadata.init_cal_ratio);
+        CopyStrPad(comp.per_cal_comp, asar_meta.compression_metadata.per_cal_method);
+        CopyStrPad(comp.per_cal_ratio, asar_meta.compression_metadata.per_cal_ratio);
+        CopyStrPad(comp.noise_comp, asar_meta.compression_metadata.noise_method);
+        CopyStrPad(comp.noise_comp_ratio, asar_meta.compression_metadata.noise_ratio);
     }
 
     {
@@ -285,10 +291,8 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
             sph.SetLastPosition(xyz2geoWGS84(near), xyz2geoWGS84(mid), xyz2geoWGS84(far));
         }
 
-        std::string compression = "FBAQ4";  // ers - none
-
         sph.SetProductInfo1(asar_meta.swath, asar_meta.ascending ? "ASCENDING" : "DESCENDING", "COMPLEX", "RAN/DOP");
-        sph.SetProductInfo2(asar_meta.polarization, "", "NONE");
+        sph.SetProductInfo2(asar_meta.polarization, "", asar_meta.compression_metadata.echo_method);
         sph.SetProductInfo3(1, 1);
         sph.SetProductInfo4(sar_meta.range_spacing, sar_meta.azimuth_spacing,
                             1.0 / sar_meta.pulse_repetition_frequency);

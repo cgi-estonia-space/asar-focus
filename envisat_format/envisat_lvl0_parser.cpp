@@ -217,6 +217,24 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     int swst_multiplier{1};
     if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
         swst_multiplier = 4;
+        // Nothing for ERS
+        asar_meta.compression_metadata.echo_method = "NONE";
+        asar_meta.compression_metadata.echo_ratio = "";
+        asar_meta.compression_metadata.init_cal_method = "NONE";
+        asar_meta.compression_metadata.init_cal_ratio = "";
+        asar_meta.compression_metadata.noise_method = "NONE";
+        asar_meta.compression_metadata.noise_ratio = "";
+        asar_meta.compression_metadata.per_cal_method = "NONE";
+        asar_meta.compression_metadata.per_cal_ratio = "";
+    } else if (product_type == alus::asar::specification::ProductTypes::ASA_IM0) {
+        asar_meta.compression_metadata.echo_method = "FBAQ";
+        asar_meta.compression_metadata.echo_ratio = "4/8";
+        asar_meta.compression_metadata.init_cal_method = "NONE"; // TBD
+        asar_meta.compression_metadata.init_cal_ratio = ""; // TBD
+        asar_meta.compression_metadata.noise_method = "NONE"; // TBD
+        asar_meta.compression_metadata.noise_ratio = ""; // TBD
+        asar_meta.compression_metadata.per_cal_method = "NONE"; // TBD
+        asar_meta.compression_metadata.per_cal_ratio = ""; // TBD
     }
 
     std::vector<EchoMeta> echos;
@@ -337,13 +355,15 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
             static uint32_t last_data_record_no{0};
             uint32_t dr_no{};
             it = CopyBSwapPOD(dr_no, it);
-            if (last_data_record_no + 1 != dr_no) {
-                std::cout << "There are discrepancies between ERS data packets. Last no. " << last_data_record_no
-                          << " current no. " << dr_no << std::endl;
-                
-            } else {
-                last_data_record_no = dr_no;
+            if (last_data_record_no == 0) {
+                last_data_record_no = dr_no - 1;
             }
+//            if (last_data_record_no + 1 != dr_no) {
+//                std::cout << "There are discrepancies between ERS data packets. Last no. " << last_data_record_no
+//                          << " current no. " << dr_no << std::endl;
+//            }
+
+            last_data_record_no = dr_no;
 
             uint8_t packet_counter = it[0];
             uint8_t subcommutation_counter = it[1];

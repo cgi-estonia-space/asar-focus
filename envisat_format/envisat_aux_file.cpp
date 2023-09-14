@@ -3,18 +3,18 @@
 #include "envisat_aux_file.h"
 #include "envisat_format/asar_aux.h"
 
+#include "util/checks.h"
+
 namespace {
     std::string DetermineFilePath(std::string aux_root, boost::posix_time::ptime start, alus::asar::aux::Type t) {
         if (!std::filesystem::exists(aux_root)) {
-            std::cerr << "The auxiliary folder - " << aux_root << " - does not exist." << std::endl;
-            exit(1);
+            ERROR_EXIT("The auxiliary folder - " + aux_root + " - does not exist.");
         }
 
         // ASA_CON_AXVIEC20030909_000000_20020815_000000_20021017_130000
         const auto file_path = alus::asar::aux::GetPathFrom(aux_root, start, t);
         if (file_path.empty()) {
-            std::cerr << "Could not find aux file for ENVISAT in " << aux_root << std::endl;
-            exit(1);
+            ERROR_EXIT("Could not find aux file for ENVISAT in " + aux_root);
         }
 
         return file_path;
