@@ -69,24 +69,24 @@ namespace {
 
 namespace alus::dorisorbit {
 
-    Parsable::Parsable(ProductHeader mph, ProductHeader sph, std::string dsd_records) : _mph{std::move(mph)},
-                                                                                        _sph{std::move(sph)},
-                                                                                        _dsd_records{std::move(
+    Parsable::Parsable(ProductHeader mph, ProductHeader sph, std::string dsd_records) : mph_{std::move(mph)},
+                                                                                        sph_{std::move(sph)},
+                                                                                        dsd_records_{std::move(
                                                                                                 dsd_records)} {
     }
 
-    Parsable::Parsable(std::vector<EntryListing> listing) : _listing{std::move(listing)} {}
+    Parsable::Parsable(std::vector<EntryListing> listing) : listing_{std::move(listing)} {}
 
     const std::vector<OrbitStateVector> &
     Parsable::CreateOrbitInfo(boost::posix_time::ptime start, boost::posix_time::ptime stop) {
 
-        if (_listing.size() > 0) {
-            const auto listing = _listing; // Make a copy for possible instantiation.
+        if (listing_.size() > 0) {
+            const auto listing = listing_; // Make a copy for possible instantiation.
             bool found{false};
             for (const auto &l: listing) {
                 if (l.start < start && l.end > stop) {
                     *this = CreateFromFile(l.file_path.c_str());
-                    this->_listing = listing;
+                    this->listing_ = listing;
                     found = true;
                     break;
                 }
@@ -96,15 +96,15 @@ namespace alus::dorisorbit {
             }
         }
 
-        _osv.clear();
-        _osv_metadata.clear();
+        osv_.clear();
+        osv_metadata_.clear();
 
         constexpr size_t ORBIT_DELTA_MINUTE_COUNT{5};
         const auto delta_minutes = boost::posix_time::minutes(ORBIT_DELTA_MINUTE_COUNT);
         const auto start_delta = start - delta_minutes;
         const auto end_delta = stop + delta_minutes;
 
-        std::istringstream record_stream(_dsd_records);
+        std::istringstream record_stream(dsd_records_);
         std::string record;
         // std::locale will take an ownership over this one.
         const auto *timestamp_styling = new boost::posix_time::time_input_facet(ENVISAT_DORIS_TIMESTAMP_PATTERN.data());
@@ -134,15 +134,15 @@ namespace alus::dorisorbit {
             a.x_vel = strtod(items.at(7).c_str(), nullptr);
             a.y_vel = strtod(items.at(8).c_str(), nullptr);
             a.z_vel = strtod(items.at(9).c_str(), nullptr);
-            _osv.push_back(a);
+            osv_.push_back(a);
             PointEntryInfo pei;
             pei.absolute_orbit = strtoul(items.at(3).c_str(), nullptr, 10);
             pei.ut1_delta = strtod(items.at(2).c_str(), nullptr);
             pei.quality = static_cast<QualityFlag>(strtoul(items.at(10).c_str(), nullptr, 10));
-            _osv_metadata.push_back(pei);
+            osv_metadata_.push_back(pei);
         }
 
-        if (_osv.size() < ORBIT_DELTA_MINUTE_COUNT * 2) {
+        if (osv_.size() < ORBIT_DELTA_MINUTE_COUNT * 2) {
             ERROR_EXIT("There were less than required " + std::to_string(ORBIT_DELTA_MINUTE_COUNT * 2) +
                         " entries parsed from orbit file (over a timespan of " +
                         std::to_string(ORBIT_DELTA_MINUTE_COUNT * 2) + " minutes), probably a corrupt orbit dataset " +
@@ -151,7 +151,7 @@ namespace alus::dorisorbit {
 
         UpdateMetadataForL1Product(start, stop);
 
-        return _osv;
+        return osv_;
     }
 
     Parsable Parsable::CreateFromFile(std::string_view filename) {
@@ -266,21 +266,21 @@ namespace alus::dorisorbit {
     void Parsable::UpdateMetadataForL1Product(boost::posix_time::ptime start, boost::posix_time::ptime stop) {
 
         bool found{false};
-        const auto filtered_osv_count = _osv.size();
+        const auto filtered_osv_count = osv_.size();
         for (size_t i{}; i < filtered_osv_count; i++) {
-            const auto &osv = _osv.at(i);
+            const auto &osv = osv_.at(i);
             // Based on observed results of the blueprints, the last state vector that is before start-stop is fetched.
             if (osv.time > start - boost::posix_time::minutes(1)) {
-                _l1_product_metadata.delta_ut1 = _osv_metadata.at(i).ut1_delta;
-                _l1_product_metadata.abs_orbit = _osv_metadata.at(i).absolute_orbit;
+                l1_product_metadata_.delta_ut1 = osv_metadata_.at(i).ut1_delta;
+                l1_product_metadata_.abs_orbit = osv_metadata_.at(i).absolute_orbit;
 
-                _l1_product_metadata.state_vector_time = osv.time;
-                _l1_product_metadata.x_position = osv.x_pos;
-                _l1_product_metadata.y_position = osv.y_pos;
-                _l1_product_metadata.z_position = osv.z_pos;
-                _l1_product_metadata.x_velocity = osv.x_vel;
-                _l1_product_metadata.y_velocity = osv.y_vel;
-                _l1_product_metadata.z_velocity = osv.z_vel;
+                l1_product_metadata_.state_vector_time = osv.time;
+                l1_product_metadata_.x_position = osv.x_pos;
+                l1_product_metadata_.y_position = osv.y_pos;
+                l1_product_metadata_.z_position = osv.z_pos;
+                l1_product_metadata_.x_velocity = osv.x_vel;
+                l1_product_metadata_.y_velocity = osv.y_vel;
+                l1_product_metadata_.z_velocity = osv.z_vel;
 
                 found = true;
                 break;
@@ -291,17 +291,17 @@ namespace alus::dorisorbit {
             ERROR_EXIT("Failed to construct L1 product metadata from orbit source, probably corrupt orbit file.");
         }
 
-        _l1_product_metadata.orbit_name = _mph.Get("PRODUCT");
-        const auto vector_source_long = _sph.Get("DS_NAME");
+        l1_product_metadata_.orbit_name = mph_.Get("PRODUCT");
+        const auto vector_source_long = sph_.Get("DS_NAME");
         if (vector_source_long.find("DORIS PRECISE") != std::string::npos) {
-            _l1_product_metadata.vector_source = "DP";
+            l1_product_metadata_.vector_source = "DP";
         } else if (vector_source_long.find("REAPER ORBIT") != std::string::npos) {
-            _l1_product_metadata.vector_source = "RO";
+            l1_product_metadata_.vector_source = "RO";
         } else {
-            _l1_product_metadata.vector_source = "??";
+            l1_product_metadata_.vector_source = "??";
         }
-        _l1_product_metadata.phase = _mph.Get("PHASE").front();
-        _l1_product_metadata.cycle = strtoul(_mph.Get("CYCLE").c_str(), nullptr, 10);
+        l1_product_metadata_.phase = mph_.Get("PHASE").front();
+        l1_product_metadata_.cycle = strtoul(mph_.Get("CYCLE").c_str(), nullptr, 10);
     }
 
 }  // namespace alus::dorisorbit
