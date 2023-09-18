@@ -60,7 +60,7 @@ namespace alus::dorisorbit {
         const std::vector<OrbitStateVector> &
         CreateOrbitInfo(boost::posix_time::ptime start, boost::posix_time::ptime stop); // AssembleOsvFor()
 
-        const L1ProductMetadata& GetL1ProductMetadata() const { return _l1_product_metadata; }
+        const L1ProductMetadata& GetL1ProductMetadata() const { return l1_product_metadata_; }
 
         ~Parsable() = default;
 
@@ -98,13 +98,13 @@ namespace alus::dorisorbit {
             QualityFlag quality;
         };
 
-        ProductHeader _mph;
-        ProductHeader _sph;
-        std::string _dsd_records;
-        std::vector<OrbitStateVector> _osv;
-        std::vector<PointEntryInfo> _osv_metadata;
-        std::vector<EntryListing> _listing;
+        ProductHeader mph_;
+        ProductHeader sph_;
+        std::string dsd_records_;
+        std::vector<OrbitStateVector> osv_;
+        std::vector<PointEntryInfo> osv_metadata_;
+        std::vector<EntryListing> listing_;
 
-        L1ProductMetadata _l1_product_metadata;
+        L1ProductMetadata l1_product_metadata_;
     };
 }

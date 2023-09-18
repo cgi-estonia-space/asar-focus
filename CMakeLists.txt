@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD  17)
 
 
 set(ENVISAT_FORMAT_FILES
+        envisat_format/asar_aux.cc
+        envisat_format/asar_aux.h
         envisat_format/asar_constants.cpp
         envisat_format/asar_constants.h
         envisat_format/envisat_lvl0_parser.cpp
@@ -22,6 +24,8 @@ set(ENVISAT_FORMAT_FILES
         envisat_format/envisat_lvl1_sph.h
         envisat_format/envisat_types.h
         envisat_format/envisat_utils.h
+        envisat_format/ers_aux_file.cc
+        envisat_format/ers_aux_file.h
         envisat_format/doris_orbit.cc
         envisat_format/doris_orbit.h
         )
@@ -56,6 +60,9 @@ set(CUDA_UTIL_SOURCES
 set(UTIL_SOURCES
         util/checks.h
         util/filesystem_util.cc
+        util/date_time_util.cc
+        util/date_time_util.h
+
         util/geo_tools.cpp
         util/geo_tools.h
         util/img_output.cpp
