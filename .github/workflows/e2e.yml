@@ -64,11 +64,17 @@ jobs:
       - name: End-to-end tests
         env:
           INSTANCE_USERNAME: ${{ secrets.EAGLE_USERNAME }}
+          ACCESS_KEY_ID: ${{ secrets.PALMY_ACCESS_KEY_ID }}
+          SECRET_ACCESS_KEY: ${{ secrets.PALMY_SECRET_ACCESS_KEY }}
         run: |
           instance_ip=${{ needs.start-gpu-instance.outputs.instance_ip }}
           exe_image_name="alus-ootpa-devel-extra-asar-focus-exe"
           exe_container_name="alus-ootpa-devel-extra-asar-focus-exe-e2e"
-          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "/tmp/asar-focus/build-automation/run_e2e_container.sh /home/$INSTANCE_USERNAME/e2e $exe_image_name"
+          echo "[default]" > /tmp/cred
+          echo "aws_access_key_id=${ACCESS_KEY_ID}" >> /tmp/cred
+          echo "aws_secret_access_key=${SECRET_ACCESS_KEY}" >> /tmp/cred
+          scp -o "StrictHostKeyChecking no" /tmp/cred $INSTANCE_USERNAME@$instance_ip:/tmp/
+          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "/tmp/asar-focus/build-automation/run_e2e_container.sh /home/$INSTANCE_USERNAME/e2e $exe_image_name /tmp/cred"
 #          package_dir=${{ steps.transfer_package.outputs.instance_package_dir }}
 #          build_id=${{ needs.release-package.outputs.package_name }}
 #          scp -o "StrictHostKeyChecking no" build-automation/*.py build-automation/*.sh build-automation/*.txt $INSTANCE_USERNAME@$instance_ip:$package_dir/

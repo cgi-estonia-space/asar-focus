@@ -4,10 +4,10 @@
 
 set -e
 
-if [ "$#" -ne 2 ]; then
-    echo "$0 requires 2 arguments."
+if [ "$#" -lt 2 ]; then
+    echo "$0 requires at least 2 arguments."
     echo "Usage:"
-    echo "$0 [End-to-end test asset dir] [docker image]"
+    echo "$0 <End-to-end test asset dir> <docker image> [credentials file]"
     exit 1
 fi
 
@@ -35,9 +35,15 @@ fi
 
 mkdir -p "${e2e_dir}"
 
-container_name="${image_name}_e2e"
+container_name="${image_name}-e2e"
 container_work_dir="/root/e2e"
 docker run -t -d --gpus all -v "${e2e_dir}":"${container_work_dir}" --name "${container_name}" "${docker_image}"
-docker exec -t "${container_name}" bash -c "cd /alus/skript && source venv/bin/activate && pip3 install -r requirements.txt && python3 skript.py ${container_work_dir}/skripts/*.yaml"
-docker stop "${container_name}"
-docker rm "${container_name}"
+
+if [ "$#" -eq 3 ]; then
+  docker exec -t "${container_name}" bash -c "mkdir /root/.aws"
+  docker cp "$3" "${container_name}":/root/.aws/credentials
+fi
+
+docker exec -t "${container_name}" bash -c "cd /alus/skript && python3 skript.py ${container_work_dir}/skripts/*.yaml"
+#docker stop "${container_name}"
+#docker rm "${container_name}"
