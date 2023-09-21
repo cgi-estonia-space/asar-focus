@@ -41,6 +41,7 @@ mkdir -p "${build_output}"
 container_name="${repo_folder_name}_${image_name}_build"
 container_work_dir="/root/${repo_folder_name}"
 container_work_dir_repo="${container_work_dir}"
+docker pull "${docker_image}"
 docker run -t -d -v "${build_output}":"${container_work_dir}" --name "${container_name}" "${docker_image}"
 if [[ "${repo_dir}" -ef "${build_output}" ]]; then
     echo "Build output will be generated into host repo directory - ${repo_dir}"
