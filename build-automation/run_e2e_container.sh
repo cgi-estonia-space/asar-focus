@@ -37,6 +37,10 @@ mkdir -p "${e2e_dir}"
 
 container_name="${image_name}-e2e"
 container_work_dir="/root/e2e"
+set +e
+docker stop "${container_name}"
+docker rm "${container_name}"
+set -e
 docker run -t -d --gpus all -v "${e2e_dir}":"${container_work_dir}" --name "${container_name}" "${docker_image}"
 
 if [ "$#" -eq 3 ]; then
@@ -44,5 +48,5 @@ if [ "$#" -eq 3 ]; then
 fi
 
 docker exec -t "${container_name}" bash -c "cd /alus/skript && python3 skript.py ${container_work_dir}/skripts/*.yaml"
-#docker stop "${container_name}"
-#docker rm "${container_name}"
+docker stop "${container_name}"
+docker rm "${container_name}"

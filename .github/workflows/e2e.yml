@@ -58,8 +58,6 @@ jobs:
           rm -rf $GITHUB_WORKSPACE/.git
           scp -o "StrictHostKeyChecking no" -r $GITHUB_WORKSPACE $INSTANCE_USERNAME@$instance_ip:/tmp/
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "CUDAARCHS=\"50;52\" /tmp/asar-focus/build-automation/create_exe_in_container.sh /tmp/asar-focus cgialus/alus-ootpa-devel-extra"
-#          scp -o "StrictHostKeyChecking no" $package_filename $INSTANCE_USERNAME@$instance_ip:$instance_package_dir/
-#          echo "instance_package_dir=$instance_package_dir" >> $GITHUB_OUTPUT
       - uses: actions/checkout@v3
       - name: End-to-end tests
         env:
@@ -75,26 +73,22 @@ jobs:
           echo "aws_secret_access_key=${SECRET_ACCESS_KEY}" >> /tmp/cred
           scp -o "StrictHostKeyChecking no" /tmp/cred $INSTANCE_USERNAME@$instance_ip:/tmp/
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "/tmp/asar-focus/build-automation/run_e2e_container.sh /home/$INSTANCE_USERNAME/e2e $exe_image_name /tmp/cred"
-#          package_dir=${{ steps.transfer_package.outputs.instance_package_dir }}
-#          build_id=${{ needs.release-package.outputs.package_name }}
-#          scp -o "StrictHostKeyChecking no" build-automation/*.py build-automation/*.sh build-automation/*.txt $INSTANCE_USERNAME@$instance_ip:$package_dir/
-#          ssh -oStrictHostKeyChecking=no $INSTANCE_USERNAME@$instance_ip "; export LD_LIBRARY_PATH=/usr/local/cuda-11.2/lib64/:\$LD_LIBRARY_PATH; cd $package_dir; ./execute_e2e.sh $build_id e2e_resources.txt"
 
-#  stop-gpu-instance:
-#    name: Stop GPU instance
-#    runs-on: ubuntu-latest
-#    needs: [start-gpu-instance, end-to-end-testing]
-#    if: |
-#      always() &&
-#      needs.start-gpu-instance.result == 'success'
-#    steps:
-#      - name: Configure AWS Credentials
-#        uses: aws-actions/configure-aws-credentials@v4
-#        with:
-#          aws-access-key-id: ${{ secrets.FALCON_ACCESS_KEY_ID }}
-#          aws-secret-access-key: ${{ secrets.FALCON_SECRET_ACCESS_KEY }}
-#          aws-region: ${{ secrets.EAGLE_INSTANCE_REGION }}
-#      - uses: actions/checkout@v3
-#      - name: Stop GPU instance
-#        run: |
-#          $GITHUB_WORKSPACE/build-automation/stop_ec2_instance.sh ${{ secrets.EAGLE_INSTANCE_ID }}
+  stop-gpu-instance:
+    name: Stop GPU instance
+    runs-on: ubuntu-latest
+    needs: [start-gpu-instance, end-to-end-testing]
+    if: |
+      always() &&
+      needs.start-gpu-instance.result == 'success'
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.FALCON_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.FALCON_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.EAGLE_INSTANCE_REGION }}
+      - uses: actions/checkout@v3
+      - name: Stop GPU instance
+        run: |
+          $GITHUB_WORKSPACE/build-automation/stop_ec2_instance.sh ${{ secrets.EAGLE_INSTANCE_ID }}
