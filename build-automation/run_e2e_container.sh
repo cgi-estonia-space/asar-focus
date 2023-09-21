@@ -40,7 +40,6 @@ container_work_dir="/root/e2e"
 docker run -t -d --gpus all -v "${e2e_dir}":"${container_work_dir}" --name "${container_name}" "${docker_image}"
 
 if [ "$#" -eq 3 ]; then
-  docker exec -t "${container_name}" bash -c "mkdir /root/.aws"
   docker cp "$3" "${container_name}":/root/.aws/credentials
 fi
 
