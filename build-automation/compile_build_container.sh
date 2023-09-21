@@ -49,6 +49,10 @@ else
     container_work_dir_repo="${container_work_dir}/${repo_folder_name}"
 fi
 
-docker exec -t "${container_name}" bash -c "${container_work_dir_repo}/build-automation/compile_build.sh ${container_work_dir_repo} ${container_work_dir}/${image_name}"
+if [ -n "$CUDAARCHS" ]; then
+  cuda_arch_value="CUDAARCHS=\"$CUDAARCHS\""
+fi
+
+docker exec -t "${container_name}" bash -c "$cuda_arch_value ${container_work_dir_repo}/build-automation/compile_build.sh ${container_work_dir_repo} ${container_work_dir}/${image_name}"
 docker stop "${container_name}"
 docker rm "${container_name}"

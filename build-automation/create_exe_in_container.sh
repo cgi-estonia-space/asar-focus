@@ -40,7 +40,10 @@ docker run -t -d --name "${container_name}" "${docker_image}"
 docker cp "${repo_dir}" "${container_name}":"${container_work_dir}/"
 container_work_dir_repo="${container_work_dir}/${repo_folder_name}"
 echo "container_work_dir_repo - ${container_work_dir_repo}"
-docker exec -t "${container_name}" bash -c "${container_work_dir_repo}/build-automation/compile_build.sh ${container_work_dir_repo} ${container_work_dir_repo}/build"
+if [ -n "$CUDAARCHS" ]; then
+  cuda_arch_value="CUDAARCHS=\"$CUDAARCHS\""
+fi
+docker exec -t "${container_name}" bash -c "$cuda_arch_value ${container_work_dir_repo}/build-automation/compile_build.sh ${container_work_dir_repo} ${container_work_dir_repo}/build"
 docker exec -t "${container_name}" bash -c "ln -s ${container_work_dir_repo}/build/asar_focus /usr/bin/asar_focus"
 docker stop "${container_name}"
 docker commit "${container_name}" "${container_name}-exe"

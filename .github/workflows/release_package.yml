@@ -28,7 +28,7 @@ jobs:
           CI_PACKAGE_FILENAME: ${{ env.CI_PACKAGE_NAME }}.tar.gz
           CI_PACKAGE_FILENAME_PATH: /tmp/${{ env.CI_PACKAGE_NAME }}.tar.gz
         run: |
-          cd $GITHUB_WORKSPACE/build-automation && ./build_in_containers.sh $GITHUB_WORKSPACE /tmp/ cgialus/alus-ootpa-devel:latest cgialus/alus-devel:latest
+          cd $GITHUB_WORKSPACE/build-automation && CUDAARCHS="50;60;70;75;80" ./build_in_containers.sh $GITHUB_WORKSPACE /tmp/ cgialus/alus-ootpa-devel:latest cgialus/alus-devel:latest
           $GITHUB_WORKSPACE/build-automation/create_release_from_builds.sh /tmp/
           echo "package_path=/tmp/*_release.tar.gz" >> $GITHUB_ENV
           echo "package_filename=$CI_PACKAGE_FILENAME" >> $GITHUB_OUTPUT
