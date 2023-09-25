@@ -1,0 +1,94 @@
+name: End-to-end tests on AWS GPU instance
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    max-concurrency: 1
+  # Allows to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    max-concurrency: 1
+
+jobs:
+  start-gpu-instance:
+    name: Start GPU instance
+    runs-on: ubuntu-latest
+    outputs:
+      instance_ip: ${{ steps.trigger_instance.outputs.instance_ip }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.FALCON_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.FALCON_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.EAGLE_INSTANCE_REGION }}
+      - uses: actions/checkout@v3
+      - name: Trigger the instance
+        id: trigger_instance
+        run: |
+          set -o pipefail
+          $GITHUB_WORKSPACE/build-automation/trigger_ec2_instance.sh ${{ secrets.EAGLE_INSTANCE_ID }} | tee trigger_out.txt
+          ip_address=$(cat trigger_out.txt | tail -n 1)
+          echo "instance_ip=$ip_address" >> $GITHUB_OUTPUT
+          sleep 5
+
+  end-to-end-testing:
+    name: End-to-end testing
+    runs-on: ubuntu-latest
+    needs: start-gpu-instance
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Create SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EAGLE_SSH_KEY }}
+        run: |
+          key_location=~/.ssh/
+          mkdir -p $key_location
+          key_path=$key_location/id_rsa
+          echo "$SSH_PRIVATE_KEY" > $key_path
+          sudo chmod 600 $key_path
+          ssh-keygen -f $key_path -y > $key_path.pub
+      - name: Transfer package and create e2e docker image
+        id: transfer_package
+        env:
+          INSTANCE_USERNAME: ${{ secrets.EAGLE_USERNAME }}
+        run: |
+          instance_ip=${{ needs.start-gpu-instance.outputs.instance_ip }}
+          rm -rf $GITHUB_WORKSPACE/.git
+          scp -o "StrictHostKeyChecking no" -r $GITHUB_WORKSPACE $INSTANCE_USERNAME@$instance_ip:/tmp/
+          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "CUDAARCHS=\"50;52\" /tmp/asar-focus/build-automation/create_exe_in_container.sh /tmp/asar-focus cgialus/alus-ootpa-devel-extra"
+      - uses: actions/checkout@v3
+      - name: End-to-end tests
+        env:
+          INSTANCE_USERNAME: ${{ secrets.EAGLE_USERNAME }}
+          ACCESS_KEY_ID: ${{ secrets.PALMY_ACCESS_KEY_ID }}
+          SECRET_ACCESS_KEY: ${{ secrets.PALMY_SECRET_ACCESS_KEY }}
+        run: |
+          instance_ip=${{ needs.start-gpu-instance.outputs.instance_ip }}
+          exe_image_name="alus-ootpa-devel-extra-asar-focus-exe"
+          exe_container_name="alus-ootpa-devel-extra-asar-focus-exe-e2e"
+          echo "[default]" > /tmp/cred
+          echo "aws_access_key_id=${ACCESS_KEY_ID}" >> /tmp/cred
+          echo "aws_secret_access_key=${SECRET_ACCESS_KEY}" >> /tmp/cred
+          scp -o "StrictHostKeyChecking no" /tmp/cred $INSTANCE_USERNAME@$instance_ip:/tmp/
+          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "/tmp/asar-focus/build-automation/run_e2e_container.sh /home/$INSTANCE_USERNAME/e2e $exe_image_name /tmp/cred"
+
+  stop-gpu-instance:
+    name: Stop GPU instance
+    runs-on: ubuntu-latest
+    needs: [start-gpu-instance, end-to-end-testing]
+    if: |
+      always() &&
+      needs.start-gpu-instance.result == 'success'
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.FALCON_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.FALCON_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.EAGLE_INSTANCE_REGION }}
+      - uses: actions/checkout@v3
+      - name: Stop GPU instance
+        run: |
+          $GITHUB_WORKSPACE/build-automation/stop_ec2_instance.sh ${{ secrets.EAGLE_INSTANCE_ID }}

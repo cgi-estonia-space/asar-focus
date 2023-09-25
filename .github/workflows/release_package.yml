@@ -1,0 +1,40 @@
+name: Release package creation
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    max-concurrency: 1
+  # Allows to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    max-concurrency: 1
+
+env:
+  CI_PACKAGE_NAME: asar_focus_runner_${{github.run_number}}
+
+# For 'trigger_instance' - tty=$(readlink /proc/$$/fd/2) - possibly needed in the future, add $tty to tee command.
+jobs:
+  package-repo:
+    name: Release builds
+    runs-on: ubuntu-latest
+    outputs:
+      package_filename: ${{ steps.build-in-containers.outputs.package_filename }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Build in containers
+        id: build-in-containers
+        env:
+          CI_PACKAGE_FILENAME: ${{ env.CI_PACKAGE_NAME }}.tar.gz
+          CI_PACKAGE_FILENAME_PATH: /tmp/${{ env.CI_PACKAGE_NAME }}.tar.gz
+        run: |
+          cd $GITHUB_WORKSPACE/build-automation && CUDAARCHS="50;60;70;75;80" ./build_in_containers.sh $GITHUB_WORKSPACE /tmp/ cgialus/alus-ootpa-devel:latest cgialus/alus-devel:latest
+          $GITHUB_WORKSPACE/build-automation/create_release_from_builds.sh /tmp/
+          echo "package_path=/tmp/*_release.tar.gz" >> $GITHUB_ENV
+          echo "package_filename=$CI_PACKAGE_FILENAME" >> $GITHUB_OUTPUT
+          ls -la /tmp/
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.CI_PACKAGE_NAME }}
+          path: ${{ env.package_path }}
+          retention-days: 3
