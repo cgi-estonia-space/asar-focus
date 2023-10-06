@@ -389,13 +389,13 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
             // https://asf.alaska.edu/wp-content/uploads/2019/03/ers_ceos.pdf mixed between two.
             it += 194 + 10;
             echo_meta.raw_data.reserve(11232);
-            uint64_t i_avg_cumulative{0};
-            uint64_t q_avg_cumulative{0};
+            //uint64_t i_avg_cumulative{0};
+            //uint64_t q_avg_cumulative{0};
             for (size_t r_i{0}; r_i < 5616; r_i++) {
                 uint8_t i_sample = it[r_i * 2 + 0];
-                i_avg_cumulative += i_sample;
+                //i_avg_cumulative += i_sample;
                 uint8_t q_sample = it[r_i * 2 + 1];
-                q_avg_cumulative += q_sample;
+                //q_avg_cumulative += q_sample;
                 echo_meta.raw_data.emplace_back(static_cast<float>(i_sample), static_cast<float>(q_sample));
             }
 //            double i_avg = i_avg_cumulative / 5616.0;

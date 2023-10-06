@@ -87,6 +87,7 @@ set_target_properties(asar_focus PROPERTIES
 find_package(CUDAToolkit 11.2 REQUIRED)
 find_package(Boost 1.71.0 REQUIRED COMPONENTS date_time program_options)
 find_package(GDAL 3.0.4 REQUIRED)
+#find_package (Eigen3 3.3 REQUIRED NO_MODULE)
 
 
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-Wall")
@@ -108,13 +109,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -Wextra -pedantic")
 INCLUDE_DIRECTORIES(${CUDAToolkit_INCLUDE_DIRS})
 
 include(FetchContent)
-
-FetchContent_Declare(
-    fmt
-    GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-    GIT_TAG 10.1.1
-)
-FetchContent_MakeAvailable(fmt)
+include(dependencies/FetchContents.cmake)
 
 add_subdirectory(app)
 
@@ -123,6 +118,6 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_
     message("Also adding 'stdc++fs' for linking since the g++ version ${CMAKE_CXX_COMPILER_VERSION} requires it.")
     target_link_libraries(asar_focus PRIVATE gdal cufft fmt::fmt Boost::date_time Boost::program_options stdc++fs)
 else ()
-    target_link_libraries(asar_focus PRIVATE gdal cufft fmt::fmt Boost::date_time Boost::program_options)
+    target_link_libraries(asar_focus PRIVATE gdal cufft fmt::fmt Boost::date_time Boost::program_options )
 endif()
 

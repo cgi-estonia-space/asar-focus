@@ -25,7 +25,8 @@ namespace alus::asar {
         [[nodiscard]] std::string_view GetAuxPath() const { return aux_path_; }
         [[nodiscard]] std::string_view GetOrbitPath() const { return orbit_path_; }
         [[nodiscard]] std::string_view GetOutputPath() const { return output_path_; }
-        [[nodiscard]] std::optional<std::string_view> GetProcessSensingStart() const { process_sensing_start_.empty() ? return std::nullopt : return process_sensing_start_; }
+        [[nodiscard]] std::optional<std::string_view> GetProcessSensingStart() const;
+        [[nodiscard]] std::optional<std::string_view> GetProcessSensingEnd() const;
 
     private:
 
