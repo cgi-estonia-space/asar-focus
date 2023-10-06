@@ -21,6 +21,7 @@ namespace {
 // 1) Uses WriteBlock API, to bypass GDAL Cache
 
 void WriteTiff(const DevicePaddedImage& img, bool complex_output, bool padding, const char* path, bool cut) {
+    (void)cut;
     const int w = padding ? img.XStride() : img.XSize();
     const int h = padding ? img.YStride() : img.YSize();
 
@@ -53,7 +54,8 @@ void WriteTiff(const DevicePaddedImage& img, bool complex_output, bool padding, 
 
     auto* b = ds->GetRasterBand(1);
     if (complex_output) {
-        b->RasterIO(GF_Write, 0, 0, w, h, data.get(), w, h, GDT_CFloat32, 0, 0);
+        const auto res = b->RasterIO(GF_Write, 0, 0, w, h, data.get(), w, h, GDT_CFloat32, 0, 0);
+        (void)res; // TODO - Check the result.
     } else {
         // convert to intensity, each pixel being I^2 + Q^2
         std::unique_ptr<float[]> intens_buf(new float[buf_size]);
@@ -66,7 +68,8 @@ void WriteTiff(const DevicePaddedImage& img, bool complex_output, bool padding, 
                 intens_buf[idx] = i * i + q * q;
             }
         }
-        b->RasterIO(GF_Write, 0, 0, w, h, intens_buf.get(), w, h, GDT_Float32, 0, 0);
+        const auto res = b->RasterIO(GF_Write, 0, 0, w, h, intens_buf.get(), w, h, GDT_Float32, 0, 0);
+        (void)res; // TODO - Check the result.
     }
 }
 

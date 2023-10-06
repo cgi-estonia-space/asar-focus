@@ -94,6 +94,7 @@ inline size_t extract_bytes(const std::string& in) {
 inline size_t extract_num(const std::string& in) {
     auto idx = in.find('=');
     auto idx_end = in.find("<bytes>");
+    (void)idx_end;
     for (size_t i = idx; i < in.size(); i++) {
         if (in[i] >= '1' && in[i] <= '9') {
             return std::stoul(in.substr(i, in.size()));

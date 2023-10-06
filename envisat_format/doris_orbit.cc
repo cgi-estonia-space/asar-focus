@@ -264,7 +264,7 @@ namespace alus::dorisorbit {
     }
 
     void Parsable::UpdateMetadataForL1Product(boost::posix_time::ptime start, boost::posix_time::ptime stop) {
-
+        (void)stop;
         bool found{false};
         const auto filtered_osv_count = osv_.size();
         for (size_t i{}; i < filtered_osv_count; i++) {

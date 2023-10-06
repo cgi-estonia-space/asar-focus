@@ -84,7 +84,7 @@ inline std::string ToAdo06(double val) {
     // TODO - Something should check if integer part is 0 actually.
     char buf[10]; // printf() somehow always inserts the integer part as well.
     snprintf(buf, 10, "%+.6f", val);
-    memcpy(buf + 1, buf + 2, 8); // Replace integer part
+    memmove(buf + 1, buf + 2, 8); // Replace integer part
     return buf;
 }
 
@@ -103,6 +103,7 @@ inline std::string ToAdo46(double val) {
 inline std::string ToAfl(float val) {
     char buf[20];
     float exp = log10f(val);
+    (void)exp;
     snprintf(buf, 20, "%+.8E", val);
     return buf;
 }

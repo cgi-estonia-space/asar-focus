@@ -3,6 +3,8 @@ project(asar_focus CUDA CXX)
 
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CXX_STANDARD  17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 
 set(ENVISAT_FORMAT_FILES
@@ -83,12 +85,12 @@ set_target_properties(asar_focus PROPERTIES
 
 
 find_package(CUDAToolkit 11.2 REQUIRED)
-find_package(Boost 1.71.0 REQUIRED COMPONENTS date_time)
-find_package(GDAL REQUIRED)
+find_package(Boost 1.71.0 REQUIRED COMPONENTS date_time program_options)
+find_package(GDAL 3.0.4 REQUIRED)
 
 
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-Wall")
-#set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-Werror")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-Werror")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-Wextra")
 # To suppress using of cmath std::min and std::max.
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
@@ -101,6 +103,8 @@ endif()
 message(STATUS "CUDA binary code will be generated for the following architecture(s) - ${CMAKE_CUDA_ARCHITECTURES}")
 set_property(TARGET asar_focus PROPERTY CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -Wextra -pedantic")
+
 INCLUDE_DIRECTORIES(${CUDAToolkit_INCLUDE_DIRS})
 
 include(FetchContent)
@@ -112,11 +116,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(fmt)
 
-target_include_directories(asar_focus PRIVATE ${GDAL_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} .)
+add_subdirectory(app)
+
+target_include_directories(asar_focus PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
     message("Also adding 'stdc++fs' for linking since the g++ version ${CMAKE_CXX_COMPILER_VERSION} requires it.")
-    target_link_libraries(asar_focus PRIVATE gdal cufft fmt::fmt Boost::date_time stdc++fs)
+    target_link_libraries(asar_focus PRIVATE gdal cufft fmt::fmt Boost::date_time Boost::program_options stdc++fs)
 else ()
-    target_link_libraries(asar_focus PRIVATE gdal cufft fmt::fmt Boost::date_time)
+    target_link_libraries(asar_focus PRIVATE gdal cufft fmt::fmt Boost::date_time Boost::program_options)
 endif()
 

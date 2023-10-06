@@ -38,17 +38,17 @@ void Plot(const PlotArgs& graph) {
     std::string base_html(HTML_TEMPLATE);
     std::stringstream data;
 
-    for (int i = 0; i < graph.data.size(); i++) {
+    for (auto i{0u}; i < graph.data.size(); i++) {
         auto& line = graph.data[i];
         data << "{x:[";
-        for (int j = 0; j < line.x.size(); j++) {
+        for (auto j{0u}; j < line.x.size(); j++) {
             data << line.x[j];
             if (j + 1 != line.x.size()) {
                 data << ",";
             }
         }
         data << "],y:[";
-        for (int j = 0; j < line.y.size(); j++) {
+        for (auto j{0u}; j < line.y.size(); j++) {
             data << line.y[j];
             if (j + 1 != line.y.size()) {
                 data << ",";

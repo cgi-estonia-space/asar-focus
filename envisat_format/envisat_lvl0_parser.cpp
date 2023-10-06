@@ -213,7 +213,6 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     auto mdsr = dsds.front();
     const uint8_t *it = reinterpret_cast<const uint8_t *>(file_data.data()) + mdsr.ds_offset;
 
-    int echo_cnt = 0;
     int swst_multiplier{1};
     if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
         swst_multiplier = 4;
@@ -365,8 +364,8 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
 
             last_data_record_no = dr_no;
 
-            uint8_t packet_counter = it[0];
-            uint8_t subcommutation_counter = it[1];
+            //uint8_t packet_counter = it[0];
+            //uint8_t subcommutation_counter = it[1];
             it += 2;
 
             it += 8;
@@ -399,8 +398,8 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
                 q_avg_cumulative += q_sample;
                 echo_meta.raw_data.emplace_back(static_cast<float>(i_sample), static_cast<float>(q_sample));
             }
-            double i_avg = i_avg_cumulative / 5616.0;
-            double q_avg = q_avg_cumulative / 5616.0;
+//            double i_avg = i_avg_cumulative / 5616.0;
+//            double q_avg = q_avg_cumulative / 5616.0;
 //            if (i_avg > 16.0 || i_avg < 15.0) {
 //                std::cout << "average for i at MSDR no. " << i << " is OOL " << i_avg << std::endl;
 //            }
