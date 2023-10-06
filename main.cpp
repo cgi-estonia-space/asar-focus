@@ -8,6 +8,8 @@
 #include <gdal/gdal_priv.h>
 #include <boost/algorithm/string.hpp>
 
+#include "args.h"
+
 #include "cuda_util/cufft_plan.h"
 #include "cuda_util/device_padded_image.cuh"
 #include "envisat_format/envisat_aux_file.h"
@@ -42,6 +44,13 @@ void time_stop(std::chrono::steady_clock::time_point beg, const char* msg) {
 }
 
 int main(int argc, char* argv[]) {
+
+    const std::vector<char*> args_raw(argv, argv + argc);
+    alus::asar::Args args(args_raw);
+    if (args.IsHelpRequested()) {
+        std::cout << args.GetHelp() << std::endl;
+        exit(0);
+    }
     if (argc != 4) {
         // to arg parse
 
@@ -148,15 +157,15 @@ int main(int argc, char* argv[]) {
     time_stop(vr_start, "Vr estimation");
 
     if (wif) {
-        PlotArgs args = {};
-        args.out_path = "/tmp/" + wif_name_base + "_Vr.html";
-        args.x_axis_title = "range index";
-        args.y_axis_title = "Vr(m/s)";
-        args.data.resize(1);
-        auto& line = args.data[0];
+        PlotArgs plot_args = {};
+        plot_args.out_path = "/tmp/" + wif_name_base + "_Vr.html";
+        plot_args.x_axis_title = "range index";
+        plot_args.y_axis_title = "Vr(m/s)";
+        plot_args.data.resize(1);
+        auto& line = plot_args.data[0];
         line.line_name = "Vr";
         PolyvalRange(metadata.results.Vr_poly, 0, metadata.img.range_size, line.x, line.y);
-        Plot(args);
+        Plot(plot_args);
     }
 
     auto chirp = GenerateChirpData(metadata.chirp, rg_padded);
@@ -164,13 +173,13 @@ int main(int argc, char* argv[]) {
     std::vector<float> chirp_freq;
 
     if (wif) {
-        PlotArgs args = {};
-        args.out_path = "/tmp/" + wif_name_base + "_chirp.html";
-        args.x_axis_title = "nth sample";
-        args.y_axis_title = "Amplitude";
-        args.data.resize(2);
-        auto& i = args.data[0];
-        auto& q = args.data[1];
+        PlotArgs plot_args = {};
+        plot_args.out_path = "/tmp/" + wif_name_base + "_chirp.html";
+        plot_args.x_axis_title = "nth sample";
+        plot_args.y_axis_title = "Amplitude";
+        plot_args.data.resize(2);
+        auto& i = plot_args.data[0];
+        auto& q = plot_args.data[1];
         std::vector<double> n_samp;
         int cnt = 0;
         for (auto iq : chirp) {
@@ -183,7 +192,7 @@ int main(int argc, char* argv[]) {
 
         i.line_name = "I";
         q.line_name = "Q";
-        Plot(args);
+        Plot(plot_args);
     }
 
     if (wif) {
@@ -196,15 +205,15 @@ int main(int argc, char* argv[]) {
     metadata.results.doppler_centroid_poly = CalculateDopplerCentroid(img, metadata.pulse_repetition_frequency);
     time_stop(dc_start, "fractional DC estimation");
     if (wif) {
-        PlotArgs args = {};
-        args.out_path = "/tmp/" + wif_name_base + "_dc.html";
-        args.x_axis_title = "range index";
-        args.y_axis_title = "Hz";
-        args.data.resize(1);
-        auto& line = args.data[0];
+        PlotArgs plot_args = {};
+        plot_args.out_path = "/tmp/" + wif_name_base + "_dc.html";
+        plot_args.x_axis_title = "range index";
+        plot_args.y_axis_title = "Hz";
+        plot_args.data.resize(1);
+        auto& line = plot_args.data[0];
         line.line_name = "Doppler centroid";
         PolyvalRange(metadata.results.doppler_centroid_poly, 0, metadata.img.range_size, line.x, line.y);
-        Plot(args);
+        Plot(plot_args);
     }
 
     printf("Image GPU byte size = %f GB\n", img.TotalByteSize() / 1e9);
