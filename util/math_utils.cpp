@@ -1,7 +1,7 @@
 #include "math_utils.h"
 
-#include <eigen3/Eigen/Core>
-#include <eigen3/Eigen/Dense>
+#include "Eigen/Core"
+#include "Eigen/Dense"
 
 std::vector<double> Polyfit(const std::vector<double>& x, const std::vector<double>& y, int degree) {
     Eigen::MatrixXd a(x.size(), degree + 1);

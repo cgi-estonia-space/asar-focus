@@ -2,7 +2,7 @@
 
 #include "geo_tools.h"
 
-#include <eigen3/Eigen/Dense>
+#include "Eigen/Dense"
 #include <iostream>
 
 GeoPos3D RangeDopplerGeoLocate(Velocity3D velocity, GeoPos3D position, GeoPos3D init_guess, double slant_range) {

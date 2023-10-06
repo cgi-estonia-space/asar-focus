@@ -1,7 +1,7 @@
 #include "processing_velocity_estimation.h"
 
-#include <eigen3/Eigen/Core>
-#include <eigen3/Eigen/Dense>
+#include "Eigen/Core"
+#include "Eigen/Dense"
 
 #include "sar_metadata.h"
 #include "util/geo_tools.h"

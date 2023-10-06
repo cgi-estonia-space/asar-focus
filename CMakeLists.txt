@@ -83,12 +83,9 @@ add_executable(asar_focus ${SOURCES})
 set_target_properties(asar_focus PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON)
 
-
 find_package(CUDAToolkit 11.2 REQUIRED)
 find_package(Boost 1.71.0 REQUIRED COMPONENTS date_time program_options)
 find_package(GDAL 3.0.4 REQUIRED)
-#find_package (Eigen3 3.3 REQUIRED NO_MODULE)
-
 
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-Wall")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-Werror")
@@ -116,8 +113,8 @@ add_subdirectory(app)
 target_include_directories(asar_focus PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
     message("Also adding 'stdc++fs' for linking since the g++ version ${CMAKE_CXX_COMPILER_VERSION} requires it.")
-    target_link_libraries(asar_focus PRIVATE gdal cufft fmt::fmt Boost::date_time Boost::program_options stdc++fs)
+    target_link_libraries(asar_focus PRIVATE gdal cufft fmt::fmt Boost::date_time Boost::program_options Eigen3::Eigen stdc++fs)
 else ()
-    target_link_libraries(asar_focus PRIVATE gdal cufft fmt::fmt Boost::date_time Boost::program_options )
+    target_link_libraries(asar_focus PRIVATE gdal cufft fmt::fmt Boost::date_time Boost::program_options Eigen3::Eigen)
 endif()
 
