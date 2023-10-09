@@ -24,7 +24,7 @@ namespace alus::asar {
         Args() = delete;
         Args(const std::vector<char*>& args);
 
-        [[nodiscard]] bool IsHelpRequested() const { return vm_.at("help").as<bool>(); }
+        [[nodiscard]] bool IsHelpRequested() const;
         [[nodiscard]] std::string GetHelp() const;
         [[nodiscard]] std::string_view GetInputDsPath() const { return ds_path_; }
         [[nodiscard]] std::string_view GetAuxPath() const { return aux_path_; }
@@ -37,10 +37,12 @@ namespace alus::asar {
     private:
 
         void Construct();
+        void Check();
 
         boost::program_options::variables_map vm_;
         boost::program_options::options_description args_{""};
 
+        bool precheck_help{false};
         std::string ds_path_{};
         std::string aux_path_{};
         std::string orbit_path_{};
