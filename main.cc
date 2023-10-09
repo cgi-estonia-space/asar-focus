@@ -45,7 +45,7 @@ void time_stop(std::chrono::steady_clock::time_point beg, const char* msg) {
 
 int main(int argc, char* argv[]) {
     try {
-        const std::vector<char*> args_raw(argv + 1, argv + (argc - 1));
+        const std::vector<char*> args_raw(argv, argv + argc);
         alus::asar::Args args(args_raw);
         if (args.IsHelpRequested()) {
             std::cout << args.GetHelp() << std::endl;
@@ -54,16 +54,16 @@ int main(int argc, char* argv[]) {
 
         printf("asar-focus version 0.1.1\n");
         auto file_time_start = time_start();
-        std::string in_path = argv[1];
-        const char* aux_path = argv[2];
-        const auto orbit_path = argv[3];
-        FILE* fp = fopen(in_path.c_str(), "r");
+        const auto in_path{args.GetInputDsPath()};
+        const auto aux_path{args.GetAuxPath()};
+        const auto orbit_path{args.GetOrbitPath()};
+        FILE* fp = fopen(in_path.data(), "r");
         if (!fp) {
-            printf("failed to open ... %s\n", in_path.c_str());
+            printf("failed to open ... %s\n", in_path.data());
             return 1;
         }
 
-        size_t file_sz = std::filesystem::file_size(in_path.c_str());
+        size_t file_sz = std::filesystem::file_size(in_path.data());
 
         std::vector<char> data(file_sz);
         auto act_sz = fread(data.data(), 1, file_sz, fp);
@@ -81,7 +81,7 @@ int main(int argc, char* argv[]) {
         auto orbit_source = alus::dorisorbit::Parsable::TryCreateFrom(orbit_path);
 
         std::vector<std::complex<float>> h_data;
-        ParseIMFile(data, aux_path, metadata, asar_meta, h_data, orbit_source);
+        ParseIMFile(data, aux_path.data(), metadata, asar_meta, h_data, orbit_source);
 
         {
             const auto& orbit_l1_metadata = orbit_source.GetL1ProductMetadata();
@@ -149,7 +149,7 @@ int main(int argc, char* argv[]) {
 
         if (wif) {
             PlotArgs plot_args = {};
-            plot_args.out_path = "/tmp/" + wif_name_base + "_Vr.html";
+            plot_args.out_path = std::string(args.GetOutputPath()) + "/" + wif_name_base + "_Vr.html";
             plot_args.x_axis_title = "range index";
             plot_args.y_axis_title = "Vr(m/s)";
             plot_args.data.resize(1);
@@ -165,7 +165,7 @@ int main(int argc, char* argv[]) {
 
         if (wif) {
             PlotArgs plot_args = {};
-            plot_args.out_path = "/tmp/" + wif_name_base + "_chirp.html";
+            plot_args.out_path = std::string(args.GetOutputPath()) + "/" + wif_name_base + "_chirp.html";
             plot_args.x_axis_title = "nth sample";
             plot_args.y_axis_title = "Amplitude";
             plot_args.data.resize(2);
@@ -187,7 +187,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (wif) {
-            std::string path = "/tmp/";
+            std::string path = std::string(args.GetOutputPath()) + "/";
             path += wif_name_base + "_raw.tif";
             WriteIntensityPaddedImg(img, path.c_str());
         }
@@ -197,7 +197,7 @@ int main(int argc, char* argv[]) {
         time_stop(dc_start, "fractional DC estimation");
         if (wif) {
             PlotArgs plot_args = {};
-            plot_args.out_path = "/tmp/" + wif_name_base + "_dc.html";
+            plot_args.out_path = std::string(args.GetOutputPath()) + "/" + wif_name_base + "_dc.html";
             plot_args.x_axis_title = "range index";
             plot_args.y_axis_title = "Hz";
             plot_args.data.resize(1);
@@ -219,7 +219,7 @@ int main(int argc, char* argv[]) {
         metadata.img.range_size = img.XSize();
 
         if (wif) {
-            std::string path = "/tmp/";
+            std::string path = std::string(args.GetOutputPath()) + "/";
             path += wif_name_base + "_rc.tif";
             WriteIntensityPaddedImg(img, path.c_str());
         }
@@ -234,7 +234,7 @@ int main(int argc, char* argv[]) {
         cudaDeviceSynchronize();
 
         if (wif) {
-            std::string path = "/tmp/";
+            std::string path = std::string(args.GetOutputPath()) + "/";
             path += wif_name_base + "_slc.tif";
             WriteIntensityPaddedImg(out, path.c_str());
         }
@@ -277,7 +277,7 @@ int main(int argc, char* argv[]) {
         time_stop(mds_formation, "MDS construction");
 
         auto file_write = time_start();
-        WriteLvl1(metadata, asar_meta, mds);
+        WriteLvl1(metadata, asar_meta, mds, args.GetOutputPath());
         time_stop(file_write, "LVL1 file write");
     } catch (const std::runtime_error& e) {
         exit(1);

@@ -33,16 +33,6 @@ std::optional<std::string_view> OptionalString(const std::string& str) {
     std::cout << "sensing_start " << vm.count("sensing_start") << std::endl;
 }
 
-//[[maybe_unused]]
-// bool DoRawArgsHaveHelp(const std::vector<char*> args) {
-//    const char* help_long = "--help";
-//    const char* help_short = "-h";
-//    for (const auto a : args) {
-//        if (strcmp(a, help_long) == 0 || strcmp(a, help_short)) {
-//            return true;
-//        }
-//    }
-//}
 }  // namespace
 
 namespace alus::asar {

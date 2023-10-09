@@ -76,7 +76,7 @@ set(UTIL_SOURCES
         )
 
 set(SOURCES
-        main.cpp ${ENVISAT_FORMAT_FILES} ${SAR_SOURCES} ${CUDA_UTIL_SOURCES} ${UTIL_SOURCES}
+        main.cc ${ENVISAT_FORMAT_FILES} ${SAR_SOURCES} ${CUDA_UTIL_SOURCES} ${UTIL_SOURCES}
 )
 
 add_executable(asar_focus ${SOURCES})
