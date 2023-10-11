@@ -19,7 +19,7 @@ FetchContent_MakeAvailable(Eigen)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-maybe-uninitialized")
 
-if (ENABLE_TESTS)
+if (ALUS_ENABLE_TESTS)
     FetchContent_Declare(
             googletest
             GIT_REPOSITORY https://github.com/google/googletest.git

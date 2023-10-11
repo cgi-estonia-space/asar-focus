@@ -6,7 +6,6 @@ set(CMAKE_CXX_STANDARD  17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-
 set(ENVISAT_FORMAT_FILES
         envisat_format/asar_aux.cc
         envisat_format/asar_aux.h
@@ -105,7 +104,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -Wextra -pedantic")
 
 INCLUDE_DIRECTORIES(${CUDAToolkit_INCLUDE_DIRS})
 
-if (ENABLE_TESTS)
+if (DEFINED ENV{ALUS_ENABLE_TESTS})
+    set(ALUS_ENABLE_TESTS $ENV{ALUS_ENABLE_TESTS})
+endif ()
+
+if (ALUS_ENABLE_TESTS)
+    message(STATUS "Enabling tests")
     set(ALUS_UNIT_TEST_BINARY_OUTPUT_DIR ${PROJECT_BINARY_DIR}/unit-test)
 endif ()
 

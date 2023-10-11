@@ -18,6 +18,6 @@ set_target_properties(app-static
         OUTPUT_NAME app
         )
 
-if (ENABLE_TESTS)
+if (ALUS_ENABLE_TESTS)
     add_subdirectory(unit-test)
 endif ()
