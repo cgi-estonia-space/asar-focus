@@ -54,6 +54,14 @@ if [ -n "$CUDAARCHS" ]; then
   cuda_arch_value="CUDAARCHS=\"$CUDAARCHS\""
 fi
 
-docker exec -t "${container_name}" bash -c "$cuda_arch_value ${container_work_dir_repo}/build-automation/compile_build.sh ${container_work_dir_repo} ${container_work_dir}/${image_name}"
+if [ -n "$ALUS_ENABLE_TESTS" ]; then
+  tests_enabling_option="ALUS_ENABLE_TESTS=$ALUS_ENABLE_TESTS"
+fi
+
+set +e
+docker exec -t "${container_name}" bash -c "$cuda_arch_value $tests_enabling_option ${container_work_dir_repo}/build-automation/compile_build.sh ${container_work_dir_repo} ${container_work_dir}/${image_name}"
+status=$?
 docker stop "${container_name}"
 docker rm "${container_name}"
+
+exit $status

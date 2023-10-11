@@ -49,22 +49,27 @@ TEST(ArgsTest, CompleteArgumentsAreParsedCorrectly) {
 
 TEST(ArgsTest, IsHelpRequestedScenarios) {
     {
-        const char* argv[] = {"--help"};
+        const char* argv[] = {"program", "--help"};
+        std::vector<char*> ta{const_cast<char*>(argv[0]), const_cast<char*>(argv[1])};
+        alus::asar::Args a(ta);
+        EXPECT_THAT(a.IsHelpRequested(), IsTrue());
+    }
+    {
+        const char* argv[] = {"program"};
         std::vector<char*> ta{const_cast<char*>(argv[0])};
         alus::asar::Args a(ta);
         EXPECT_THAT(a.IsHelpRequested(), IsTrue());
     }
     {
-        std::vector<char*> ta{};
+        const char* argv[] = {"program", "-h"};
+        std::vector<char*> ta{const_cast<char*>(argv[0]), const_cast<char*>(argv[1])};
         alus::asar::Args a(ta);
         EXPECT_THAT(a.IsHelpRequested(), IsTrue());
     }
-    {
-        const char* argv[] = {"-h"};
-        std::vector<char*> ta{const_cast<char*>(argv[0])};
-        alus::asar::Args a(ta);
-        EXPECT_THAT(a.IsHelpRequested(), IsTrue());
-    }
+}
+
+TEST(ArgsTest, ThrowLogicErrorWhenEmptyArraySupplied) {
+    ASSERT_THROW(alus::asar::Args(std::vector<char*>{}), std::logic_error);
 }
 
 }  // namespace

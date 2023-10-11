@@ -10,12 +10,12 @@
 
 #include "args.h"
 
+#include <stdexcept>
 #include <sstream>
 #include <string>
 
 #include <boost/program_options.hpp>
 
-#include <iostream>
 namespace {
 std::optional<std::string_view> OptionalString(const std::string& str) {
     if (str.empty()) {
@@ -23,14 +23,6 @@ std::optional<std::string_view> OptionalString(const std::string& str) {
     }
 
     return str;
-}
-
-[[maybe_unused]] void DebugArgs(boost::program_options::variables_map& vm) {
-    std::cout << "help/h " << vm.count("help") << "/" << vm.count("h") << std::endl;
-    std::cout << "aux " << vm.count("aux") << std::endl;
-    std::cout << "orb " << vm.count("orb") << std::endl;
-    std::cout << "output/o " << vm.count("output") << "/" << vm.count("o") << std::endl;
-    std::cout << "sensing_start " << vm.count("sensing_start") << std::endl;
 }
 
 }  // namespace
@@ -65,12 +57,15 @@ void Args::Check() {
 }
 
 Args::Args(const std::vector<char *> &args) {
+    if (args.size() == 0) {
+        throw std::logic_error("Programming error when supplying arguments to parser - arg array length is 0.");
+    }
     Construct();
     po::store(po::parse_command_line(static_cast<int>(args.size()), args.data(), args_), vm_);
     const auto argc = args.size();
     const auto check_help = [](const char* a) { return strcmp(a, "--help") == 0 || strcmp(a, "-h") == 0; };
     const auto has_help = std::find_if(args.cbegin(), args.cend(), check_help) != args.end();
-    if (argc != 0 && !has_help) {
+    if (argc > 1 && !has_help) {
         Check();
     } else {
         precheck_help = true;

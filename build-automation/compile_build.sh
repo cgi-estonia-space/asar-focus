@@ -16,3 +16,18 @@ build_output="$2"
 
 cmake -B "${build_output}" "${repo_dir}"
 cd "${build_output}" && make -j8
+
+result=0
+if [ -n "$ALUS_ENABLE_TESTS" ]; then
+  hardcoded_unit_test_dir="unit-test"
+
+  while read -r exe
+  do
+    $exe --gtest_output=xml:${hardcoded_unit_test_dir}/results/
+    last_result=$?
+    result=$((result | last_result))
+  done < <(find ${hardcoded_unit_test_dir} -maxdepth 1 -executable -type f)
+
+fi
+
+exit $result
