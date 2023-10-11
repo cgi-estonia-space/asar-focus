@@ -83,7 +83,7 @@ set_target_properties(asar_focus PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON)
 
 find_package(CUDAToolkit 11.2 REQUIRED)
-find_package(Boost 1.71.0 REQUIRED COMPONENTS date_time program_options)
+find_package(Boost 1.71.0 REQUIRED COMPONENTS date_time program_options log log_setup)
 find_package(GDAL 3.0.4 REQUIRED)
 
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-Wall")

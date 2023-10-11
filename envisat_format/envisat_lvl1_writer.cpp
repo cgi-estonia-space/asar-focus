@@ -3,6 +3,7 @@
 
 #include <filesystem>
 
+#include "alus_log.h"
 #include "asar_constants.h"
 #include "envisat_mph_sph_str_utils.h"
 #include "sar/sar_metadata.h"
@@ -398,5 +399,5 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
     fwrite(mds.buf, mds.record_size, mds.n_records, fp);
     fclose(fp);
 
-    printf("File written = %s!\n", out_path.c_str());
+    LOGI << "Focussed product saved at " << out_path;
 }

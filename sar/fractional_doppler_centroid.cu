@@ -1,7 +1,17 @@
-
-
+/**
+* ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+*
+* ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+* Creative Commons Attribution-ShareAlike 4.0 International License.
+*
+* You should have received a copy of the license along with this
+* work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+*/
 #include "fractional_doppler_centroid.cuh"
 
+#include <sstream>
+
+#include "alus_log.h"
 #include "cuda_util/cuda_cleanup.h"
 #include "util/checks.h"
 #include "util/math_utils.h"
@@ -120,18 +130,23 @@ std::vector<double> CalculateDopplerCentroid(const DevicePaddedImage& d_img, dou
 
     auto dc_poly = Polyfit(dc_idx, dc_results, POLY_ORDER);
 
-    printf("Doppler Centroid result(range sample - Hz):\n");
+    LOGV << "Doppler Centroid result(range sample - Hz):";
+    std::stringstream stream;
+    char print_buf[50];
     for (int i = 0; i < N_DC_CALC; i++) {
         if (i && (i % 4) == 0) {
-            printf("\n");
+            stream << std::endl;
         }
-        printf("(%5d - %5.2f ) ", static_cast<int>(dc_idx.at(i)), dc_results.at(i));
+        snprintf(print_buf, 50, "(%5d - %5.2f ) ", static_cast<int>(dc_idx.at(i)), dc_results.at(i));
+        stream << print_buf;
     }
-
-    printf("\nFitted polynomial\n");
+    LOGV << stream.str();
+    stream.clear();
+    LOGV << "Fitted polynomial";
     for (double e : dc_poly) {
-        printf("%g ", e);
+        snprintf(print_buf, 50, "%g ", e);
+        stream << print_buf;
     }
-    printf("\n");
+    LOGV << stream.str();
     return dc_poly;
 }

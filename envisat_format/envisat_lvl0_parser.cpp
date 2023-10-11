@@ -1,4 +1,12 @@
-
+/**
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+ *
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+ * Creative Commons Attribution-ShareAlike 4.0 International License.
+ *
+ * You should have received a copy of the license along with this
+ * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+ */
 
 #include "envisat_mph_sph_parser.h"
 
@@ -6,6 +14,7 @@
 
 #include "fmt/format.h"
 
+#include "alus_log.h"
 #include "asar_constants.h"
 #include "envisat_aux_file.h"
 #include "envisat_mph_sph_str_utils.h"
@@ -13,131 +22,131 @@
 #include "sar/orbit_state_vector.h"
 
 namespace {
-    template<class T>
-    [[nodiscard]] const uint8_t *CopyBSwapPOD(T &dest, const uint8_t *src) {
-        memcpy(&dest, src, sizeof(T));
-        dest = bswap(dest);
-        return src + sizeof(T);
+template <class T>
+[[nodiscard]] const uint8_t* CopyBSwapPOD(T& dest, const uint8_t* src) {
+    memcpy(&dest, src, sizeof(T));
+    dest = bswap(dest);
+    return src + sizeof(T);
+}
+
+struct EchoMeta {
+    mjd isp_sensing_time;
+    uint8_t mode_id;
+    uint64_t onboard_time;
+    uint32_t mode_count;
+    uint8_t antenna_beam_set_no;
+    uint8_t comp_ratio;
+    bool echo_flag;
+    bool noise_flag;
+    bool cal_flag;
+    bool cal_type;
+    uint16_t cycle_count;
+
+    uint16_t pri_code;
+    uint16_t swst_code;
+    uint16_t echo_window_code;
+    uint8_t upconverter_raw;
+    uint8_t downconverter_raw;
+    bool tx_pol;
+    bool rx_pol;
+    uint8_t cal_row_number;
+    uint16_t tx_pulse_code;
+    uint8_t beam_adj_delta;
+    uint8_t chirp_pulse_bw_code;
+    uint8_t aux_tx_monitor_level;
+    uint16_t resampling_factor;
+
+    std::vector<std::complex<float>> raw_data;
+};
+
+int FBAQ4Idx(int block, int idx) {
+    switch (idx) {
+        case 0b1111:
+            idx = 0;
+            break;
+        case 0b1110:
+            idx = 1;
+            break;
+        case 0b1101:
+            idx = 2;
+            break;
+        case 0b1100:
+            idx = 3;
+            break;
+        case 0b1011:
+            idx = 4;
+            break;
+        case 0b1010:
+            idx = 5;
+            break;
+        case 0b1001:
+            idx = 6;
+            break;
+        case 0b1000:
+            idx = 7;
+            break;
+        case 0b0000:
+            idx = 8;
+            break;
+        case 0b0001:
+            idx = 9;
+            break;
+        case 0b0010:
+            idx = 10;
+            break;
+        case 0b0011:
+            idx = 11;
+            break;
+        case 0b0100:
+            idx = 12;
+            break;
+        case 0b0101:
+            idx = 13;
+            break;
+        case 0b0110:
+            idx = 14;
+            break;
+        case 0b0111:
+            idx = 15;
+            break;
     }
 
-    struct EchoMeta {
-        mjd isp_sensing_time;
-        uint8_t mode_id;
-        uint64_t onboard_time;
-        uint32_t mode_count;
-        uint8_t antenna_beam_set_no;
-        uint8_t comp_ratio;
-        bool echo_flag;
-        bool noise_flag;
-        bool cal_flag;
-        bool cal_type;
-        uint16_t cycle_count;
+    return 256 * idx + block;
+}
 
-        uint16_t pri_code;
-        uint16_t swst_code;
-        uint16_t echo_window_code;
-        uint8_t upconverter_raw;
-        uint8_t downconverter_raw;
-        bool tx_pol;
-        bool rx_pol;
-        uint8_t cal_row_number;
-        uint16_t tx_pulse_code;
-        uint8_t beam_adj_delta;
-        uint8_t chirp_pulse_bw_code;
-        uint8_t aux_tx_monitor_level;
-        uint16_t resampling_factor;
+double NadirLLParse(const std::string& str) {
+    auto val = std::stol(str.substr(3, 8));
+    if (str.at(0) == '-') {
+        val = -val;
+    }
+    return val * 1e-6;
+}
 
-        std::vector<std::complex<float>> raw_data;
-    };
-
-    int FBAQ4Idx(int block, int idx) {
-        switch (idx) {
-            case 0b1111:
-                idx = 0;
-                break;
-            case 0b1110:
-                idx = 1;
-                break;
-            case 0b1101:
-                idx = 2;
-                break;
-            case 0b1100:
-                idx = 3;
-                break;
-            case 0b1011:
-                idx = 4;
-                break;
-            case 0b1010:
-                idx = 5;
-                break;
-            case 0b1001:
-                idx = 6;
-                break;
-            case 0b1000:
-                idx = 7;
-                break;
-            case 0b0000:
-                idx = 8;
-                break;
-            case 0b0001:
-                idx = 9;
-                break;
-            case 0b0010:
-                idx = 10;
-                break;
-            case 0b0011:
-                idx = 11;
-                break;
-            case 0b0100:
-                idx = 12;
-                break;
-            case 0b0101:
-                idx = 13;
-                break;
-            case 0b0110:
-                idx = 14;
-                break;
-            case 0b0111:
-                idx = 15;
-                break;
+int SwathIdx(const std::string& swath) {
+    if (swath.size() == 3 && swath[0] == 'I' && swath[1] == 'S') {
+        char idx = swath[2];
+        if (idx >= '1' && idx <= '7') {
+            return idx - '1';
         }
-
-        return 256 * idx + block;
     }
-
-    double NadirLLParse(const std::string &str) {
-        auto val = std::stol(str.substr(3, 8));
-        if (str.at(0) == '-') {
-            val = -val;
-        }
-        return val * 1e-6;
-    }
-
-    int SwathIdx(const std::string &swath) {
-        if (swath.size() == 3 && swath[0] == 'I' && swath[1] == 'S') {
-            char idx = swath[2];
-            if (idx >= '1' && idx <= '7') {
-                return idx - '1';
-            }
-        }
-        ERROR_EXIT(swath + " = unknown swath");
-    }
+    ERROR_EXIT(swath + " = unknown swath");
+}
 }  // namespace
 
-void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMetadata &sar_meta,
-                 ASARMetadata &asar_meta, std::vector<std::complex<float>> &img_data,
-                 alus::dorisorbit::Parsable &orbit_source) {
+void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMetadata& sar_meta,
+                 ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data,
+                 alus::dorisorbit::Parsable& orbit_source) {
     ProductHeader mph = {};
 
     mph.Load(file_data.data(), MPH_SIZE);
 
-    // printf("Lvl1MPH = \n");
+    // LOGV << "Lvl1MPH =";
     // mph.PrintValues();
 
     asar_meta.product_name = mph.Get("PRODUCT");
 
-    alus::asar::specification::ProductTypes product_type = alus::asar::specification::GetProductTypeFrom(
-            asar_meta.product_name);
+    alus::asar::specification::ProductTypes product_type =
+        alus::asar::specification::GetProductTypeFrom(asar_meta.product_name);
 
     if (product_type == alus::asar::specification::ProductTypes::UNIDENTIFIED) {
         ERROR_EXIT("This product is not supported - " + asar_meta.product_name);
@@ -176,7 +185,8 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
         FindCONFile(aux_path, asar_meta.sensing_start, conf_file, asar_meta.configuration_file);
     } else if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
         alus::asar::envisat_format::FindINSFile(aux_path, asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
-        alus::asar::envisat_format::FindCONFile(aux_path, asar_meta.sensing_start, conf_file, asar_meta.configuration_file);
+        alus::asar::envisat_format::FindCONFile(aux_path, asar_meta.sensing_start, conf_file,
+                                                asar_meta.configuration_file);
     } else {
         std::cerr << "WAT?" << std::endl;
         exit(1);
@@ -185,7 +195,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     ProductHeader sph = {};
     sph.Load(file_data.data() + MPH_SIZE, SPH_SIZE);
 
-    // printf("SPH = \n");
+    // LOGV << "SPH =";
     // sph.PrintValues();
 
     asar_meta.start_nadir_lat = NadirLLParse(sph.Get("START_LAT"));
@@ -199,7 +209,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     asar_meta.swath = sph.Get("SWATH");
 
     int swath_idx = SwathIdx(asar_meta.swath);
-    printf("Swath = %s , idx = %d\n", asar_meta.swath.c_str(), swath_idx);
+    LOGD << "Swath = " << asar_meta.swath << " idx = " << swath_idx;
 
     asar_meta.acquistion_station = mph.Get("ACQUISITION_STATION");
     asar_meta.processing_station = mph.Get("PROC_CENTER");
@@ -211,7 +221,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     }
 
     auto mdsr = dsds.front();
-    const uint8_t *it = reinterpret_cast<const uint8_t *>(file_data.data()) + mdsr.ds_offset;
+    const uint8_t* it = reinterpret_cast<const uint8_t*>(file_data.data()) + mdsr.ds_offset;
 
     int swst_multiplier{1};
     if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
@@ -228,12 +238,12 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     } else if (product_type == alus::asar::specification::ProductTypes::ASA_IM0) {
         asar_meta.compression_metadata.echo_method = "FBAQ";
         asar_meta.compression_metadata.echo_ratio = "4/8";
-        asar_meta.compression_metadata.init_cal_method = "NONE"; // TBD
-        asar_meta.compression_metadata.init_cal_ratio = ""; // TBD
-        asar_meta.compression_metadata.noise_method = "NONE"; // TBD
-        asar_meta.compression_metadata.noise_ratio = ""; // TBD
-        asar_meta.compression_metadata.per_cal_method = "NONE"; // TBD
-        asar_meta.compression_metadata.per_cal_ratio = ""; // TBD
+        asar_meta.compression_metadata.init_cal_method = "NONE";  // TBD
+        asar_meta.compression_metadata.init_cal_ratio = "";       // TBD
+        asar_meta.compression_metadata.noise_method = "NONE";     // TBD
+        asar_meta.compression_metadata.noise_ratio = "";          // TBD
+        asar_meta.compression_metadata.per_cal_method = "NONE";   // TBD
+        asar_meta.compression_metadata.per_cal_ratio = "";        // TBD
     }
 
     std::vector<EchoMeta> echos;
@@ -260,8 +270,8 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
             it = CopyBSwapPOD(datafield_length, it);
 
             if (datafield_length != 29) {
-                ERROR_EXIT(fmt::format("DSR nr = {} ({}) parsing error. Date Field Header Length should be 29 - is {}", i,
-                                       mdsr.num_dsr, datafield_length));
+                ERROR_EXIT(fmt::format("DSR nr = {} ({}) parsing error. Date Field Header Length should be 29 - is {}",
+                                       i, mdsr.num_dsr, datafield_length));
             }
 
             it++;
@@ -269,7 +279,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
             it++;
 
             if (echo_meta.mode_id != 0x54) {
-                printf("mode id = %02X - not IM mode!\n", echo_meta.mode_id);
+                LOGE << "mode id = " << std::hex << echo_meta.mode_id << "- not IM mode!";
                 exit(1);
             }
             echo_meta.onboard_time = 0;
@@ -334,7 +344,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
                 size_t n_blocks = data_len / 64;
 
                 for (size_t i = 0; i < n_blocks; i++) {
-                    const uint8_t *block_data = it + i * 64;
+                    const uint8_t* block_data = it + i * 64;
                     uint8_t block_id = block_data[0];
                     for (size_t j = 0; j < 63; j++) {
                         uint8_t i_codeword = block_data[1 + j] >> 4;
@@ -357,15 +367,16 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
             if (last_data_record_no == 0) {
                 last_data_record_no = dr_no - 1;
             }
-//            if (last_data_record_no + 1 != dr_no) {
-//                std::cout << "There are discrepancies between ERS data packets. Last no. " << last_data_record_no
-//                          << " current no. " << dr_no << std::endl;
-//            }
+            //            if (last_data_record_no + 1 != dr_no) {
+            //                std::cout << "There are discrepancies between ERS data packets. Last no. " <<
+            //                last_data_record_no
+            //                          << " current no. " << dr_no << std::endl;
+            //            }
 
             last_data_record_no = dr_no;
 
-            //uint8_t packet_counter = it[0];
-            //uint8_t subcommutation_counter = it[1];
+            // uint8_t packet_counter = it[0];
+            // uint8_t subcommutation_counter = it[1];
             it += 2;
 
             it += 8;
@@ -375,44 +386,43 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
                 exit(1);
             }
             it += 1;
-            it += 1; // OGRC/OBRC flag and Orbit ID code
+            it += 1;  // OGRC/OBRC flag and Orbit ID code
             echo_meta.onboard_time = 0;
             echo_meta.onboard_time |= static_cast<uint64_t>(it[0]) << 24;
             echo_meta.onboard_time |= static_cast<uint64_t>(it[1]) << 16;
             echo_meta.onboard_time |= static_cast<uint64_t>(it[2]) << 8;
             echo_meta.onboard_time |= static_cast<uint64_t>(it[3]) << 0;
             it += 4;
-            it += 6; // activity task and image format counter;
+            it += 6;  // activity task and image format counter;
             it = CopyBSwapPOD(echo_meta.swst_code, it);
             it = CopyBSwapPOD(echo_meta.pri_code, it);
             // https://earth.esa.int/eogateway/documents/20142/37627/ERS-products-specification-with-Envisat-format.pdf
             // https://asf.alaska.edu/wp-content/uploads/2019/03/ers_ceos.pdf mixed between two.
             it += 194 + 10;
             echo_meta.raw_data.reserve(11232);
-            //uint64_t i_avg_cumulative{0};
-            //uint64_t q_avg_cumulative{0};
+            // uint64_t i_avg_cumulative{0};
+            // uint64_t q_avg_cumulative{0};
             for (size_t r_i{0}; r_i < 5616; r_i++) {
                 uint8_t i_sample = it[r_i * 2 + 0];
-                //i_avg_cumulative += i_sample;
+                // i_avg_cumulative += i_sample;
                 uint8_t q_sample = it[r_i * 2 + 1];
-                //q_avg_cumulative += q_sample;
+                // q_avg_cumulative += q_sample;
                 echo_meta.raw_data.emplace_back(static_cast<float>(i_sample), static_cast<float>(q_sample));
             }
-//            double i_avg = i_avg_cumulative / 5616.0;
-//            double q_avg = q_avg_cumulative / 5616.0;
-//            if (i_avg > 16.0 || i_avg < 15.0) {
-//                std::cout << "average for i at MSDR no. " << i << " is OOL " << i_avg << std::endl;
-//            }
-//            if (q_avg > 16.0 || q_avg < 15.0) {
-//                std::cout << "average for q at MSDR no. " << i << " is OOL " << q_avg << std::endl;
-//            }
+            //            double i_avg = i_avg_cumulative / 5616.0;
+            //            double q_avg = q_avg_cumulative / 5616.0;
+            //            if (i_avg > 16.0 || i_avg < 15.0) {
+            //                std::cout << "average for i at MSDR no. " << i << " is OOL " << i_avg << std::endl;
+            //            }
+            //            if (q_avg > 16.0 || q_avg < 15.0) {
+            //                std::cout << "average for q at MSDR no. " << i << " is OOL " << q_avg << std::endl;
+            //            }
             it += 11232;
             echos.push_back(std::move(echo_meta));
         } else {
             std::cerr << "WAT?" << std::endl;
             exit(1);
         }
-
     }
 
     uint16_t min_swst = UINT16_MAX;
@@ -438,7 +448,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
 
     std::vector<float> v;
     if (product_type == alus::asar::specification::ProductTypes::ASA_IM0) {
-        for (auto &e: echos) {
+        for (auto& e : echos) {
             if (prev_swst != e.swst_code) {
                 prev_swst = e.swst_code;
                 swst_changes++;
@@ -448,7 +458,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
             max_samples = std::max(max_samples, e.raw_data.size());
         }
     } else if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
-        for (auto &e: echos) {
+        for (auto& e : echos) {
             if (prev_swst != e.swst_code) {
                 if ((e.swst_code < 500) || (e.swst_code > 1500) || ((prev_swst - e.swst_code) % 22 != 0)) {
                     e.swst_code = prev_swst;
@@ -494,7 +504,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     constexpr uint32_t im_idx = 0;
     const uint32_t n_pulses_swst = ins_file.fbp.mode_timelines[im_idx].r_values[swath_idx];
 
-    printf("n PRI before SWST = %u\n", n_pulses_swst);
+    LOGD << "n PRI before SWST = " << n_pulses_swst;
 
     asar_meta.swst_rank = n_pulses_swst;
 
@@ -502,7 +512,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     if (product_type == alus::asar::specification::ProductTypes::ASA_IM0) {
         sar_meta.pulse_repetition_frequency = sar_meta.chirp.range_sampling_rate / echos.front().pri_code;
         asar_meta.two_way_slant_range_time =
-                (min_swst + n_pulses_swst * echos.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate);
+            (min_swst + n_pulses_swst * echos.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate);
     } else if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
         const auto delay_time = ins_file.flp.range_gate_bias;
         // ISCE2 uses 210.943006e-9, but
@@ -517,9 +527,10 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
                       << "Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05) range [1640, 1720] Hz" << std::endl;
         }
 
-        asar_meta.two_way_slant_range_time = n_pulses_swst * pri + min_swst * swst_multiplier / sar_meta.chirp.range_sampling_rate - delay_time;
+        asar_meta.two_way_slant_range_time =
+            n_pulses_swst * pri + min_swst * swst_multiplier / sar_meta.chirp.range_sampling_rate - delay_time;
     } else {
-        std::cerr << "WTF? " << __FUNCTION__  << " " << __LINE__ << std::endl;
+        std::cerr << "WTF? " << __FUNCTION__ << " " << __LINE__ << std::endl;
         exit(1);
     }
 
@@ -537,7 +548,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     // TODO should it be calculated more precisely?
     const double Vg = sar_meta.platform_velocity * 0.88;
     sar_meta.results.Vr_poly = {0, 0, sqrt(Vg * sar_meta.platform_velocity)};
-    printf("platform velocity = %f, initial Vr = %f\n", sar_meta.platform_velocity, CalcVr(sar_meta, 0));
+    LOGD << "platform velocity = " << sar_meta.platform_velocity << ", initial Vr = " << CalcVr(sar_meta, 0);
     sar_meta.azimuth_spacing = Vg * (1 / sar_meta.pulse_repetition_frequency);
 
     sar_meta.img.range_size = range_samples;
@@ -549,7 +560,7 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     sar_meta.total_raw_samples = 0;
 
     for (size_t y = 0; y < echos.size(); y++) {
-        const auto &e = echos[y];
+        const auto& e = echos[y];
         size_t idx = y * range_samples;
         idx += swst_multiplier * (e.swst_code - min_swst);
         const size_t n_samples = e.raw_data.size();
@@ -600,5 +611,5 @@ void ParseIMFile(const std::vector<char> &file_data, const char *aux_path, SARMe
     sar_meta.first_line_time = asar_meta.sensing_start;
     sar_meta.azimuth_bandwidth_fraction = 0.8f;
     auto llh = xyz2geoWGS84(sar_meta.center_point);
-    printf("center point = %f %f\n", llh.latitude, llh.longitude);
+    LOGD << "center point = " <<  llh.latitude << " " << llh.longitude;
 }

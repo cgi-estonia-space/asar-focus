@@ -1,3 +1,13 @@
+/**
+* ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+*
+* ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+* Creative Commons Attribution-ShareAlike 4.0 International License.
+*
+* You should have received a copy of the license along with this
+* work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+*/
+
 #include "plot.h"
 
 #include <filesystem>
@@ -5,6 +15,8 @@
 #include <iostream>
 
 #include <boost/algorithm/string.hpp>
+
+#include "alus_log.h"
 
 namespace {
 const char* HTML_TEMPLATE = R"foo(
@@ -72,5 +84,5 @@ void Plot(const PlotArgs& graph) {
 
     std::ofstream ofs(graph.out_path);
     ofs << base_html;
-    printf("Output plot @ %s\n", graph.out_path.c_str());
+    LOGI << "Output plot at " <<  graph.out_path;
 }

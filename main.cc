@@ -1,28 +1,25 @@
-#include <stdio.h>
 #include <complex>
 #include <filesystem>
-#include <iostream>
 #include <string>
 #include <vector>
 
 #include <gdal/gdal_priv.h>
 #include <boost/algorithm/string.hpp>
 
+#include "alus_log.h"
 #include "args.h"
+#include "VERSION"
 
 #include "cuda_util/cufft_plan.h"
 #include "cuda_util/device_padded_image.cuh"
 #include "envisat_format/envisat_aux_file.h"
 #include "envisat_format/envisat_lvl1_writer.h"
-#include "envisat_format/envisat_mph_sph_parser.h"
 #include "sar/fractional_doppler_centroid.cuh"
 #include "sar/iq_correction.cuh"
-#include "sar/orbit_state_vector.h"
 #include "sar/processing_velocity_estimation.h"
 #include "sar/range_compression.cuh"
 #include "sar/range_doppler_algorithm.cuh"
 #include "sar/sar_chirp.h"
-#include "util/checks.h"
 #include "util/geo_tools.h"
 #include "util/img_output.h"
 #include "util/math_utils.h"
@@ -40,11 +37,12 @@ auto time_start() { return std::chrono::steady_clock::now(); }
 void time_stop(std::chrono::steady_clock::time_point beg, const char* msg) {
     auto end = std::chrono::steady_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(end - beg).count();
-    std::cout << msg << " time = " << diff << " ms\n";
+    LOGD << msg << " time = " << diff << " ms";
 }
 
 int main(int argc, char* argv[]) {
     try {
+        alus::asar::log::Initialize();
         const std::vector<char*> args_raw(argv, argv + argc);
         alus::asar::Args args(args_raw);
         if (args.IsHelpRequested()) {
@@ -52,14 +50,14 @@ int main(int argc, char* argv[]) {
             exit(0);
         }
 
-        printf("asar-focus version 0.1.1\n");
+        LOGI << "asar-focus version " << VERSION_MAJOR << "." << VERSION_MINOR << "." << VERSION_PATCH;
         auto file_time_start = time_start();
         const auto in_path{args.GetInputDsPath()};
         const auto aux_path{args.GetAuxPath()};
         const auto orbit_path{args.GetOrbitPath()};
         FILE* fp = fopen(in_path.data(), "r");
         if (!fp) {
-            printf("failed to open ... %s\n", in_path.data());
+            LOGE << "Failed to open input - " << in_path;
             return 1;
         }
 
@@ -68,7 +66,7 @@ int main(int argc, char* argv[]) {
         std::vector<char> data(file_sz);
         auto act_sz = fread(data.data(), 1, file_sz, fp);
         if (act_sz != file_sz) {
-            printf("Failed to read %zu bytes.. expected = %zu!\n", file_sz, act_sz);
+            LOGE << "Failed to read " << file_sz << " bytes, expected " << act_sz << " bytes from input dataset";
             return 1;
         }
         fclose(fp);
@@ -111,19 +109,19 @@ int main(int argc, char* argv[]) {
         auto fft_sizes = GetOptimalFFTSizes();
 
         auto rg_plan_sz = fft_sizes.upper_bound(rg_size + metadata.chirp.n_samples);
-        printf("range FFT padding sz = %d (2 ^ %d * 3 ^ %d * 5 ^ %d * 7 ^ %d)\n", rg_plan_sz->first,
-               rg_plan_sz->second[0], rg_plan_sz->second[1], rg_plan_sz->second[2], rg_plan_sz->second[3]);
+        LOGD << "Range FFT padding sz = " << rg_plan_sz->first << "(2 ^ " << rg_plan_sz->second[0]
+             << " * 3 ^ " << rg_plan_sz->second[1] << " * 5 ^ " << rg_plan_sz->second[2]
+             << " * 7 ^ " << rg_plan_sz->second[3] << ")";
         int rg_padded = rg_plan_sz->first;
 
         auto az_plan_sz = fft_sizes.upper_bound(az_size);
 
-        printf("azimuth FFT padding sz = %d (2 ^ %d * 3 ^ %d * 5 ^ %d * 7 ^ %d)\n", az_plan_sz->first,
-               az_plan_sz->second[0], az_plan_sz->second[1], az_plan_sz->second[2], az_plan_sz->second[3]);
+        LOGD << "azimuth FFT padding sz = " << az_plan_sz->first << " (2 ^ " << az_plan_sz->second[0]
+             << " * 3 ^ " << az_plan_sz->second[1] << " * 5 ^ " << az_plan_sz->second[2]
+             << " * 7 ^ " << az_plan_sz->second[3] << ")";
         int az_padded = az_plan_sz->first;
 
-        printf("FFT paddings:\n");
-        printf("rg  = %d -> %d\n", rg_size, rg_padded);
-        printf("az = %d -> %d\n", az_size, az_padded);
+        LOGD << "FFT paddings: rg  = " << rg_size << "->" << rg_padded << " az = " << az_size << "->" << az_padded;
 
         auto gpu_transfer_start = time_start();
         DevicePaddedImage img;
@@ -207,8 +205,8 @@ int main(int argc, char* argv[]) {
             Plot(plot_args);
         }
 
-        printf("Image GPU byte size = %f GB\n", img.TotalByteSize() / 1e9);
-        printf("Estimated GPU memory usage ~%f GB\n", (img.TotalByteSize() * 2) / 1e9);
+        LOGD << "Image GPU byte size = " <<  (img.TotalByteSize() / 1e9) << "GB";
+        LOGD << "Estimated GPU memory usage ~" << ((img.TotalByteSize() * 2) / 1e9) << "GB";
 
         CudaWorkspace d_workspace(img.TotalByteSize());
 
@@ -256,11 +254,11 @@ int main(int argc, char* argv[]) {
             int range_stride = out.XStride();
             std::vector<IQ16> row(range_size);
             for (int y = 0; y < out.YSize(); y++) {
-                // printf("y = %d\n", y);
+                // LOGV << "y = " << y;
                 for (int x = 0; x < out.XSize(); x++) {
                     auto pix = res[x + y * range_stride];
                     float tambov = 120000 / 100;
-                    // printf("scaling tambov = %f\n", tambov);
+                    // LOGV << "scaling tambov = " << tambov;
                     IQ16 iq16;
                     iq16.i = std::clamp<float>(pix.x * tambov, INT16_MIN, INT16_MAX);
                     iq16.q = std::clamp<float>(pix.y * tambov, INT16_MIN, INT16_MAX);

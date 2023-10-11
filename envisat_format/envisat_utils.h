@@ -6,7 +6,6 @@
 
 #include "util/checks.h"
 
-#include "envisat_utils.h"
 
 template <size_t N>
 void CopyStrPad(uc (&arr)[N], const std::string& s) {
