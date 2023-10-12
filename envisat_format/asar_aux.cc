@@ -10,7 +10,6 @@
 #include "envisat_format/asar_aux.h"
 
 #include <filesystem>
-#include <iostream>
 #include <string_view>
 
 #include <boost/algorithm/string.hpp>

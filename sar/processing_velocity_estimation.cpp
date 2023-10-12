@@ -120,7 +120,9 @@ std::vector<double> EstimateProcessingVelocity(const SARMetadata& metadata) {
     char printf_buf[50];
     for (int i = 0; i < N_Vr_CALC; i++) {
         if (i && (i % 4) == 0) {
-            stream << std::endl;
+            LOGD << stream.str();
+            stream.str("");
+            stream.clear();
         }
         snprintf(printf_buf, 50, "(%5d - %5.2f ) ", static_cast<int>(idx_vec.at(i)), Vr_results.at(i));
         stream << printf_buf;

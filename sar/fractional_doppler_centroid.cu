@@ -135,7 +135,9 @@ std::vector<double> CalculateDopplerCentroid(const DevicePaddedImage& d_img, dou
     char print_buf[50];
     for (int i = 0; i < N_DC_CALC; i++) {
         if (i && (i % 4) == 0) {
-            stream << std::endl;
+            LOGV << stream.str();
+            stream.str("");
+            stream.clear();
         }
         snprintf(print_buf, 50, "(%5d - %5.2f ) ", static_cast<int>(dc_idx.at(i)), dc_results.at(i));
         stream << print_buf;

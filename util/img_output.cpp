@@ -1,4 +1,12 @@
-
+/**
+* ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+*
+* ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+* Creative Commons Attribution-ShareAlike 4.0 International License.
+*
+* You should have received a copy of the license along with this
+* work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+*/
 
 #include "img_output.h"
 
@@ -9,7 +17,7 @@
 #include <gdal/gdal_priv.h>
 #include <boost/date_time.hpp>
 
-//#include "alus_log.h"
+#include "alus_log.h"
 #include "checks.h"
 //#include "gdal_util.h"
 #include "math_utils.h"
@@ -25,7 +33,7 @@ void WriteTiff(const DevicePaddedImage& img, bool complex_output, bool padding, 
     const int w = padding ? img.XStride() : img.XSize();
     const int h = padding ? img.YStride() : img.YSize();
 
-    std::cout << "Writing " << (complex_output ? "complex" : "intensity") << " file @ " << path << "\n";
+    LOGI << "Writing " << (complex_output ? "complex" : "intensity") << " file at " << path;
 
     const int buf_size = w * h;
 
@@ -44,7 +52,7 @@ void WriteTiff(const DevicePaddedImage& img, bool complex_output, bool padding, 
     int y_block_size;
     band->GetBlockSize(&x_block_size, &y_block_size);
 
-    std::cout << "Write slow path\n";
+    LOGV << "Write slow path";
     std::unique_ptr<cufftComplex[]> data(new cufftComplex[buf_size]);
     if (padding) {
         img.CopyToHostPaddedSize(data.get());

@@ -13,7 +13,6 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <locale>
 #include <numeric>
 #include <sstream>

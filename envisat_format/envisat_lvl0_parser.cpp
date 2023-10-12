@@ -170,11 +170,11 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
         ERROR_EXIT(msg);
     }
 
-    std::cout << "Product name = " << asar_meta.product_name << "\n";
-    std::cout << "SENSING START " << asar_meta.sensing_start << "\n";
-    std::cout << "SENSIND END " << asar_meta.sensing_stop << "\n";
-    std::cout << "ORBIT vectors start " << sar_meta.osv.front().time << "\n";
-    std::cout << "ORBIT vectors end " << sar_meta.osv.back().time << "\n";
+    LOGD << "Product name = " << asar_meta.product_name;
+    LOGD << "SENSING START " << asar_meta.sensing_start;
+    LOGD << "SENSIND END " << asar_meta.sensing_stop;
+    LOGD << "ORBIT vectors start " << sar_meta.osv.front().time;
+    LOGD << "ORBIT vectors end " << sar_meta.osv.back().time;
     CHECK_BOOL(asar_meta.sensing_start >= sar_meta.osv.front().time &&
                asar_meta.sensing_stop <= sar_meta.osv.back().time);
 
@@ -188,7 +188,7 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
         alus::asar::envisat_format::FindCONFile(aux_path, asar_meta.sensing_start, conf_file,
                                                 asar_meta.configuration_file);
     } else {
-        std::cerr << "WAT?" << std::endl;
+        LOGE << "WAT?";
         exit(1);
     }
 
@@ -368,9 +368,8 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
                 last_data_record_no = dr_no - 1;
             }
             //            if (last_data_record_no + 1 != dr_no) {
-            //                std::cout << "There are discrepancies between ERS data packets. Last no. " <<
-            //                last_data_record_no
-            //                          << " current no. " << dr_no << std::endl;
+            //                LOGD << "There are discrepancies between ERS data packets. Last no. " <<
+            //                last_data_record_nr << " current no. " << dr_no;
             //            }
 
             last_data_record_no = dr_no;
@@ -412,10 +411,10 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
             //            double i_avg = i_avg_cumulative / 5616.0;
             //            double q_avg = q_avg_cumulative / 5616.0;
             //            if (i_avg > 16.0 || i_avg < 15.0) {
-            //                std::cout << "average for i at MSDR no. " << i << " is OOL " << i_avg << std::endl;
+            //                LOGD << "average for i at MSDR no. " << i << " is OOL " << i_avg;
             //            }
             //            if (q_avg > 16.0 || q_avg < 15.0) {
-            //                std::cout << "average for q at MSDR no. " << i << " is OOL " << q_avg << std::endl;
+            //                LOGD << "average for q at MSDR no. " << i << " is OOL " << q_avg;
             //            }
             it += 11232;
             echos.push_back(std::move(echo_meta));
@@ -490,14 +489,15 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     sar_meta.chirp.n_samples = std::round(sar_meta.chirp.pulse_duration / (1 / sar_meta.chirp.range_sampling_rate));
 
     sar_meta.chirp.pulse_bandwidth = sar_meta.chirp.Kr * sar_meta.chirp.pulse_duration;
-    fmt::print("Chirp Kr = {}, n_samp = {}\n", sar_meta.chirp.Kr, sar_meta.chirp.n_samples);
-    fmt::print("tx pulse calc dur = {}\n", asar_meta.tx_pulse_len_code * (1 / sar_meta.chirp.range_sampling_rate));
-    fmt::print("Nominal chirp duration = {}\n", sar_meta.chirp.pulse_duration);
-    fmt::print("Calculated chirp BW = {} , meta bw = {}\n", sar_meta.chirp.pulse_bandwidth, pulse_bw);
+    LOGD << fmt::format("Chirp Kr = {}, n_samp = {}", sar_meta.chirp.Kr, sar_meta.chirp.n_samples);
+    LOGD << fmt::format("tx pulse calc dur = {}",
+                        asar_meta.tx_pulse_len_code * (1 / sar_meta.chirp.range_sampling_rate));
+    LOGD << fmt::format("Nominal chirp duration = {}", sar_meta.chirp.pulse_duration);
+    LOGD << fmt::format("Calculated chirp BW = {} , meta bw = {}", sar_meta.chirp.pulse_bandwidth, pulse_bw);
 
     const size_t range_samples = max_samples + swst_multiplier * (max_swst - min_swst);
-    fmt::print("range samples = {}, minimum range padded size = {}\n", range_samples,
-               range_samples + sar_meta.chirp.n_samples);
+    LOGD << fmt::format("range samples = {}, minimum range padded size = {}", range_samples,
+                        range_samples + sar_meta.chirp.n_samples);
 
     constexpr double c = 299792458;
 
@@ -522,15 +522,15 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
         sar_meta.pulse_repetition_frequency = 1 / pri;
 
         if (sar_meta.pulse_repetition_frequency < 1640 || sar_meta.pulse_repetition_frequency > 1720) {
-            std::cout << "PRF value '" << sar_meta.pulse_repetition_frequency << "'"
-                      << "is out of the specification (ERS-1-Satellite-to-Ground-Segment-Interface-"
-                      << "Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05) range [1640, 1720] Hz" << std::endl;
+            LOGW << "PRF value '" << sar_meta.pulse_repetition_frequency << "'"
+                 << "is out of the specification (ERS-1-Satellite-to-Ground-Segment-Interface-"
+                 << "Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05) range [1640, 1720] Hz" << std::endl;
         }
 
         asar_meta.two_way_slant_range_time =
             n_pulses_swst * pri + min_swst * swst_multiplier / sar_meta.chirp.range_sampling_rate - delay_time;
     } else {
-        std::cerr << "WTF? " << __FUNCTION__ << " " << __LINE__ << std::endl;
+        LOGE << "WTF? " << __FUNCTION__ << " " << __LINE__ << std::endl;
         exit(1);
     }
 
@@ -538,10 +538,10 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     sar_meta.wavelength = c / sar_meta.carrier_frequency;
     sar_meta.range_spacing = c / (2 * sar_meta.chirp.range_sampling_rate);
 
-    fmt::print("Carrier frequency: {}\nRange sampling rate = {}\n", sar_meta.carrier_frequency,
-               sar_meta.chirp.range_sampling_rate);
-    fmt::print("Slant range to first sample = {} m\ntwo way slant time {} ns\n", sar_meta.slant_range_first_sample,
-               asar_meta.two_way_slant_range_time * 1e9);
+    LOGD << fmt::format("Carrier frequency: {} Range sampling rate = {}", sar_meta.carrier_frequency,
+                        sar_meta.chirp.range_sampling_rate);
+    LOGD << fmt::format("Slant range to first sample = {} m two way slant time {} ns",
+                        sar_meta.slant_range_first_sample, asar_meta.two_way_slant_range_time * 1e9);
 
     sar_meta.platform_velocity = CalcVelocity(sar_meta.osv[sar_meta.osv.size() / 2]);
     // Ground speed ~12% less than platform velocity. 4.2.1 from "Digital processing of SAR Data"
@@ -569,10 +569,10 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     }
 
     // TODO these two always seem to differ?
-
-    // auto first_mjd = MjdToPtime(echos.front().isp_sensing_time);
-    // fmt::print("Sensing start = {}\nFirst ISP = {}\nDiff = {} us\n", to_iso_extended_string(asar_meta.sensing_start),
-    //            to_iso_extended_string(first_mjd), (asar_meta.sensing_start - first_mjd).total_microseconds());
+//    auto first_mjd = MjdToPtime(echos.front().isp_sensing_time);
+//    LOGD << fmt::format("Sensing start = {} First ISP = {} Diff = {} us",
+//                        to_iso_extended_string(asar_meta.sensing_start), to_iso_extended_string(first_mjd),
+//                        (asar_meta.sensing_start - first_mjd).total_microseconds());
 
     // TODO init guess handling? At the moment just a naive guess from nadir point
     double init_guess_lat = (asar_meta.start_nadir_lat + asar_meta.stop_nadir_lat) / 2;
@@ -589,10 +589,10 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
         }
     }
 
-    fmt::print("nadirs start {} {} - stop  {} {}\n", asar_meta.start_nadir_lat, asar_meta.start_nadir_lon,
+    LOGD << fmt::format("nadirs start {} {} - stop  {} {}", asar_meta.start_nadir_lat, asar_meta.start_nadir_lon,
                asar_meta.stop_nadir_lat, asar_meta.stop_nadir_lon);
 
-    fmt::print("guess = {} {}\n", init_guess_lat, init_guess_lon);
+    LOGD << fmt::format("guess = {} {}", init_guess_lat, init_guess_lon);
 
     auto init_xyz = Geo2xyzWgs84(init_guess_lat, init_guess_lon, 0);
 
@@ -611,5 +611,5 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     sar_meta.first_line_time = asar_meta.sensing_start;
     sar_meta.azimuth_bandwidth_fraction = 0.8f;
     auto llh = xyz2geoWGS84(sar_meta.center_point);
-    LOGD << "center point = " <<  llh.latitude << " " << llh.longitude;
+    LOGD << "center point = " << llh.latitude << " " << llh.longitude;
 }
