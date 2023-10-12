@@ -16,6 +16,8 @@
 
 #include <boost/program_options.hpp>
 
+#include "alus_log.h"
+
 namespace alus::asar {
 
 class Args final {
@@ -32,13 +34,19 @@ public:
     [[nodiscard]] std::string_view GetFocussedProductType() const { return focussed_product_type_; }
     [[nodiscard]] std::optional<std::string_view> GetProcessSensingStart() const;
     [[nodiscard]] std::optional<std::string_view> GetProcessSensingEnd() const;
+    [[nodiscard]] log::Level GetLogLevel() const { return log_level_; }
+    [[nodiscard]] bool StorePlots() const { return plots_on_; }
+    [[nodiscard]] bool StoreIntensity() const { return store_intensity_; }
 
 private:
     void Construct();
     void Check();
+    static log::Level TryFetchLogLevelFrom(std::string_view level_arg);
 
     boost::program_options::variables_map vm_;
     boost::program_options::options_description args_{""};
+    boost::program_options::options_description visible_args_{""};
+    boost::program_options::options_description hidden_args_{""};
 
     bool precheck_help{false};
     std::string ds_path_{};
@@ -48,6 +56,10 @@ private:
     std::string focussed_product_type_{};
     std::string process_sensing_start_{};
     std::string process_sensing_end_{};
+    std::string log_level_arg_{};
+    log::Level log_level_{log::Level::VERBOSE};
+    bool plots_on_{};
+    bool store_intensity_{};
 };
 
 }  // namespace alus::asar

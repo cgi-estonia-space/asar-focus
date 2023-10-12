@@ -115,27 +115,27 @@ std::vector<double> EstimateProcessingVelocity(const SARMetadata& metadata) {
 
     auto Vr_poly = Polyfit(idx_vec, Vr_results, POLY_ORDER);
 
-    LOGD << "Vr result(range sample - m/s):";
+    LOGV << "Vr result(range sample - m/s):";
     std::stringstream stream;
     char printf_buf[50];
     for (int i = 0; i < N_Vr_CALC; i++) {
         if (i && (i % 4) == 0) {
-            LOGD << stream.str();
+            LOGV << stream.str();
             stream.str("");
             stream.clear();
         }
         snprintf(printf_buf, 50, "(%5d - %5.2f ) ", static_cast<int>(idx_vec.at(i)), Vr_results.at(i));
         stream << printf_buf;
     }
-    LOGD << stream.str();
+    LOGV << stream.str();
     stream.clear();
 
-    LOGD << "Fitted polynomial";
+    LOGV << "Fitted polynomial";
     for (double e : Vr_poly) {
         snprintf(printf_buf, 50, "%g ", e);
         stream << printf_buf;
     }
-    LOGD << stream.str();
+    LOGV << stream.str();
 
     return Vr_poly;
 }

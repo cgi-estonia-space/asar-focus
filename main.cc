@@ -1,12 +1,12 @@
 /**
-* ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
-*
-* ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
-* Creative Commons Attribution-ShareAlike 4.0 International License.
-*
-* You should have received a copy of the license along with this
-* work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
-*/
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+ *
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+ * Creative Commons Attribution-ShareAlike 4.0 International License.
+ *
+ * You should have received a copy of the license along with this
+ * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+ */
 
 #include <complex>
 #include <filesystem>
@@ -17,9 +17,9 @@
 #include <gdal/gdal_priv.h>
 #include <boost/algorithm/string.hpp>
 
+#include "VERSION"
 #include "alus_log.h"
 #include "args.h"
-#include "VERSION"
 
 #include "cuda_util/cufft_plan.h"
 #include "cuda_util/device_padded_image.cuh"
@@ -41,8 +41,6 @@ struct IQ16 {
     int16_t q;
 };
 
-bool wif = false;
-
 auto time_start() { return std::chrono::steady_clock::now(); }
 
 void time_stop(std::chrono::steady_clock::time_point beg, const char* msg) {
@@ -53,14 +51,17 @@ void time_stop(std::chrono::steady_clock::time_point beg, const char* msg) {
 
 int main(int argc, char* argv[]) {
     try {
-        alus::asar::log::Initialize();
         const std::vector<char*> args_raw(argv, argv + argc);
         alus::asar::Args args(args_raw);
         if (args.IsHelpRequested()) {
+            std::cout << "asar-focus version " << VERSION_MAJOR << "." << VERSION_MINOR << "." << VERSION_PATCH
+                      << std::endl;
             std::cout << args.GetHelp() << std::endl;
             exit(0);
         }
 
+        alus::asar::log::Initialize();
+        alus::asar::log::SetLevel(args.GetLogLevel());
         LOGI << "asar-focus version " << VERSION_MAJOR << "." << VERSION_MINOR << "." << VERSION_PATCH;
         auto file_time_start = time_start();
         const auto in_path{args.GetInputDsPath()};
@@ -120,16 +121,16 @@ int main(int argc, char* argv[]) {
         auto fft_sizes = GetOptimalFFTSizes();
 
         auto rg_plan_sz = fft_sizes.upper_bound(rg_size + metadata.chirp.n_samples);
-        LOGD << "Range FFT padding sz = " << rg_plan_sz->first << "(2 ^ " << rg_plan_sz->second[0]
-             << " * 3 ^ " << rg_plan_sz->second[1] << " * 5 ^ " << rg_plan_sz->second[2]
-             << " * 7 ^ " << rg_plan_sz->second[3] << ")";
+        LOGD << "Range FFT padding sz = " << rg_plan_sz->first << "(2 ^ " << rg_plan_sz->second[0] << " * 3 ^ "
+             << rg_plan_sz->second[1] << " * 5 ^ " << rg_plan_sz->second[2] << " * 7 ^ " << rg_plan_sz->second[3]
+             << ")";
         int rg_padded = rg_plan_sz->first;
 
         auto az_plan_sz = fft_sizes.upper_bound(az_size);
 
-        LOGD << "azimuth FFT padding sz = " << az_plan_sz->first << " (2 ^ " << az_plan_sz->second[0]
-             << " * 3 ^ " << az_plan_sz->second[1] << " * 5 ^ " << az_plan_sz->second[2]
-             << " * 7 ^ " << az_plan_sz->second[3] << ")";
+        LOGD << "azimuth FFT padding sz = " << az_plan_sz->first << " (2 ^ " << az_plan_sz->second[0] << " * 3 ^ "
+             << az_plan_sz->second[1] << " * 5 ^ " << az_plan_sz->second[2] << " * 7 ^ " << az_plan_sz->second[3]
+             << ")";
         int az_padded = az_plan_sz->first;
 
         LOGD << "FFT paddings: rg  = " << rg_size << "->" << rg_padded << " az = " << az_size << "->" << az_padded;
@@ -156,7 +157,7 @@ int main(int argc, char* argv[]) {
         metadata.results.Vr_poly = EstimateProcessingVelocity(metadata);
         time_stop(vr_start, "Vr estimation");
 
-        if (wif) {
+        if (args.StorePlots()) {
             PlotArgs plot_args = {};
             plot_args.out_path = std::string(args.GetOutputPath()) + "/" + wif_name_base + "_Vr.html";
             plot_args.x_axis_title = "range index";
@@ -172,7 +173,7 @@ int main(int argc, char* argv[]) {
 
         std::vector<float> chirp_freq;
 
-        if (wif) {
+        if (args.StorePlots()) {
             PlotArgs plot_args = {};
             plot_args.out_path = std::string(args.GetOutputPath()) + "/" + wif_name_base + "_chirp.html";
             plot_args.x_axis_title = "nth sample";
@@ -195,7 +196,7 @@ int main(int argc, char* argv[]) {
             Plot(plot_args);
         }
 
-        if (wif) {
+        if (args.StoreIntensity()) {
             std::string path = std::string(args.GetOutputPath()) + "/";
             path += wif_name_base + "_raw.tif";
             WriteIntensityPaddedImg(img, path.c_str());
@@ -204,7 +205,7 @@ int main(int argc, char* argv[]) {
         auto dc_start = time_start();
         metadata.results.doppler_centroid_poly = CalculateDopplerCentroid(img, metadata.pulse_repetition_frequency);
         time_stop(dc_start, "fractional DC estimation");
-        if (wif) {
+        if (args.StorePlots()) {
             PlotArgs plot_args = {};
             plot_args.out_path = std::string(args.GetOutputPath()) + "/" + wif_name_base + "_dc.html";
             plot_args.x_axis_title = "range index";
@@ -216,7 +217,7 @@ int main(int argc, char* argv[]) {
             Plot(plot_args);
         }
 
-        LOGD << "Image GPU byte size = " <<  (img.TotalByteSize() / 1e9) << "GB";
+        LOGD << "Image GPU byte size = " << (img.TotalByteSize() / 1e9) << "GB";
         LOGD << "Estimated GPU memory usage ~" << ((img.TotalByteSize() * 2) / 1e9) << "GB";
 
         CudaWorkspace d_workspace(img.TotalByteSize());
@@ -227,7 +228,7 @@ int main(int argc, char* argv[]) {
 
         metadata.img.range_size = img.XSize();
 
-        if (wif) {
+        if (args.StoreIntensity()) {
             std::string path = std::string(args.GetOutputPath()) + "/";
             path += wif_name_base + "_rc.tif";
             WriteIntensityPaddedImg(img, path.c_str());
@@ -242,7 +243,7 @@ int main(int argc, char* argv[]) {
         time_stop(az_comp_start, "Azimuth compression");
         cudaDeviceSynchronize();
 
-        if (wif) {
+        if (args.StoreIntensity()) {
             std::string path = std::string(args.GetOutputPath()) + "/";
             path += wif_name_base + "_slc.tif";
             WriteIntensityPaddedImg(out, path.c_str());
