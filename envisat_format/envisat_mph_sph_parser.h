@@ -13,7 +13,7 @@
 #include <cstdlib>
 #include <string>
 
-#include "util/checks.h"
+#include "checks.h"
 
 constexpr size_t MPH_SIZE = 1247;
 constexpr size_t SPH_SIZE = 1956;

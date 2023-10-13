@@ -31,28 +31,37 @@
 #include "sar/range_compression.cuh"
 #include "sar/range_doppler_algorithm.cuh"
 #include "sar/sar_chirp.h"
-#include "util/geo_tools.h"
-#include "util/img_output.h"
-#include "util/math_utils.h"
-#include "util/plot.h"
+#include "geo_tools.h"
+#include "img_output.h"
+#include "math_utils.h"
+#include "plot.h"
 
 struct IQ16 {
     int16_t i;
     int16_t q;
 };
 
-auto time_start() { return std::chrono::steady_clock::now(); }
+template <typename T>
+void ExceptionMessagePrint(const T& e) {
+    LOGE << "Caught an exception";
+    LOGE << e.what();
+    LOGE << "Exiting.";
+}
 
-void time_stop(std::chrono::steady_clock::time_point beg, const char* msg) {
+auto TimeStart() { return std::chrono::steady_clock::now(); }
+
+void TimeStop(std::chrono::steady_clock::time_point beg, const char* msg) {
     auto end = std::chrono::steady_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(end - beg).count();
     LOGD << msg << " time = " << diff << " ms";
 }
 
 int main(int argc, char* argv[]) {
+    std::string args_help{};
     try {
         const std::vector<char*> args_raw(argv, argv + argc);
         alus::asar::Args args(args_raw);
+        args_help = args.GetHelp();
         if (args.IsHelpRequested()) {
             std::cout << "asar-focus version " << VERSION_MAJOR << "." << VERSION_MINOR << "." << VERSION_PATCH
                       << std::endl;
@@ -63,7 +72,7 @@ int main(int argc, char* argv[]) {
         alus::asar::log::Initialize();
         alus::asar::log::SetLevel(args.GetLogLevel());
         LOGI << "asar-focus version " << VERSION_MAJOR << "." << VERSION_MINOR << "." << VERSION_PATCH;
-        auto file_time_start = time_start();
+        auto file_time_start = TimeStart();
         const auto in_path{args.GetInputDsPath()};
         const auto aux_path{args.GetAuxPath()};
         const auto orbit_path{args.GetOrbitPath()};
@@ -82,14 +91,17 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         fclose(fp);
+        TimeStop(file_time_start, "Input DS read and fetch");
+
 
         GDALAllRegister();
 
         SARMetadata metadata = {};
         ASARMetadata asar_meta = {};
-
+        file_time_start = TimeStart();
         auto orbit_source = alus::dorisorbit::Parsable::TryCreateFrom(orbit_path);
-
+        TimeStop(file_time_start, "Orbit file fetch");
+        file_time_start = TimeStart();
         std::vector<std::complex<float>> h_data;
         ParseIMFile(data, aux_path.data(), metadata, asar_meta, h_data, orbit_source);
 
@@ -111,7 +123,7 @@ int main(int argc, char* argv[]) {
             asar_meta.orbit_dataset_name = orbit_l1_metadata.orbit_name;
         }
 
-        time_stop(file_time_start, "LVL0 file read + parse");
+        TimeStop(file_time_start, "LVL0 file packet parse");
 
         std::string wif_name_base = asar_meta.product_name;
         wif_name_base.resize(wif_name_base.size() - 3);
@@ -135,7 +147,7 @@ int main(int argc, char* argv[]) {
 
         LOGD << "FFT paddings: rg  = " << rg_size << "->" << rg_padded << " az = " << az_size << "->" << az_padded;
 
-        auto gpu_transfer_start = time_start();
+        auto gpu_transfer_start = TimeStart();
         DevicePaddedImage img;
         img.InitPadded(rg_size, az_size, rg_padded, az_padded);
         img.ZeroMemory();
@@ -146,16 +158,16 @@ int main(int argc, char* argv[]) {
             CHECK_CUDA_ERR(cudaMemcpy(dest, src, rg_size * 8, cudaMemcpyHostToDevice));
         }
 
-        time_stop(gpu_transfer_start, "GPU image formation");
+        TimeStop(gpu_transfer_start, "GPU image formation");
 
-        auto correction_start = time_start();
+        auto correction_start = TimeStart();
         RawDataCorrection(img, {metadata.total_raw_samples}, metadata.results);
         img.ZeroNaNs();
-        time_stop(correction_start, "I/Q correction");
+        TimeStop(correction_start, "I/Q correction");
 
-        auto vr_start = time_start();
+        auto vr_start = TimeStart();
         metadata.results.Vr_poly = EstimateProcessingVelocity(metadata);
-        time_stop(vr_start, "Vr estimation");
+        TimeStop(vr_start, "Vr estimation");
 
         if (args.StorePlots()) {
             PlotArgs plot_args = {};
@@ -202,9 +214,9 @@ int main(int argc, char* argv[]) {
             WriteIntensityPaddedImg(img, path.c_str());
         }
 
-        auto dc_start = time_start();
+        auto dc_start = TimeStart();
         metadata.results.doppler_centroid_poly = CalculateDopplerCentroid(img, metadata.pulse_repetition_frequency);
-        time_stop(dc_start, "fractional DC estimation");
+        TimeStop(dc_start, "fractional DC estimation");
         if (args.StorePlots()) {
             PlotArgs plot_args = {};
             plot_args.out_path = std::string(args.GetOutputPath()) + "/" + wif_name_base + "_dc.html";
@@ -222,9 +234,9 @@ int main(int argc, char* argv[]) {
 
         CudaWorkspace d_workspace(img.TotalByteSize());
 
-        auto rc_start = time_start();
+        auto rc_start = TimeStart();
         RangeCompression(img, chirp, metadata.chirp.n_samples, d_workspace);
-        time_stop(rc_start, "Range compression");
+        TimeStop(rc_start, "Range compression");
 
         metadata.img.range_size = img.XSize();
 
@@ -234,13 +246,13 @@ int main(int argc, char* argv[]) {
             WriteIntensityPaddedImg(img, path.c_str());
         }
 
-        auto az_comp_start = time_start();
+        auto az_comp_start = TimeStart();
         DevicePaddedImage out;
         RangeDopplerAlgorithm(metadata, img, out, std::move(d_workspace));
 
         out.ZeroFillPaddings();
 
-        time_stop(az_comp_start, "Azimuth compression");
+        TimeStop(az_comp_start, "Azimuth compression");
         cudaDeviceSynchronize();
 
         if (args.StoreIntensity()) {
@@ -249,13 +261,13 @@ int main(int argc, char* argv[]) {
             WriteIntensityPaddedImg(out, path.c_str());
         }
 
-        auto cpu_transfer_start = time_start();
+        auto cpu_transfer_start = TimeStart();
         cufftComplex* res = new cufftComplex[out.XStride() * out.YStride()];
         out.CopyToHostPaddedSize(res);
 
-        time_stop(cpu_transfer_start, "Image GPU->CPU");
+        TimeStop(cpu_transfer_start, "Image GPU->CPU");
 
-        auto mds_formation = time_start();
+        auto mds_formation = TimeStart();
         MDS mds;
         mds.n_records = out.YSize();
         mds.record_size = out.XSize() * 4 + 12 + 1 + 4;
@@ -284,14 +296,21 @@ int main(int argc, char* argv[]) {
                 memcpy(&mds.buf[y * mds.record_size + 17], row.data(), row.size() * 4);
             }
         }
-        time_stop(mds_formation, "MDS construction");
+        TimeStop(mds_formation, "MDS construction");
 
-        auto file_write = time_start();
+        auto file_write = TimeStart();
         WriteLvl1(metadata, asar_meta, mds, args.GetOutputPath());
-        time_stop(file_write, "LVL1 file write");
-    } catch (const std::runtime_error& e) {
+        TimeStop(file_write, "LVL1 file write");
+    } catch (const boost::program_options::error& e) {
+        ExceptionMessagePrint(e);
+        std::cout << args_help << std::endl;
         exit(1);
+    } catch (const std::exception& e) {
+        ExceptionMessagePrint(e);
+        exit(2);
     } catch (...) {
+        LOGE << "Unknown exception occured";
+        LOGE << "Exiting";
         exit(2);
     }
 

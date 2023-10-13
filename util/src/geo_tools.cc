@@ -11,8 +11,6 @@
 
 #include "Eigen/Dense"
 
-#include "alus_log.h"
-
 GeoPos3D RangeDopplerGeoLocate(Velocity3D velocity, GeoPos3D position, GeoPos3D init_guess, double slant_range) {
     constexpr double a = 6378137.0;
     constexpr double b = 6356752.314245;
@@ -45,13 +43,11 @@ GeoPos3D RangeDopplerGeoLocate(Velocity3D velocity, GeoPos3D position, GeoPos3D 
         iter++;
 
         if (dx.norm() < 1e-6) {
-            // LOGV << "geocode iter = " << iter;
             return {result[0], result[1], result[2]};
         }
 
         if (iter > 100) {
-            LOGE << "failed to converge!";
-            exit(1);
+            throw std::runtime_error("Failed to converge for " + std::string(__FUNCTION__));
         }
     }
 }

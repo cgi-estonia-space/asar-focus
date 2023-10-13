@@ -16,9 +16,9 @@
 #include <boost/date_time/posix_time/posix_time_io.hpp>
 #include <boost/date_time/posix_time/ptime.hpp>
 
-#include "util/checks.h"
-#include "util/date_time_util.h"
-#include "util/filesystem_util.h"
+#include "checks.h"
+#include "date_time_util.h"
+#include "filesystem_util.h"
 
 namespace {
 constexpr std::string_view PROCESSOR_CONFIGURATION_ID{"CON"};
@@ -55,6 +55,9 @@ std::string GetPathFrom(std::string aux_root, boost::posix_time::ptime start, Ty
     const auto locale = std::locale(std::locale::classic(), timestamp_styling);
     std::string satellite_id{};
     for (const auto& f : file_list) {
+        if (f.has_extension()) {
+            continue;
+        }
         std::vector<std::string> items;
         boost::split(items, f.filename().string(), boost::is_any_of("_"), boost::token_compress_on);
 
@@ -67,7 +70,7 @@ std::string GetPathFrom(std::string aux_root, boost::posix_time::ptime start, Ty
         }
 
         const auto& current_sat_id = items.front();
-        if (current_sat_id != satellite_id) {
+        if (current_sat_id != satellite_id && current_sat_id != "DOR") {
             ERROR_EXIT("There are mixed satellite auxiliary files in the supplied aux folder - " + aux_root);
         }
 

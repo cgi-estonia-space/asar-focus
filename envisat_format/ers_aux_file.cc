@@ -14,7 +14,7 @@
 #include <boost/date_time/posix_time/ptime.hpp>
 
 #include "asar_aux.h"
-#include "util/checks.h"
+#include "checks.h"
 
 namespace {
     std::string DetermineFilePath(std::string aux_root, boost::posix_time::ptime start, alus::asar::aux::Type t) {

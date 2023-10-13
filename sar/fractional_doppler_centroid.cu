@@ -13,8 +13,8 @@
 
 #include "alus_log.h"
 #include "cuda_util/cuda_cleanup.h"
-#include "util/checks.h"
-#include "util/math_utils.h"
+#include "checks.h"
+#include "math_utils.h"
 
 namespace {
 constexpr int BLOCK_X_SIZE = 32;

@@ -8,7 +8,7 @@
  * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
  */
 
-#include "util/filesystem_util.h"
+#include "filesystem_util.h"
 
 namespace alus::util::filesystem {
 

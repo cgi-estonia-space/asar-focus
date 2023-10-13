@@ -16,7 +16,7 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include "envisat_lvl1_ads.h"
-#include "util/checks.h"
+#include "checks.h"
 
 // Utility functions to generate strings for MPH and SPH
 

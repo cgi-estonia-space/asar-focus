@@ -12,7 +12,7 @@
 #include "envisat_format/asar_aux.h"
 
 #include "alus_log.h"
-#include "util/checks.h"
+#include "checks.h"
 
 namespace {
     std::string DetermineFilePath(std::string aux_root, boost::posix_time::ptime start, alus::asar::aux::Type t) {

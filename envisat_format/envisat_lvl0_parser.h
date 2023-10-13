@@ -1,3 +1,12 @@
+/**
+* ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+*
+* ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+* Creative Commons Attribution-ShareAlike 4.0 International License.
+*
+* You should have received a copy of the license along with this
+* work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+ */
 #pragma once
 
 #include <string_view>
@@ -14,8 +23,8 @@
 #include "envisat_types.h"
 #include "sar/orbit_state_vector.h"
 #include "sar/sar_metadata.h"
-#include "util/geo_tools.h"
-#include "util/math_utils.h"
+#include "geo_tools.h"
+#include "math_utils.h"
 
 /**
  * Envisat LVL0 IM file parser, ex ASA_IM__0PNPDE20040111_085939_000000182023_00179_09752_2307.N1

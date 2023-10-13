@@ -16,8 +16,8 @@
 
 #include "alus_log.h"
 #include "sar_metadata.h"
-#include "util/geo_tools.h"
-#include "util/math_utils.h"
+#include "geo_tools.h"
+#include "math_utils.h"
 
 namespace {
 double SquareFitVr(const Eigen::VectorXd& xvals, const Eigen::VectorXd& yvals) {

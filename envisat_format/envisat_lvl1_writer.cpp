@@ -1,4 +1,12 @@
-
+/**
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+ *
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+ * Creative Commons Attribution-ShareAlike 4.0 International License.
+ *
+ * You should have received a copy of the license along with this
+ * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+ */
 #include "envisat_lvl1_writer.h"
 
 #include <filesystem>
@@ -6,8 +14,8 @@
 #include "alus_log.h"
 #include "asar_constants.h"
 #include "envisat_mph_sph_str_utils.h"
+#include "geo_tools.h"
 #include "sar/sar_metadata.h"
-#include "util/geo_tools.h"
 
 namespace {
 void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& asar_meta,
@@ -137,7 +145,7 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
 
     {
         for (int i = 0; i < 5; i++) {
-            int az_idx = (sar_meta.img.azimuth_size * i)/4;
+            int az_idx = (sar_meta.img.azimuth_size * i) / 4;
             auto time = CalcAzimuthTime(sar_meta, az_idx);
             auto iosv = InterpolateOrbit(sar_meta.osv, time);
 
@@ -195,7 +203,7 @@ void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, co
         constexpr double c = 299792458;
         double two_way_slant_time = 2 * (R / c) * 1e9;
         {
-            auto osv = InterpolateOrbit(sar_meta.osv, first); //TODO OSV fast time interpolation
+            auto osv = InterpolateOrbit(sar_meta.osv, first);  // TODO OSV fast time interpolation
             auto xyz = RangeDopplerGeoLocate({osv.x_vel, osv.y_vel, osv.z_vel}, {osv.x_pos, osv.y_pos, osv.z_pos},
                                              sar_meta.center_point, R);
             geo.first_line_tie_points.samp_numbers[i] = range_samp + 1;
@@ -366,10 +374,9 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
 
             static_assert(size == 521);
 
-
-            int step = sar_meta.img.azimuth_size / (n-1);
+            int step = sar_meta.img.azimuth_size / (n - 1);
             for (size_t i = 0; i < n; i++) {
-                int az_idx = i * sar_meta.img.azimuth_size / (n-1);
+                int az_idx = i * sar_meta.img.azimuth_size / (n - 1);
                 FillGeoLocationAds(az_idx, az_idx + step - 1, sar_meta, asar_meta, out.geolocation_grid[i]);
                 out.geolocation_grid[i].BSwap();
             }

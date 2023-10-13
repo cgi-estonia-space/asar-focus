@@ -9,7 +9,7 @@
 #include "envisat_lvl0_parser.h"
 #include "envisat_lvl1_ads.h"
 #include "envisat_mph_sph_str_utils.h"
-#include "util/checks.h"
+#include "checks.h"
 
 
 /**
