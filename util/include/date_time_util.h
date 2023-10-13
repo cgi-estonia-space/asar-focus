@@ -15,6 +15,7 @@
 
 namespace alus::util::date_time {
 
-    boost::posix_time::ptime YYYYMMDD(std::string str);
     boost::posix_time::ptime ParseDate(const std::string &date_string, std::locale format);
+    // 20040229_212504912000
+    boost::posix_time::ptime ToYyyyMmDd_HhMmSsFfffff(const std::string& date_string);
 }

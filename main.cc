@@ -96,6 +96,9 @@ int main(int argc, char* argv[]) {
 
         GDALAllRegister();
 
+        const auto sensing_start_filter = args.GetProcessSensingStart();
+        const auto sensing_end_filter = args.GetProcessSensingEnd();
+
         SARMetadata metadata = {};
         ASARMetadata asar_meta = {};
         file_time_start = TimeStart();

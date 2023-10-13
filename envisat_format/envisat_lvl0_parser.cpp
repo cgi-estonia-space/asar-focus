@@ -342,7 +342,6 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
             if (echo_meta.echo_flag) {
                 echo_meta.raw_data.reserve(echo_meta.echo_window_code);
                 size_t n_blocks = data_len / 64;
-
                 for (size_t i = 0; i < n_blocks; i++) {
                     const uint8_t* block_data = it + i * 64;
                     uint8_t block_id = block_data[0];

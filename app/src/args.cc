@@ -45,10 +45,11 @@ void Args::Construct() {
     ("output,o", po::value<std::string>(&output_path_)->required(), "Destination path for focussed dataset")
     ("type,t", po::value<std::string>(&focussed_product_type_)->required(), "Focussed product type")
     ("sensing_start", po::value<std::string>(&process_sensing_start_),
-        "Sensing start time <IN FORMAT>. If \"sensing_stop\" is not specified, product type based sensing duration is "
-        "added to start for the end time or until packets last.")
+        "Sensing start time in format '%Y%m%d_%H%M%S%F' e.g. 20040229_212504912000. "
+        "If \"sensing_stop\" is not specified, product type based sensing duration is used or until packets last.")
     ("sensing_stop", po::value<std::string>(&process_sensing_end_),
-        "Sensing stop time <IN FORMAT>. Requires \"sensing_start\" time to be specified.")
+        "Sensing stop time in format '%Y%m%d_%H%M%S%F' e.g. 20040229_212504912000. "
+        " Requires \"sensing_start\" time to be specified.")
     ("log", po::value<std::string>(&log_level_arg_)->default_value("verbose"),
         "Log level, one of the following - verbose|debug|info|warning|error");
 

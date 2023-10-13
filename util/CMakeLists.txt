@@ -28,5 +28,5 @@ set_target_properties(util-static
 )
 
 if (ALUS_ENABLE_TESTS)
-#    add_subdirectory(unit-test)
+    add_subdirectory(unit-test)
 endif ()
