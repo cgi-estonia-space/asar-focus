@@ -77,8 +77,6 @@ int main(int argc, char* argv[]) {
         LOGI << "asar-focus version " << VERSION_MAJOR << "." << VERSION_MINOR << "." << VERSION_PATCH;
         auto file_time_start = TimeStart();
         const auto in_path{args.GetInputDsPath()};
-        const auto aux_path{args.GetAuxPath()};
-        const auto orbit_path{args.GetOrbitPath()};
         FILE* fp = fopen(in_path.data(), "r");
         if (!fp) {
             LOGE << "Failed to open input - " << in_path;
@@ -101,7 +99,7 @@ int main(int argc, char* argv[]) {
         SARMetadata metadata = {};
         ASARMetadata asar_meta = {};
         file_time_start = TimeStart();
-        auto orbit_source = alus::dorisorbit::Parsable::TryCreateFrom(orbit_path);
+        auto orbit_source = alus::dorisorbit::Parsable::TryCreateFrom(args.GetOrbitPath());
         TimeStop(file_time_start, "Orbit file fetch");
         file_time_start = TimeStart();
         std::vector<std::complex<float>> h_data;
@@ -110,7 +108,10 @@ int main(int argc, char* argv[]) {
         alus::asar::mainflow::CheckAndLimitSensingStartEnd(asar_meta.sensing_start, asar_meta.sensing_stop,
                                                            args.GetProcessSensingStart(), args.GetProcessSensingEnd());
         alus::asar::mainflow::TryFetchOrbit(orbit_source, asar_meta, metadata);
-        ParseIMFile(data, aux_path.data(), metadata, asar_meta, h_data, product_type);
+        InstrumentFile ins_file{};
+        ConfigurationFile conf_file{};
+        alus::asar::mainflow::FetchAuxFiles(ins_file, conf_file, asar_meta, product_type, args.GetAuxPath());
+        ParseIMFile(data, metadata, asar_meta, h_data, product_type, ins_file);
 
         {
             const auto& orbit_l1_metadata = orbit_source.GetL1ProductMetadata();

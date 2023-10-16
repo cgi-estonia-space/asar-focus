@@ -17,6 +17,7 @@
 #include "boost/date_time/posix_time/posix_time.hpp"
 
 #include "envisat_format/doris_orbit.h"
+#include "envisat_format/envisat_aux_file.h"
 #include "envisat_format/envisat_lvl0_parser.h"
 #include "sar/sar_metadata.h"
 
@@ -29,5 +30,8 @@ void CheckAndLimitSensingStartEnd(boost::posix_time::ptime& product_sensing_star
 specification::ProductTypes TryDetermineProductType(std::string_view product_name);
 
 void TryFetchOrbit(alus::dorisorbit::Parsable& orbit_source, ASARMetadata& asar_meta, SARMetadata& sar_meta);
+
+void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, ASARMetadata& asar_meta,
+                   specification::ProductTypes product_type, std::string_view aux_path);
 
 }  // namespace alus::asar::mainflow

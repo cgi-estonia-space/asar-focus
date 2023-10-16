@@ -18,7 +18,6 @@
 #include "asar_constants.h"
 #include "envisat_aux_file.h"
 #include "envisat_mph_sph_str_utils.h"
-#include "ers_aux_file.h"
 #include "sar/orbit_state_vector.h"
 
 namespace {
@@ -133,9 +132,9 @@ int SwathIdx(const std::string& swath) {
 }
 }  // namespace
 
-void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMetadata& sar_meta,
+void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
                  ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data,
-                 alus::asar::specification::ProductTypes product_type) {
+                 alus::asar::specification::ProductTypes product_type, InstrumentFile& ins_file) {
 
     asar_meta.first_line_time = asar_meta.sensing_start;
     asar_meta.last_line_time = asar_meta.sensing_stop;
@@ -148,20 +147,6 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     LOGD << "ORBIT vectors end " << sar_meta.osv.back().time;
     CHECK_BOOL(asar_meta.sensing_start >= sar_meta.osv.front().time &&
                asar_meta.sensing_stop <= sar_meta.osv.back().time);
-
-    InstrumentFile ins_file = {};
-    ConfigurationFile conf_file = {};
-    if (product_type == alus::asar::specification::ProductTypes::ASA_IM0) {
-        FindINSFile(aux_path, asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
-        FindCONFile(aux_path, asar_meta.sensing_start, conf_file, asar_meta.configuration_file);
-    } else if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
-        alus::asar::envisat_format::FindINSFile(aux_path, asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
-        alus::asar::envisat_format::FindCONFile(aux_path, asar_meta.sensing_start, conf_file,
-                                                asar_meta.configuration_file);
-    } else {
-        LOGE << "WAT?";
-        exit(1);
-    }
 
     ProductHeader sph = {};
     sph.Load(file_data.data() + MPH_SIZE, SPH_SIZE);
@@ -310,8 +295,8 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
             if (echo_meta.echo_flag) {
                 echo_meta.raw_data.reserve(echo_meta.echo_window_code);
                 size_t n_blocks = data_len / 64;
-                for (size_t i = 0; i < n_blocks; i++) {
-                    const uint8_t* block_data = it + i * 64;
+                for (size_t bi = 0; bi < n_blocks; bi++) {
+                    const uint8_t* block_data = it + bi * 64;
                     uint8_t block_id = block_data[0];
                     for (size_t j = 0; j < 63; j++) {
                         uint8_t i_codeword = block_data[1 + j] >> 4;

@@ -9,9 +9,9 @@
  */
 #pragma once
 
-#include <boost/date_time/posix_time/posix_time.hpp>
 #include <filesystem>
-#include "envisat_lvl0_parser.h"
+
+#include "boost/date_time/posix_time/posix_time.hpp"
 
 #include "bswap_util.h"
 

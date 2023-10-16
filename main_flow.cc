@@ -16,6 +16,7 @@
 
 #include "alus_log.h"
 #include "date_time_util.h"
+#include "envisat_format/ers_aux_file.h"
 #include "status_assembly.h"
 
 namespace alus::asar::mainflow {
@@ -85,6 +86,21 @@ void TryFetchOrbit(alus::dorisorbit::Parsable& orbit_source, ASARMetadata& asar_
             LOGE << "Last OSV date - " << boost::posix_time::to_simple_string(sar_meta.osv.back().time);
         }
         exit(alus::asar::status::EXIT_CODE::INVALID_DATASET);
+    }
+}
+
+void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, ASARMetadata& asar_meta,
+                   specification::ProductTypes product_type, std::string_view aux_path) {
+    if (product_type == alus::asar::specification::ProductTypes::ASA_IM0) {
+        FindINSFile(std::string(aux_path), asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
+        FindCONFile(std::string(aux_path), asar_meta.sensing_start, conf_file, asar_meta.configuration_file);
+    } else if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
+        alus::asar::envisat_format::FindINSFile(std::string(aux_path), asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
+        alus::asar::envisat_format::FindCONFile(std::string(aux_path), asar_meta.sensing_start, conf_file,
+                                                asar_meta.configuration_file);
+    } else {
+        LOGE << "Implementation error for this type of product while trying to fetch auxiliary files";
+        exit(alus::asar::status::EXIT_CODE::ASSERT_FAILURE);
     }
 }
 
