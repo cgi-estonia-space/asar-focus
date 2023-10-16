@@ -110,6 +110,9 @@ int main(int argc, char* argv[]) {
         InstrumentFile ins_file{};
         ConfigurationFile conf_file{};
         alus::asar::mainflow::FetchAuxFiles(ins_file, conf_file, asar_meta, product_type, args.GetAuxPath());
+        const auto target_product_type =
+            alus::asar::specification::TryDetermineTargetProductFrom(product_type, args.GetFocussedProductType());
+        (void)target_product_type;
         ParseIMFile(data, metadata, asar_meta, h_data, product_type, ins_file);
 
         {
