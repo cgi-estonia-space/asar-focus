@@ -9,31 +9,28 @@
  */
 
 #include "envisat_aux_file.h"
-#include "envisat_format/asar_aux.h"
-
 #include "alus_log.h"
+#include "asar_aux.h"
 #include "checks.h"
 
 namespace {
-    std::string DetermineFilePath(std::string aux_root, boost::posix_time::ptime start, alus::asar::aux::Type t) {
-        if (!std::filesystem::exists(aux_root)) {
-            ERROR_EXIT("The auxiliary folder - " + aux_root + " - does not exist.");
-        }
-
-        // ASA_CON_AXVIEC20030909_000000_20020815_000000_20021017_130000
-        const auto file_path = alus::asar::aux::GetPathFrom(aux_root, start, t);
-        if (file_path.empty()) {
-            ERROR_EXIT("Could not find aux file for ENVISAT in " + aux_root);
-        }
-
-        return file_path;
+std::string DetermineFilePath(std::string aux_root, boost::posix_time::ptime start, alus::asar::aux::Type t) {
+    if (!std::filesystem::exists(aux_root)) {
+        ERROR_EXIT("The auxiliary folder - " + aux_root + " - does not exist.");
     }
+
+    // ASA_CON_AXVIEC20030909_000000_20020815_000000_20021017_130000
+    const auto file_path = alus::asar::aux::GetPathFrom(aux_root, start, t);
+    if (file_path.empty()) {
+        ERROR_EXIT("Could not find aux file for ENVISAT in " + aux_root);
+    }
+
+    return file_path;
 }
+}  // namespace
 
-
-void FindCONFile(std::string aux_root, boost::posix_time::ptime start, ConfigurationFile &conf_file,
-                 std::string &filename) {
-
+void FindCONFile(std::string aux_root, boost::posix_time::ptime start, ConfigurationFile& conf_file,
+                 std::string& filename) {
     const auto file_path = DetermineFilePath(aux_root, start, alus::asar::aux::Type::PROCESSOR_CONFIGURATION);
 
     // sizes: mph 1247, sph 378
@@ -42,7 +39,7 @@ void FindCONFile(std::string aux_root, boost::posix_time::ptime start, Configura
     static_assert(CONF_FILE_SIZE == sizeof(conf_file) + MPH_SPH_SIZE);
 
     std::vector<uint8_t> conf_data(CONF_FILE_SIZE);
-    FILE *fp = fopen(file_path.c_str(), "r");
+    FILE* fp = fopen(file_path.c_str(), "r");
     auto total = fread(conf_data.data(), 1, CONF_FILE_SIZE, fp);
 
     if (total != CONF_FILE_SIZE) {
@@ -56,9 +53,8 @@ void FindCONFile(std::string aux_root, boost::posix_time::ptime start, Configura
     filename = std::filesystem::path(file_path).filename();
 }
 
-void FindINSFile(std::string aux_root, boost::posix_time::ptime start, InstrumentFile &ins_file,
-                 std::string &filename) {
-
+void FindINSFile(std::string aux_root, boost::posix_time::ptime start, InstrumentFile& ins_file,
+                 std::string& filename) {
     const auto file_path = DetermineFilePath(aux_root, start, alus::asar::aux::Type::INSTRUMENT_CHARACTERIZATION);
     // ASA_INS_AXVIEC20020308_112323_20020301_000000_20021231_000000
 
@@ -71,7 +67,7 @@ void FindINSFile(std::string aux_root, boost::posix_time::ptime start, Instrumen
     std::vector<uint8_t> ins_data(INS_FILE_SIZE);
 
     LOGI << "Instrument file = " << file_path;
-    FILE *fp = fopen(file_path.c_str(), "r");
+    FILE* fp = fopen(file_path.c_str(), "r");
     auto total = fread(ins_data.data(), 1, INS_FILE_SIZE, fp);
 
     if (total != INS_FILE_SIZE) {

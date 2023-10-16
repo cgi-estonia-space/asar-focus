@@ -22,7 +22,7 @@
 #include <boost/date_time/posix_time/posix_time_io.hpp>
 #include <boost/date_time/posix_time/ptime.hpp>
 
-#include "envisat_format/envisat_mph_sph_parser.h"
+#include "envisat_mph_sph_parser.h"
 #include "checks.h"
 #include "filesystem_util.h"
 

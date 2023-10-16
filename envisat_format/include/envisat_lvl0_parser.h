@@ -21,7 +21,7 @@
 
 #include "asar_constants.h"
 #include "doris_orbit.h"
-#include "envisat_format/envisat_aux_file.h"
+#include "envisat_aux_file.h"
 #include "envisat_types.h"
 #include "sar/orbit_state_vector.h"
 #include "sar/sar_metadata.h"

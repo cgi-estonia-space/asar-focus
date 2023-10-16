@@ -13,7 +13,7 @@
 
 #include <boost/date_time/posix_time/posix_time.hpp>
 
-#include "envisat_format/envisat_aux_file.h"
+#include "envisat_aux_file.h"
 
 namespace alus::asar::envisat_format {
     void FindINSFile(std::string aux_root, boost::posix_time::ptime start, InstrumentFile& ins_file,

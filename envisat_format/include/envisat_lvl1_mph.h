@@ -1,4 +1,12 @@
-
+/**
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+ *
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+ * Creative Commons Attribution-ShareAlike 4.0 International License.
+ *
+ * You should have received a copy of the license along with this
+ * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+ */
 
 #pragma once
 
@@ -6,11 +14,10 @@
 
 #include <string.h>
 
+#include "checks.h"
 #include "envisat_lvl0_parser.h"
 #include "envisat_lvl1_ads.h"
 #include "envisat_mph_sph_str_utils.h"
-#include "checks.h"
-
 
 /**
  *  Memory layout struct for Envisat LVL1 MPH, intended for file writing

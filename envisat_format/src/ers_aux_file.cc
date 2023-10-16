@@ -7,7 +7,7 @@
 * You should have received a copy of the license along with this
 * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
 */
-#include "envisat_format/ers_aux_file.h"
+#include "ers_aux_file.h"
 
 #include <string>
 

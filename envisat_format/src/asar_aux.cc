@@ -7,7 +7,7 @@
  * You should have received a copy of the license along with this
  * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
  */
-#include "envisat_format/asar_aux.h"
+#include "asar_aux.h"
 
 #include <filesystem>
 #include <string_view>

@@ -12,11 +12,11 @@
 
 #include <optional>
 
-#include "boost/date_time/posix_time/posix_time.hpp"
+#include <boost/date_time/posix_time/posix_time.hpp>
 
 #include "alus_log.h"
 #include "date_time_util.h"
-#include "envisat_format/ers_aux_file.h"
+#include "ers_aux_file.h"
 #include "status_assembly.h"
 
 namespace alus::asar::mainflow {

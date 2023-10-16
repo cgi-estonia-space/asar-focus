@@ -20,16 +20,14 @@
 #include "VERSION"
 #include "alus_log.h"
 #include "args.h"
-#include "main_flow.h"
-#include "status_assembly.h"
-
+#include "asar_constants.h"
 #include "cuda_util/cufft_plan.h"
 #include "cuda_util/device_padded_image.cuh"
-#include "envisat_format/asar_constants.h"
-#include "envisat_format/envisat_aux_file.h"
-#include "envisat_format/envisat_lvl1_writer.h"
+#include "envisat_aux_file.h"
+#include "envisat_lvl1_writer.h"
 #include "geo_tools.h"
 #include "img_output.h"
+#include "main_flow.h"
 #include "math_utils.h"
 #include "plot.h"
 #include "sar/fractional_doppler_centroid.cuh"
@@ -38,6 +36,7 @@
 #include "sar/range_compression.cuh"
 #include "sar/range_doppler_algorithm.cuh"
 #include "sar/sar_chirp.h"
+#include "status_assembly.h"
 
 struct IQ16 {
     int16_t i;
