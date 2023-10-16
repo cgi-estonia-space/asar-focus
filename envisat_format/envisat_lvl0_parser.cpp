@@ -135,44 +135,15 @@ int SwathIdx(const std::string& swath) {
 
 void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMetadata& sar_meta,
                  ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data,
-                 alus::dorisorbit::Parsable& orbit_source) {
-    ProductHeader mph = {};
-
-    mph.Load(file_data.data(), MPH_SIZE);
-
-    // LOGV << "Lvl1MPH =";
-    // mph.PrintValues();
-
-    asar_meta.product_name = mph.Get("PRODUCT");
-
-    alus::asar::specification::ProductTypes product_type =
-        alus::asar::specification::GetProductTypeFrom(asar_meta.product_name);
-
-    if (product_type == alus::asar::specification::ProductTypes::UNIDENTIFIED) {
-        ERROR_EXIT("This product is not supported - " + asar_meta.product_name);
-    }
-
-    asar_meta.sensing_start = StrToPtime(mph.Get("SENSING_START"));
-    asar_meta.sensing_stop = StrToPtime(mph.Get("SENSING_STOP"));
+                 alus::asar::specification::ProductTypes product_type) {
 
     asar_meta.first_line_time = asar_meta.sensing_start;
     asar_meta.last_line_time = asar_meta.sensing_stop;
 
-    sar_meta.osv = orbit_source.CreateOrbitInfo(asar_meta.sensing_start, asar_meta.sensing_stop);
-
-    if (sar_meta.osv.size() < 8) {
-        std::string msg = "Wrong date on orbit file?\nOSV start/end = ";
-        if (sar_meta.osv.size() > 1) {
-            msg += boost::posix_time::to_simple_string(sar_meta.osv.front().time) + " / ";
-            msg += boost::posix_time::to_simple_string(sar_meta.osv.back().time);
-        }
-        msg += " Sensing start = " + boost::posix_time::to_simple_string(asar_meta.sensing_start) + "\n";
-        ERROR_EXIT(msg);
-    }
-
     LOGD << "Product name = " << asar_meta.product_name;
     LOGD << "SENSING START " << asar_meta.sensing_start;
     LOGD << "SENSIND END " << asar_meta.sensing_stop;
+    CHECK_BOOL(sar_meta.osv.size() > 8);
     LOGD << "ORBIT vectors start " << sar_meta.osv.front().time;
     LOGD << "ORBIT vectors end " << sar_meta.osv.back().time;
     CHECK_BOOL(asar_meta.sensing_start >= sar_meta.osv.front().time &&
@@ -205,14 +176,11 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
 
     asar_meta.ascending = asar_meta.start_nadir_lat < asar_meta.stop_nadir_lat;
 
-    asar_meta.product_name = mph.Get("PRODUCT");
     asar_meta.swath = sph.Get("SWATH");
 
     int swath_idx = SwathIdx(asar_meta.swath);
     LOGD << "Swath = " << asar_meta.swath << " idx = " << swath_idx;
 
-    asar_meta.acquistion_station = mph.Get("ACQUISITION_STATION");
-    asar_meta.processing_station = mph.Get("PROC_CENTER");
     asar_meta.polarization = sph.Get("TX_RX_POLAR");
 
     auto dsds = ExtractDSDs(sph);
@@ -611,4 +579,22 @@ void ParseIMFile(const std::vector<char>& file_data, const char* aux_path, SARMe
     sar_meta.azimuth_bandwidth_fraction = 0.8f;
     auto llh = xyz2geoWGS84(sar_meta.center_point);
     LOGD << "center point = " << llh.latitude << " " << llh.longitude;
+}
+
+namespace alus::asar::envformat {
+
+void ParseLevel0Header(const std::vector<char>& file_data, ASARMetadata& asar_meta) {
+    ProductHeader mph = {};
+
+    mph.Load(file_data.data(), MPH_SIZE);
+
+    // LOGV << "Lvl1MPH =";
+    // mph.PrintValues();
+
+    asar_meta.product_name = mph.Get("PRODUCT");
+    asar_meta.sensing_start = StrToPtime(mph.Get("SENSING_START"));
+    asar_meta.sensing_stop = StrToPtime(mph.Get("SENSING_STOP"));
+    asar_meta.acquistion_station = mph.Get("ACQUISITION_STATION");
+    asar_meta.processing_station = mph.Get("PROC_CENTER");
+}
 }

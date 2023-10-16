@@ -19,6 +19,7 @@
 #include <map>
 #include <variant>
 
+#include "asar_constants.h"
 #include "doris_orbit.h"
 #include "envisat_types.h"
 #include "sar/orbit_state_vector.h"
@@ -125,4 +126,9 @@ struct ASARMetadata {
 
 void ParseIMFile(const std::vector<char> &file_data, const char *aux_pax, SARMetadata &sar_meta,
                  ASARMetadata &asar_meta, std::vector<std::complex<float>> &img_data,
-                 alus::dorisorbit::Parsable &orbit_source);
+                 alus::asar::specification::ProductTypes product_type);
+
+namespace alus::asar::envformat {
+
+void ParseLevel0Header(const std::vector<char>& file_data, ASARMetadata& asar_meta);
+}

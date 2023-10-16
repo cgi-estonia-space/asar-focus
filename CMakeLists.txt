@@ -59,7 +59,7 @@ set(CUDA_UTIL_SOURCES
         )
 
 set(SOURCES
-        main.cc ${ENVISAT_FORMAT_FILES} ${SAR_SOURCES} ${CUDA_UTIL_SOURCES}
+        main.cc main_flow.cc ${ENVISAT_FORMAT_FILES} ${SAR_SOURCES} ${CUDA_UTIL_SOURCES}
 )
 
 add_executable(asar_focus ${SOURCES})

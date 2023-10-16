@@ -20,21 +20,24 @@
 #include "VERSION"
 #include "alus_log.h"
 #include "args.h"
+#include "main_flow.h"
+#include "status_assembly.h"
 
 #include "cuda_util/cufft_plan.h"
 #include "cuda_util/device_padded_image.cuh"
+#include "envisat_format/asar_constants.h"
 #include "envisat_format/envisat_aux_file.h"
 #include "envisat_format/envisat_lvl1_writer.h"
+#include "geo_tools.h"
+#include "img_output.h"
+#include "math_utils.h"
+#include "plot.h"
 #include "sar/fractional_doppler_centroid.cuh"
 #include "sar/iq_correction.cuh"
 #include "sar/processing_velocity_estimation.h"
 #include "sar/range_compression.cuh"
 #include "sar/range_doppler_algorithm.cuh"
 #include "sar/sar_chirp.h"
-#include "geo_tools.h"
-#include "img_output.h"
-#include "math_utils.h"
-#include "plot.h"
 
 struct IQ16 {
     int16_t i;
@@ -93,11 +96,7 @@ int main(int argc, char* argv[]) {
         fclose(fp);
         TimeStop(file_time_start, "Input DS read and fetch");
 
-
         GDALAllRegister();
-
-        const auto sensing_start_filter = args.GetProcessSensingStart();
-        const auto sensing_end_filter = args.GetProcessSensingEnd();
 
         SARMetadata metadata = {};
         ASARMetadata asar_meta = {};
@@ -106,7 +105,12 @@ int main(int argc, char* argv[]) {
         TimeStop(file_time_start, "Orbit file fetch");
         file_time_start = TimeStart();
         std::vector<std::complex<float>> h_data;
-        ParseIMFile(data, aux_path.data(), metadata, asar_meta, h_data, orbit_source);
+        alus::asar::envformat::ParseLevel0Header(data, asar_meta);
+        const auto product_type = alus::asar::mainflow::TryDetermineProductType(asar_meta.product_name);
+        alus::asar::mainflow::CheckAndLimitSensingStartEnd(asar_meta.sensing_start, asar_meta.sensing_stop,
+                                                           args.GetProcessSensingStart(), args.GetProcessSensingEnd());
+        alus::asar::mainflow::TryFetchOrbit(orbit_source, asar_meta, metadata);
+        ParseIMFile(data, aux_path.data(), metadata, asar_meta, h_data, product_type);
 
         {
             const auto& orbit_l1_metadata = orbit_source.GetL1ProductMetadata();
