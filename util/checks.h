@@ -1,9 +1,19 @@
-
+/**
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+ *
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+ * Creative Commons Attribution-ShareAlike 4.0 International License.
+ *
+ * You should have received a copy of the license along with this
+ * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+ */
 #pragma once
 
 #include <cufft.h>
 
 #include <stdexcept>
+
+#include "alus_log.h"
 
 #ifndef __NVCC__
 #include <gdal/gdal_priv.h>
@@ -124,7 +134,7 @@ inline void CheckCufftSize(size_t workspace_size, cufftHandle plan) {
 
 inline void VerifyBool(bool cond, const char* file, int line) {
     if (!cond) {
-        printf("error  file = %s , line = %d\n", file, line);
+        LOGE << "error  file = " << file << " line = " << line;
         exit(1);
     }
 }
@@ -132,6 +142,6 @@ inline void VerifyBool(bool cond, const char* file, int line) {
 #define ERROR_EXIT(msg) ErrorExit(msg, __FILE__, __LINE__)
 
 [[noreturn]] inline void ErrorExit(std::string msg, const char* file, int line) {
-    printf("error msg = %s , file = %s , line = %d\n", msg.c_str(), file, line);
+    LOGE << "error msg = " << msg << " file = " << file << " line = " << line;
     exit(1);
 }

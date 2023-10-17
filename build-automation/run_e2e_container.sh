@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Simply builds the repository
+# E2E tests on a prepared container image and Skript files.
 
 set -e
 

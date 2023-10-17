@@ -1,9 +1,17 @@
-
-
+/**
+* ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+*
+* ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+* Creative Commons Attribution-ShareAlike 4.0 International License.
+*
+* You should have received a copy of the license along with this
+* work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+*/
 #include "geo_tools.h"
 
-#include <eigen3/Eigen/Dense>
-#include <iostream>
+#include "Eigen/Dense"
+
+#include "alus_log.h"
 
 GeoPos3D RangeDopplerGeoLocate(Velocity3D velocity, GeoPos3D position, GeoPos3D init_guess, double slant_range) {
     constexpr double a = 6378137.0;
@@ -37,12 +45,12 @@ GeoPos3D RangeDopplerGeoLocate(Velocity3D velocity, GeoPos3D position, GeoPos3D 
         iter++;
 
         if (dx.norm() < 1e-6) {
-            // printf("geocode iter = %d\n", iter);
+            // LOGV << "geocode iter = " << iter;
             return {result[0], result[1], result[2]};
         }
 
         if (iter > 100) {
-            printf("failed to converge!\n");
+            LOGE << "failed to converge!";
             exit(1);
         }
     }

@@ -1,9 +1,17 @@
-
-
+/**
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+ *
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+ * Creative Commons Attribution-ShareAlike 4.0 International License.
+ *
+ * You should have received a copy of the license along with this
+ * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+ */
 #include "iq_correction.cuh"
 
 #include <numeric>
 
+#include "alus_log.h"
 #include "cuda_util/cuda_cleanup.h"
 #include "util/checks.h"
 
@@ -253,7 +261,7 @@ void RawDataCorrection(DevicePaddedImage& img, CorrectionParams par, SARResults&
             CorrectDCBias<<<grid_sz, block_sz>>>(img.Data(), x_size, y_size, i_dc, q_dc);
         }
 
-        printf("DC bias = %f %f\n", i_dc, q_dc);
+        LOGD << "DC bias = " << i_dc << " " << q_dc;
 
         results.dc_i = i_dc;
         results.dc_q = q_dc;
@@ -306,7 +314,7 @@ void RawDataCorrection(DevicePaddedImage& img, CorrectionParams par, SARResults&
 
         double deg_misconf = 360 * quad_misconf / (2 * M_PI);
 
-        printf("quad misconf = %f\n", deg_misconf);
+        LOGD << "quad misconf = " << deg_misconf;
         results.phase_error = deg_misconf;
         {
             dim3 block_sz(16, 16);

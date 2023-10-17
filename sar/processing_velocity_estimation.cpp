@@ -1,8 +1,20 @@
+/**
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+ *
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+ * Creative Commons Attribution-ShareAlike 4.0 International License.
+ *
+ * You should have received a copy of the license along with this
+ * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+ */
 #include "processing_velocity_estimation.h"
 
-#include <eigen3/Eigen/Core>
-#include <eigen3/Eigen/Dense>
+#include <sstream>
 
+#include "Eigen/Core"
+#include "Eigen/Dense"
+
+#include "alus_log.h"
 #include "sar_metadata.h"
 #include "util/geo_tools.h"
 #include "util/math_utils.h"
@@ -103,19 +115,27 @@ std::vector<double> EstimateProcessingVelocity(const SARMetadata& metadata) {
 
     auto Vr_poly = Polyfit(idx_vec, Vr_results, POLY_ORDER);
 
-    printf("Vr result(range sample - m/s):\n");
+    LOGV << "Vr result(range sample - m/s):";
+    std::stringstream stream;
+    char printf_buf[50];
     for (int i = 0; i < N_Vr_CALC; i++) {
         if (i && (i % 4) == 0) {
-            printf("\n");
+            LOGV << stream.str();
+            stream.str("");
+            stream.clear();
         }
-        printf("(%5d - %5.2f ) ", static_cast<int>(idx_vec.at(i)), Vr_results.at(i));
+        snprintf(printf_buf, 50, "(%5d - %5.2f ) ", static_cast<int>(idx_vec.at(i)), Vr_results.at(i));
+        stream << printf_buf;
     }
+    LOGV << stream.str();
+    stream.clear();
 
-    printf("\nFitted polynomial\n");
+    LOGV << "Fitted polynomial";
     for (double e : Vr_poly) {
-        printf("%g ", e);
+        snprintf(printf_buf, 50, "%g ", e);
+        stream << printf_buf;
     }
-    printf("\n");
+    LOGV << stream.str();
 
     return Vr_poly;
 }

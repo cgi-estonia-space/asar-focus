@@ -1,5 +1,15 @@
+/**
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+ *
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+ * Creative Commons Attribution-ShareAlike 4.0 International License.
+ *
+ * You should have received a copy of the license along with this
+ * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+ */
 #pragma once
 
+#include <cstdio>
 #include <cstdlib>
 #include <string>
 
@@ -29,9 +39,8 @@ void ClearSpare(uc (&arr)[N]) {
 template <size_t N>
 void CopyStr(uc (&arr)[N], const std::string& s) {
     if (N != s.size()) {
-        printf("sizes dest src = %zu %zu\n", N, s.size());
-        printf("BAD STRING!? = %s\n", s.c_str());
-        CHECK_BOOL(false);
+        throw std::runtime_error("Invalid ENVISAT string format supplied for input '" + s + "' shall be " +
+                                 std::to_string(N) + " characters long");
     }
     memcpy(&arr[0], s.data(), N);
 }
@@ -58,51 +67,52 @@ void SetChar(uc (&arr)[N], const char* keyword, char value) {
 
 inline std::string ToAs(int val) {
     char buf[20];
-    snprintf(buf, 20, "%+06d", val); // Sign specifier counts as additional integer part count.
+    snprintf(buf, 20, "%+06d", val);  // Sign specifier counts as additional integer part count.
     return buf;
 }
 
 inline std::string ToAl(int val) {
     char buf[20];
-    snprintf(buf, 20, "%+011d", val); // Sign specifier counts as additional integer part count.
+    snprintf(buf, 20, "%+011d", val);  // Sign specifier counts as additional integer part count.
     return buf;
 }
 
 inline std::string ToAc(int val) {
     char buf[20];
-    snprintf(buf, 20, "%+04d", val); // Sign specifier counts as additional integer part count.
+    snprintf(buf, 20, "%+04d", val);  // Sign specifier counts as additional integer part count.
     return buf;
 }
 
 inline std::string ToAd(int64_t val) {
     char buf[30];
-    snprintf(buf, 30, "%+021ld", val); // Sign specifier counts as additional integer part count.
+    snprintf(buf, 30, "%+021ld", val);  // Sign specifier counts as additional integer part count.
     return buf;
 }
 
 inline std::string ToAdo06(double val) {
     // TODO - Something should check if integer part is 0 actually.
-    char buf[10]; // printf() somehow always inserts the integer part as well.
+    char buf[10];  // printf() somehow always inserts the integer part as well.
     snprintf(buf, 10, "%+.6f", val);
-    memcpy(buf + 1, buf + 2, 8); // Replace integer part
+    memmove(buf + 1, buf + 2, 8);  // Replace integer part
     return buf;
 }
 
 inline std::string ToAdo73(double val) {
     char buf[20];
-    snprintf(buf, 20, "%+012.3f", val); // Sign specifier counts as additional integer part count.
+    snprintf(buf, 20, "%+012.3f", val);  // Sign specifier counts as additional integer part count.
     return buf;
 }
 
 inline std::string ToAdo46(double val) {
     char buf[20];
-    snprintf(buf, 20, "%+012.6f", val); // Sign specifier counts as additional integer part count.
+    snprintf(buf, 20, "%+012.6f", val);  // Sign specifier counts as additional integer part count.
     return buf;
 }
 
 inline std::string ToAfl(float val) {
     char buf[20];
     float exp = log10f(val);
+    (void)exp;
     snprintf(buf, 20, "%+.8E", val);
     return buf;
 }
@@ -196,4 +206,3 @@ inline std::string PtimeToStr(boost::posix_time::ptime time) {
     for (auto& e : str) e = toupper(e);
     return str;
 }
-

@@ -1,17 +1,16 @@
 name: Release package creation
 
 on:
-  pull_request:
+  push:
     branches: [ "main" ]
-    max-concurrency: 1
+    max-concurrency: 3
   # Allows to run this workflow manually from the Actions tab
   workflow_dispatch:
-    max-concurrency: 1
+    max-concurrency: 3
 
 env:
   CI_PACKAGE_NAME: asar_focus_runner_${{github.run_number}}
 
-# For 'trigger_instance' - tty=$(readlink /proc/$$/fd/2) - possibly needed in the future, add $tty to tee command.
 jobs:
   package-repo:
     name: Release builds
@@ -37,4 +36,4 @@ jobs:
         with:
           name: ${{ env.CI_PACKAGE_NAME }}
           path: ${{ env.package_path }}
-          retention-days: 3
+          retention-days: 5

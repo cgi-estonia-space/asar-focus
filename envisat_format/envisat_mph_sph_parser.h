@@ -1,8 +1,16 @@
+/**
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+ *
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+ * Creative Commons Attribution-ShareAlike 4.0 International License.
+ *
+ * You should have received a copy of the license along with this
+ * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+ */
 #pragma once
 
 #include <boost/algorithm/string.hpp>
 #include <cstdlib>
-#include <iostream>
 #include <string>
 
 #include "util/checks.h"
@@ -20,11 +28,6 @@ struct DSD_lvl0 {
     size_t ds_size;
     size_t num_dsr;
     size_t dsr_size;
-
-    void print() {
-        printf("DSD name %s type = %s fn = %s offset = %zu , ds_size = %zu,  ndsr = %zu size = %zu\n", ds_name.c_str(),
-               ds_type.c_str(), filename.c_str(), ds_offset, ds_size, num_dsr, dsr_size);
-    }
 };
 
 class ProductHeader {
@@ -62,12 +65,6 @@ public:
 
     const auto& GetIdx(size_t idx) { return kv_vec_.at(idx); }
 
-    void PrintValues() {
-        for (const auto& e : kv_vec_) {
-            std::cout << e.key << " | = | " << e.value << "\n";
-        }
-    }
-
     const char* Data() const { return copy_.c_str(); }
 
 private:
@@ -94,6 +91,7 @@ inline size_t extract_bytes(const std::string& in) {
 inline size_t extract_num(const std::string& in) {
     auto idx = in.find('=');
     auto idx_end = in.find("<bytes>");
+    (void)idx_end;
     for (size_t i = idx; i < in.size(); i++) {
         if (in[i] >= '1' && in[i] <= '9') {
             return std::stoul(in.substr(i, in.size()));
@@ -114,7 +112,6 @@ inline std::vector<DSD_lvl0> ExtractDSDs(const ProductHeader& sph) {
         if (tokens.size() < 6) {
             continue;
         }
-        // std::cout << tokens[0] << "\n";
         DSD_lvl0 dsd = {};
         dsd.ds_name = tokens.at(0);
         dsd.ds_type = tokens.at(1);
@@ -125,7 +122,6 @@ inline std::vector<DSD_lvl0> ExtractDSDs(const ProductHeader& sph) {
         dsd.dsr_size = extract_bytes(tokens.at(6));
 
         res.push_back(dsd);
-        // dsd.print();
     }
 
     return res;

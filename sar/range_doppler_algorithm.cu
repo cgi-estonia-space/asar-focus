@@ -1,3 +1,12 @@
+/**
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+ *
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+ * Creative Commons Attribution-ShareAlike 4.0 International License.
+ *
+ * You should have received a copy of the license along with this
+ * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+ */
 #include "range_doppler_algorithm.cuh"
 
 #include "cuda_util/cuda_cleanup.h"
@@ -324,8 +333,8 @@ void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_i
 
     // double dc = CalcDopplerCentroid(metadata, metadata.img.range_size / 2);
 
-    // printf("KARGS prf = %f\n", k_args.prf);
-    // LOGD << "Doppler centroid steps = " << k_args.dc_steps;
+    // LOGV << "KARGS prf = " << k_args.prf;
+    // LOGV << "Doppler centroid steps = " << k_args.dc_steps;
 
     // give d_workspace memory to out_img
     out_img.InitExtPtr(src_img.XSize(), src_img.YSize(), src_img.XStride(), src_img.YStride(), d_workspace);

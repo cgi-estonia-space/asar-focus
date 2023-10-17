@@ -3,6 +3,7 @@
 
 #include <filesystem>
 
+#include "alus_log.h"
 #include "asar_constants.h"
 #include "envisat_mph_sph_str_utils.h"
 #include "sar/sar_metadata.h"
@@ -220,7 +221,7 @@ void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, co
 }
 }  // namespace
 
-void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& mds) {
+void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& mds, std::string_view result_dir) {
     EnvisatIMS out = {};
 
     static_assert(__builtin_offsetof(EnvisatIMS, main_processing_params) == 7516);
@@ -391,12 +392,12 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
         sph.dsds[17].SetReferenceDSD("ORBIT STATE VECTOR 1", asar_meta.orbit_dataset_name);
     }
 
-    std::string out_path = "/tmp/" + out_name;
+    std::string out_path = std::string(result_dir) + "/" + out_name;
     FILE* fp = fopen(out_path.c_str(), "w");
 
     fwrite(&out, sizeof(out), 1, fp);
     fwrite(mds.buf, mds.record_size, mds.n_records, fp);
     fclose(fp);
 
-    printf("File written = %s!\n", out_path.c_str());
+    LOGI << "Focussed product saved at " << out_path;
 }

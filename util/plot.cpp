@@ -1,10 +1,21 @@
+/**
+* ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+*
+* ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+* Creative Commons Attribution-ShareAlike 4.0 International License.
+*
+* You should have received a copy of the license along with this
+* work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+*/
+
 #include "plot.h"
 
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 
 #include <boost/algorithm/string.hpp>
+
+#include "alus_log.h"
 
 namespace {
 const char* HTML_TEMPLATE = R"foo(
@@ -38,17 +49,17 @@ void Plot(const PlotArgs& graph) {
     std::string base_html(HTML_TEMPLATE);
     std::stringstream data;
 
-    for (int i = 0; i < graph.data.size(); i++) {
+    for (auto i{0u}; i < graph.data.size(); i++) {
         auto& line = graph.data[i];
         data << "{x:[";
-        for (int j = 0; j < line.x.size(); j++) {
+        for (auto j{0u}; j < line.x.size(); j++) {
             data << line.x[j];
             if (j + 1 != line.x.size()) {
                 data << ",";
             }
         }
         data << "],y:[";
-        for (int j = 0; j < line.y.size(); j++) {
+        for (auto j{0u}; j < line.y.size(); j++) {
             data << line.y[j];
             if (j + 1 != line.y.size()) {
                 data << ",";
@@ -72,5 +83,5 @@ void Plot(const PlotArgs& graph) {
 
     std::ofstream ofs(graph.out_path);
     ofs << base_html;
-    printf("Output plot @ %s\n", graph.out_path.c_str());
+    LOGI << "Output plot at " <<  graph.out_path;
 }

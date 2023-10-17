@@ -37,6 +37,10 @@ fi
 container_name="${image_name}-${repo_folder_name}"
 container_work_dir="/root/"
 docker pull "${docker_image}"
+set +e
+docker stop "${container_name}"
+docker rm "${container_name}"
+set -e
 docker run -t -d --name "${container_name}" "${docker_image}"
 docker cp "${repo_dir}" "${container_name}":"${container_work_dir}/"
 container_work_dir_repo="${container_work_dir}/${repo_folder_name}"

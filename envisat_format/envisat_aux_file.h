@@ -1,8 +1,16 @@
+/**
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+ *
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+ * Creative Commons Attribution-ShareAlike 4.0 International License.
+ *
+ * You should have received a copy of the license along with this
+ * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+ */
 #pragma once
 
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <filesystem>
-#include <iostream>
 #include "envisat_lvl0_parser.h"
 
 #include "bswap_util.h"
@@ -528,18 +536,19 @@ struct __attribute__((packed)) ConfigurationFile {
         exp_gm1_std_dev = bswap(exp_gm1_std_dev);
         input_mean = bswap(input_mean);
         input_std_dev = bswap(input_std_dev);
-        look_conf_tresh[2] = bswap(look_conf_tresh[2]);
+        BSWAP_ARR(look_conf_tresh);
         inter_look_conf_thresh = bswap(inter_look_conf_thresh);
         az_cutoff_thresh = bswap(az_cutoff_thresh);
         az_cutoff_iterations_thresh = bswap(az_cutoff_iterations_thresh);
         phs_peak_thresh = bswap(phs_peak_thresh);
         phs_cross_thresh = bswap(phs_cross_thresh);
-        uc spare_2[64];
 
-        uc apply_gain_corr_flag;
-        uc apply_gc_cal_p2_flag;
-        uc apply_gc_delay_cal_p2_flag;
-        uc spare_3[65];
+        // Below fields are char arrays, not need to be swapped
+        // uc spare_2[64];
+        //        uc apply_gain_corr_flag;
+        //        uc apply_gc_cal_p2_flag;
+        //        uc apply_gc_delay_cal_p2_flag;
+        //        uc spare_3[65];
 
         BSWAP_ARR(chirp_val_im);
         BSWAP_ARR(chirp_val_ap);
@@ -699,4 +708,5 @@ static_assert(offsetof(ConfigurationFile, spare_7) == 3130);
 static_assert(sizeof(ConfigurationFile) == 4096);
 
 void FindINSFile(std::string aux_root, boost::posix_time::ptime start, InstrumentFile& ins_file, std::string& filename);
-void FindCONFile(std::string aux_root, boost::posix_time::ptime start, ConfigurationFile& ins_file, std::string& filename);
+void FindCONFile(std::string aux_root, boost::posix_time::ptime start, ConfigurationFile& ins_file,
+                 std::string& filename);

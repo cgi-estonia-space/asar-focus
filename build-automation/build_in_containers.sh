@@ -16,6 +16,12 @@ if [ ! -d "$1" ] || [ ! -d "$2" ]; then
     exit 1
 fi
 
+# Do not return failure if tests fail, let them all run and return status in the end.
+if [ -n "$ALUS_ENABLE_TESTS" ]; then
+  set +e
+fi
+
+status=0
 # Iterate through Docker images (starting from the 3rd argument)
 for ((i = 3; i <= $#; i++)); do
     docker_image="${!i}"  # Get the argument by index
@@ -24,5 +30,9 @@ for ((i = 3; i <= $#; i++)); do
     if [ -n "$docker_image" ]; then
         echo "Building on Docker image: $docker_image"
         ./compile_build_container.sh "$1" "$2" "${docker_image}"
+        last_result=$?
+        status=$((status | last_result))
     fi
 done
+
+exit $status

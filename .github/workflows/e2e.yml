@@ -67,6 +67,7 @@ jobs:
         run: |
           instance_ip=${{ needs.start-gpu-instance.outputs.instance_ip }}
           exe_image_name="alus-ootpa-devel-extra-asar-focus-exe"
+          # JFYI
           exe_container_name="alus-ootpa-devel-extra-asar-focus-exe-e2e"
           echo "[default]" > /tmp/cred
           echo "aws_access_key_id=${ACCESS_KEY_ID}" >> /tmp/cred
