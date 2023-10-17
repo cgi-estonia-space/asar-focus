@@ -136,9 +136,6 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
                  ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data,
                  alus::asar::specification::ProductTypes product_type, InstrumentFile& ins_file) {
 
-    asar_meta.first_line_time = asar_meta.sensing_start;
-    asar_meta.last_line_time = asar_meta.sensing_stop;
-
     LOGD << "Product name = " << asar_meta.product_name;
     LOGD << "SENSING START " << asar_meta.sensing_start;
     LOGD << "SENSIND END " << asar_meta.sensing_stop;
@@ -199,17 +196,26 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
         asar_meta.compression_metadata.per_cal_ratio = "";        // TBD
     }
 
+    const auto start_filter_mjd = PtimeToMjd(asar_meta.sensing_start);
+    const auto end_filter_mjd = PtimeToMjd(asar_meta.sensing_stop);
     std::vector<EchoMeta> echos;
     for (size_t i = 0; i < mdsr.num_dsr; i++) {
         EchoMeta echo_meta = {};
         // Source: ENVISAT-1 ASAR INTERPRETATION OF SOURCE PACKET DATA
         // PO-TN-MMS-SR-0248
         it = CopyBSwapPOD(echo_meta.isp_sensing_time, it);
-
         FEPAnnotations fep;
         it = CopyBSwapPOD(fep, it);
 
         if (product_type == alus::asar::specification::ProductTypes::ASA_IM0) {
+            if (echo_meta.isp_sensing_time < start_filter_mjd) {
+                it += fep.isp_length + 29;
+                continue;
+            }
+            if (echo_meta.isp_sensing_time > end_filter_mjd) {
+                it += fep.isp_length + 29;
+                continue;
+            }
             uint16_t packet_id;
             it = CopyBSwapPOD(packet_id, it);
 
@@ -313,6 +319,14 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
 
             it += (fep.isp_length - 29);
         } else if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
+            if (echo_meta.isp_sensing_time < start_filter_mjd) {
+                it += 234 + 11232;
+                continue;
+            }
+            if (echo_meta.isp_sensing_time > end_filter_mjd) {
+                it += 234 + 11232;
+                continue;
+            }
             static uint32_t last_data_record_no{0};
             uint32_t dr_no{};
             it = CopyBSwapPOD(dr_no, it);
@@ -428,6 +442,9 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
     }
 
     asar_meta.swst_changes = swst_changes;
+
+    asar_meta.first_line_time = MjdToPtime(echos.front().isp_sensing_time);
+    asar_meta.last_line_time = MjdToPtime(echos.back().isp_sensing_time);
 
     double pulse_bw = 16e6 / 255 * echos.front().chirp_pulse_bw_code;
 

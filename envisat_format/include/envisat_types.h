@@ -31,6 +31,30 @@ struct mjd {
     sl days;
     ul seconds;
     ul micros;
+
+    bool operator <(const mjd& o) {
+        if (days == o.days) {
+            if (seconds == o.seconds) {
+                return micros < o.micros;
+            } else {
+                return seconds < o.seconds;
+            }
+        } else {
+            return days < o.days;
+        }
+    }
+
+    bool operator >(const mjd& o) {
+        if (days == o.days) {
+            if (seconds == o.seconds) {
+                return micros > o.micros;
+            } else {
+                return seconds > o.seconds;
+            }
+        } else {
+            return days > o.days;
+        }
+    }
 };
 
 static_assert(sizeof(mjd) == 12);

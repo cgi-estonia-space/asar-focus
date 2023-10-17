@@ -1,6 +1,7 @@
 
 list(APPEND ENVISAT_FORMAT_UNIT_TEST_SOURCES
         ${CMAKE_CURRENT_LIST_DIR}/asar_constants_test.cc
+        ${CMAKE_CURRENT_LIST_DIR}/envisat_types_test.cc
 )
 
 add_executable(envisat-format-unit-test ${ENVISAT_FORMAT_UNIT_TEST_SOURCES})
