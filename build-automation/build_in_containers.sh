@@ -16,7 +16,7 @@ if [ ! -d "$1" ] || [ ! -d "$2" ]; then
     exit 1
 fi
 
-# Let all tests run.echo $?
+# Do not return failure if tests fail, let them all run and return status in the end.
 if [ -n "$ALUS_ENABLE_TESTS" ]; then
   set +e
 fi
