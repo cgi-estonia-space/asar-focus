@@ -70,6 +70,7 @@ void bswap(T in) = delete;  // avoid implicit conversions
 }
 
 [[nodiscard]] inline FEPAnnotations bswap(FEPAnnotations in) {
+    in.mjd_time = bswap(in.mjd_time);
     in.isp_length = bswap(in.isp_length);
     in.crcErrorCnt = bswap(in.crcErrorCnt);
     in.correctionCnt = bswap(in.correctionCnt);

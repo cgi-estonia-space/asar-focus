@@ -60,7 +60,7 @@ struct mjd {
 static_assert(sizeof(mjd) == 12);
 
 struct FEPAnnotations {
-    uc blank[12];  // mjd?
+    mjd mjd_time;
     us isp_length;
     us crcErrorCnt;
     us correctionCnt;
