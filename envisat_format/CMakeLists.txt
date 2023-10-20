@@ -20,6 +20,7 @@ target_include_directories(envisat-format-static
 )
 target_link_libraries(envisat-format-static
         PUBLIC
+        CUDA::cudart
         Boost::date_time
         fmt::fmt
         util-static

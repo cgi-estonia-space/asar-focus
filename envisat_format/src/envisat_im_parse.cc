@@ -206,14 +206,14 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
                                  ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data,
                                  InstrumentFile& ins_file, boost::posix_time::ptime packets_start_filter,
                                  boost::posix_time::ptime packets_stop_filter) {
-    (void)packets_start_filter;
-    (void)packets_stop_filter;
     FillFbaqMeta(asar_meta);
     std::vector<EchoMeta> echos;  // Via MDSR - the count of data records -> reserve()?
     const uint8_t* it = reinterpret_cast<const uint8_t*>(file_data.data()) + mdsr.ds_offset;
 #if DEBUG_PACKETS
     std::vector<EnvisatFepAndPacketHeader> envisat_dbg_meta;
 #endif
+    const auto start_filter_mjd = PtimeToMjd(packets_start_filter);
+    const auto end_filter_mjd = PtimeToMjd(packets_stop_filter);
     for (size_t i = 0; i < mdsr.num_dsr; i++) {
         EchoMeta echo_meta = {};
         // Source: ENVISAT-1 ASAR INTERPRETATION OF SOURCE PACKET DATA
@@ -236,14 +236,14 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
 
         // 28 bytes from mode_id until block loop. 29 is datafield_length.
         // Exclude also 32 bytes above (FEP, ISP sensing time).
-        //        if (echo_meta.isp_sensing_time < start_filter_mjd) {
-        //            it += (fep.isp_length - datafield_length + 28);
-        //            continue;
-        //        }
-        //        if (echo_meta.isp_sensing_time > end_filter_mjd) {
-        //            it += (fep.isp_length - datafield_length + 28);
-        //            break;
-        //        }
+        if (echo_meta.isp_sensing_time < start_filter_mjd) {
+            it += (fep.isp_length - datafield_length + 28);
+            continue;
+        }
+        if (echo_meta.isp_sensing_time > end_filter_mjd) {
+            it += (fep.isp_length - datafield_length + 28);
+            break;
+        }
 
         if (datafield_length != 29) {
             throw std::runtime_error(
@@ -332,17 +332,17 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
                 }
             }
             // Deal with the remainder
-//            size_t remainder = data_len % 64;
-//            const uint8_t* block_data = it + n_blocks * 64;
-//            uint8_t block_id = block_data[0];
-//            for (size_t j = 0; j < remainder; j++) {
-//                uint8_t i_codeword = block_data[1 + j] >> 4;
-//                uint8_t q_codeword = block_data[1 + j] & 0xF;
-//
-//                float i_samp = ins_file.fbp.i_LUT_fbaq4[FBAQ4Idx(block_id, i_codeword)];
-//                float q_samp = ins_file.fbp.q_LUT_fbaq4[FBAQ4Idx(block_id, q_codeword)];
-//                echo_meta.raw_data.emplace_back(i_samp, q_samp);
-//            }
+            size_t remainder = data_len % 64;
+            const uint8_t* block_data = it + n_blocks * 64;
+            uint8_t block_id = block_data[0];
+            for (size_t j = 0; j < remainder; j++) {
+                uint8_t i_codeword = block_data[1 + j] >> 4;
+                uint8_t q_codeword = block_data[1 + j] & 0xF;
+
+                float i_samp = ins_file.fbp.i_LUT_fbaq4[FBAQ4Idx(block_id, i_codeword)];
+                float q_samp = ins_file.fbp.q_LUT_fbaq4[FBAQ4Idx(block_id, q_codeword)];
+                echo_meta.raw_data.emplace_back(i_samp, q_samp);
+            }
 
 #if DEBUG_PACKETS
             EnvisatFepAndPacketHeader d;
@@ -401,8 +401,10 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
 
     asar_meta.swst_changes = swst_changes;
 
-    asar_meta.first_line_time = asar_meta.sensing_start;//MjdToPtime(echos.front().isp_sensing_time);
-    asar_meta.last_line_time = asar_meta.sensing_stop;//MjdToPtime(echos.back().isp_sensing_time);
+    asar_meta.first_line_time = MjdToPtime(echos.front().isp_sensing_time);
+    asar_meta.sensing_start = asar_meta.first_line_time;
+    asar_meta.last_line_time = MjdToPtime(echos.back().isp_sensing_time);
+    asar_meta.sensing_stop = asar_meta.last_line_time;
 
     double pulse_bw = 16e6 / 255 * echos.front().chirp_pulse_bw_code;
 

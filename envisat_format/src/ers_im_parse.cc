@@ -160,6 +160,8 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
 #if DEBUG_PACKETS
     std::vector<ErsFepAndPacketMetadata> ers_dbg_meta;
 #endif
+    const auto start_filter_mjd = PtimeToMjd(packets_start_filter);
+    const auto end_filter_mjd = PtimeToMjd(packets_stop_filter);
     for (size_t i = 0; i < mdsr.num_dsr; i++) {
         EchoMeta echo_meta = {};
         // Source: ENVISAT-1 ASAR INTERPRETATION OF SOURCE PACKET DATA
@@ -167,14 +169,14 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         it = CopyBSwapPOD(echo_meta.isp_sensing_time, it);
         FEPAnnotations fep;
         it = CopyBSwapPOD(fep, it);
-        //            if (echo_meta.isp_sensing_time < start_filter_mjd) {
-        //                it += 234 + 11232;
-        //                continue;
-        //            }
-        //            if (echo_meta.isp_sensing_time > end_filter_mjd) {
-        //                it += 234 + 11232;
-        //                continue;
-        //            }
+        if (echo_meta.isp_sensing_time < start_filter_mjd) {
+            it += 234 + 11232;
+            continue;
+        }
+        if (echo_meta.isp_sensing_time > end_filter_mjd) {
+            it += 234 + 11232;
+            continue;
+        }
         static uint32_t last_data_record_no{0};
         uint32_t dr_no{};
         it = CopyBSwapPOD(dr_no, it);
@@ -287,8 +289,10 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
 
     asar_meta.swst_changes = swst_changes;
 
-    asar_meta.first_line_time = asar_meta.sensing_start;//MjdToPtime(echos.front().isp_sensing_time);
-    asar_meta.last_line_time = asar_meta.sensing_stop;//MjdToPtime(echos.back().isp_sensing_time);
+    asar_meta.first_line_time = MjdToPtime(echos.front().isp_sensing_time);
+    asar_meta.sensing_start = asar_meta.first_line_time;
+    asar_meta.last_line_time = MjdToPtime(echos.back().isp_sensing_time);
+    asar_meta.sensing_stop = asar_meta.last_line_time;
 
     double pulse_bw = 16e6 / 255 * echos.front().chirp_pulse_bw_code;
 

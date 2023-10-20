@@ -266,8 +266,8 @@ struct ErsFepAndPacketMetadata {
 
 DSD_lvl0 ParseSphAndGetMdsr(ASARMetadata& asar_meta, const SARMetadata& sar_meta, const std::vector<char>& file_data) {
     LOGD << "Product name = " << asar_meta.product_name;
-    LOGD << "SENSING START " << asar_meta.sensing_start;
-    LOGD << "SENSIND END " << asar_meta.sensing_stop;
+    LOGD << "Input SENSING_START=" << asar_meta.sensing_start;
+    LOGD << "Input SENSING_END=" << asar_meta.sensing_stop;
     if (sar_meta.osv.size() < 8) {
         throw std::runtime_error(
             "Atleast 8 OSVs are required in order to accomplish precise interpolation, currently " +
