@@ -1,11 +1,11 @@
 /**
-* ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
-*
-* ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
-* Creative Commons Attribution-ShareAlike 4.0 International License.
-*
-* You should have received a copy of the license along with this
-* work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+ *
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+ * Creative Commons Attribution-ShareAlike 4.0 International License.
+ *
+ * You should have received a copy of the license along with this
+ * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
  */
 #pragma once
 
@@ -23,17 +23,15 @@
 #include "doris_orbit.h"
 #include "envisat_aux_file.h"
 #include "envisat_types.h"
-#include "sar/orbit_state_vector.h"
-#include "sar/sar_metadata.h"
 #include "geo_tools.h"
 #include "math_utils.h"
+#include "sar/orbit_state_vector.h"
+#include "sar/sar_metadata.h"
 
 /**
  * Envisat LVL0 IM file parser, ex ASA_IM__0PNPDE20040111_085939_000000182023_00179_09752_2307.N1
  * Extracts RAW echo data and relevant metadata needed for SAR focussing
  */
-
-
 
 struct ASARMetadata {
     std::string lvl0_file_name;
@@ -81,20 +79,20 @@ struct ASARMetadata {
     bool ascending;
 
     struct {
-//            SetChar(phase, "PHASE", 'X');
-//            SetAc(cycle, "CYCLE", 0);
-//            SetAs(rel_orbit, "REL_ORBIT", 0);
-//            SetAs(abs_orbit, "ABS_ORBIT", 0);
-//            SetStr(state_vector_time, "STATE_VECTOR_TIME", "");
-//            strcpy((char*)&delta_ut1[0], "DELTA_UT1=+.281903<s>");  // TODO
-//            delta_ut1[sizeof(delta_ut1) - 1] = '\n';
-//            SetAdo73(x_position, "X_POSITION", 0.0, "<m>");
-//            SetAdo73(y_position, "Y_POSITION", 0.0, "<m>");
-//            SetAdo73(z_position, "Z_POSITION", 0.0, "<m>");
-//            SetAdo46(x_velocity, "X_VELOCITY", 0.0, "<m/s>");
-//            SetAdo46(y_velocity, "Y_VELOCITY", 0.0, "<m/s>");
-//            SetAdo46(z_velocity, "Z_VELOCITY", 0.0, "<m/s>");
-//            SetStr(vector_source, "VECTOR_SOURCE", "PC");
+        //            SetChar(phase, "PHASE", 'X');
+        //            SetAc(cycle, "CYCLE", 0);
+        //            SetAs(rel_orbit, "REL_ORBIT", 0);
+        //            SetAs(abs_orbit, "ABS_ORBIT", 0);
+        //            SetStr(state_vector_time, "STATE_VECTOR_TIME", "");
+        //            strcpy((char*)&delta_ut1[0], "DELTA_UT1=+.281903<s>");  // TODO
+        //            delta_ut1[sizeof(delta_ut1) - 1] = '\n';
+        //            SetAdo73(x_position, "X_POSITION", 0.0, "<m>");
+        //            SetAdo73(y_position, "Y_POSITION", 0.0, "<m>");
+        //            SetAdo73(z_position, "Z_POSITION", 0.0, "<m>");
+        //            SetAdo46(x_velocity, "X_VELOCITY", 0.0, "<m/s>");
+        //            SetAdo46(y_velocity, "Y_VELOCITY", 0.0, "<m/s>");
+        //            SetAdo46(z_velocity, "Z_VELOCITY", 0.0, "<m/s>");
+        //            SetStr(vector_source, "VECTOR_SOURCE", "PC");
         std::string orbit_name;
         std::string processing_centre;
         std::string processing_time;
@@ -125,11 +123,17 @@ struct ASARMetadata {
     } compression_metadata;
 };
 
-void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
-                 ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data,
-                 alus::asar::specification::ProductTypes product_type, InstrumentFile& ins_file);
+void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta, ASARMetadata& asar_meta,
+                 std::vector<std::complex<float>>& img_data, alus::asar::specification::ProductTypes product_type,
+                 InstrumentFile& ins_file);
 
 namespace alus::asar::envformat {
 
 void ParseLevel0Header(const std::vector<char>& file_data, ASARMetadata& asar_meta);
-}
+void ParseLevel0Packets(const std::vector<char>& file_data, SARMetadata& sar_meta, ASARMetadata& asar_meta,
+                        std::vector<std::complex<float>>& img_data,
+                        alus::asar::specification::ProductTypes product_type, InstrumentFile& ins_file,
+                        boost::posix_time::ptime packets_start_filter = boost::posix_time::not_a_date_time,
+                        boost::posix_time::ptime packets_stop_filter = boost::posix_time::not_a_date_time);
+
+}  // namespace alus::asar::envformat

@@ -401,6 +401,9 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
 
     std::string out_path = std::string(result_dir) + "/" + out_name;
     FILE* fp = fopen(out_path.c_str(), "w");
+    if (fp == nullptr) {
+        throw std::runtime_error("Failed to create output dataset file at " + out_path);
+    }
 
     fwrite(&out, sizeof(out), 1, fp);
     fwrite(mds.buf, mds.record_size, mds.n_records, fp);

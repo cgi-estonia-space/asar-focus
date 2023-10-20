@@ -12,13 +12,19 @@
 
 #include "envisat_lvl0_parser.h"
 
+#include <sstream>
+
 #include "fmt/format.h"
 
 #include "alus_log.h"
 #include "asar_constants.h"
 #include "envisat_aux_file.h"
+#include "envisat_im_parse.h"
 #include "envisat_mph_sph_str_utils.h"
+#include "ers_im_parse.h"
 #include "sar/orbit_state_vector.h"
+
+#define DEBUG_PACKETS 1
 
 namespace {
 template <class T>
@@ -130,12 +136,180 @@ int SwathIdx(const std::string& swath) {
     }
     ERROR_EXIT(swath + " = unknown swath");
 }
+
+struct EnvisatFepAndPacketHeader {
+    FEPAnnotations fep_annotations;
+    uint16_t packet_id;
+    uint16_t sequence_control;
+    uint16_t packet_length;
+    uint16_t datafield_length;
+};
+
+struct ErsFepAndPacketMetadata {
+    FEPAnnotations fep_annotations;
+    uint32_t data_record_no;
+    uint8_t packet_counter;
+    uint8_t subcommutation_counter;
+};
+
+[[maybe_unused]] void DebugEnvisatPackets(const std::vector<EchoMeta>& em,
+                                          const std::vector<EnvisatFepAndPacketHeader> dm, size_t limit) {
+    if (em.size() != dm.size()) {
+        LOGW << "Envisat dbg metadata size is not equal to echoes.";
+        return;
+    }
+
+    std::stringstream stream;
+    stream << "mjd_fep,mjd_fep_micros,isp_length,crc_error_count,correction_count,spare,"
+           << "packet_id,sequence_control,packet_length,datafield_length,"
+           << "isp_sense,isp_sense_micros,mode_id,onboard_time,mode_count,antenna_beam_set_no,comp_ratio,echo_flag,"
+           << "noise_flag,cal_flag,"
+           << "cal_type,cycle_count,pri_code,swst_code,echo_window_code,upconverter_raw,downconverter_raw,tx_pol,"
+           << "rx_pol,cal_row_number,tx_pulse_code,beam_adj_delta,chirp_pulse_bw_code,aux_tx_monitor_level,"
+           << "resampling_factor" << std::endl;
+    std::cout << stream.str();
+    const auto length = em.size();
+    (void)length;
+    for (size_t i{}; i < limit; i++) {
+        stream.str("");
+        const auto& emi = em.at(i);
+        const auto& dmi = dm.at(i);
+        std::string mjd_fep_str{"INVALID"};
+        long mjd_fep_micros{};
+        mjd mjd_fep = dmi.fep_annotations.mjd_time;
+        try {
+            const auto mjd_fep_ptime = MjdToPtime(mjd_fep);
+            mjd_fep_str = boost::posix_time::to_simple_string(mjd_fep_ptime);
+            mjd_fep_micros = mjd_fep_ptime.time_of_day().total_microseconds();
+        } catch (const std::out_of_range& e) {
+            mjd_fep_str = fmt::format("{}-{}-{}", mjd_fep.days, mjd_fep.seconds, mjd_fep.micros);
+        }
+
+        const auto isp_sensing_time_ptime = MjdToPtime(emi.isp_sensing_time);
+        // clang-format off
+        stream << mjd_fep_str << "," << mjd_fep_micros << "," << dmi.fep_annotations.isp_length << ","
+               << dmi.fep_annotations.crcErrorCnt << "," << dmi.fep_annotations.correctionCnt << ","
+               << dmi.fep_annotations.spare << ","
+               << dmi.packet_id << "," << dmi.sequence_control << "," << dmi.packet_length << ","
+               << dmi.datafield_length << ","
+               << boost::posix_time::to_simple_string(isp_sensing_time_ptime) << ","
+               << isp_sensing_time_ptime.time_of_day().total_microseconds() << ","
+               << fmt::format("{:#x},", emi.mode_id) << emi.onboard_time << "," << emi.mode_count << ","
+               << fmt::format("{:#x},{:#x},{},{},{},{}", emi.antenna_beam_set_no, emi.comp_ratio,
+                              emi.echo_flag, emi.noise_flag, emi.cal_flag, emi.cal_type) << ","
+               << emi.cycle_count << "," << emi.pri_code << "," << emi.swst_code << "," << emi.echo_window_code << ","
+               << fmt::format("{:#x},{:#x},{},{}", emi.upconverter_raw, emi.downconverter_raw, emi.tx_pol, emi.rx_pol)
+               << "," << (uint32_t)emi.cal_row_number << "," << emi.tx_pulse_code << ","
+               << fmt::format("{:#x},{:#x},{:#x}",
+                              emi.beam_adj_delta, emi.chirp_pulse_bw_code, emi.aux_tx_monitor_level) << ","
+               << emi.resampling_factor << std::endl;
+        // clang-format on
+        std::cout << stream.str();
+    }
+}
+
+[[maybe_unused]] void DebugErsPackets(const std::vector<EchoMeta>& em, const std::vector<ErsFepAndPacketMetadata> dm,
+                                      size_t limit) {
+    if (em.size() != dm.size()) {
+        LOGW << "ERS dbg metadata size is not equal to echoes.";
+        return;
+    }
+
+    std::stringstream stream;
+    stream << "mjd_fep,mjd_fep_micros,isp_length,crc_error_count,correction_count,spare,"
+           << "data_rec_no,packet_counter,subcomm_counter,"
+           << "isp_sense,isp_sense_micros,mode_id,onboard_time,mode_count,antenna_beam_set_no,comp_ratio,echo_flag,"
+           << "noise_flag,cal_flag,"
+           << "cal_type,cycle_count,pri_code,swst_code,echo_window_code,upconverter_raw,downconverter_raw,tx_pol,"
+           << "rx_pol,cal_row_number,tx_pulse_code,beam_adj_delta,chirp_pulse_bw_code,aux_tx_monitor_level,"
+           << "resampling_factor" << std::endl;
+    std::cout << stream.str();
+    const auto length = em.size();
+    (void)length;
+    for (size_t i{}; i < limit; i++) {
+        stream.str("");
+        const auto& emi = em.at(i);
+        const auto& dmi = dm.at(i);
+        std::string mjd_fep_str{"INVALID"};
+        long mjd_fep_micros{};
+        mjd mjd_fep = dmi.fep_annotations.mjd_time;
+        try {
+            const auto mjd_fep_ptime = MjdToPtime(mjd_fep);
+            mjd_fep_str = boost::posix_time::to_simple_string(mjd_fep_ptime);
+            mjd_fep_micros = mjd_fep_ptime.time_of_day().total_microseconds();
+        } catch (const std::out_of_range& e) {
+            mjd_fep_str = fmt::format("{}-{}-{}", mjd_fep.days, mjd_fep.seconds, mjd_fep.micros);
+        }
+
+        const auto isp_sensing_time_ptime = MjdToPtime(emi.isp_sensing_time);
+        // clang-format off
+        stream << mjd_fep_str << "," << mjd_fep_micros << "," << dmi.fep_annotations.isp_length << ","
+               << dmi.fep_annotations.crcErrorCnt << "," << dmi.fep_annotations.correctionCnt << ","
+               << dmi.fep_annotations.spare << ","
+               << dmi.data_record_no << "," << (uint32_t)dmi.packet_counter  << ","
+               << (uint32_t)dmi.subcommutation_counter << ","
+               << boost::posix_time::to_simple_string(isp_sensing_time_ptime) << ","
+               << isp_sensing_time_ptime.time_of_day().total_microseconds() << ","
+               << fmt::format("{:#x},", emi.mode_id) << emi.onboard_time << "," << emi.mode_count << ","
+               << fmt::format("{:#x},{:#x},{},{},{},{}", emi.antenna_beam_set_no, emi.comp_ratio,
+                              emi.echo_flag, emi.noise_flag, emi.cal_flag, emi.cal_type) << ","
+               << emi.cycle_count << "," << emi.pri_code << "," << emi.swst_code << "," << emi.echo_window_code << ","
+               << fmt::format("{:#x},{:#x},{},{}", emi.upconverter_raw, emi.downconverter_raw, emi.tx_pol, emi.rx_pol)
+               << "," << (uint32_t)emi.cal_row_number << "," << emi.tx_pulse_code << ","
+               << fmt::format("{:#x},{:#x},{:#x}",
+                              emi.beam_adj_delta, emi.chirp_pulse_bw_code, emi.aux_tx_monitor_level) << ","
+               << emi.resampling_factor << std::endl;
+        // clang-format on
+        std::cout << stream.str();
+    }
+}
+
+DSD_lvl0 ParseSphAndGetMdsr(ASARMetadata& asar_meta, const SARMetadata& sar_meta, const std::vector<char>& file_data) {
+    LOGD << "Product name = " << asar_meta.product_name;
+    LOGD << "SENSING START " << asar_meta.sensing_start;
+    LOGD << "SENSIND END " << asar_meta.sensing_stop;
+    if (sar_meta.osv.size() < 8) {
+        throw std::runtime_error(
+            "Atleast 8 OSVs are required in order to accomplish precise interpolation, currently " +
+            std::to_string(sar_meta.osv.size()) +
+            " are supplied. Check OSV sources and supply one which has more overlap.");
+    }
+    LOGD << "ORBIT vectors start " << sar_meta.osv.front().time;
+    LOGD << "ORBIT vectors end " << sar_meta.osv.back().time;
+    if (asar_meta.sensing_start < sar_meta.osv.front().time || asar_meta.sensing_stop > sar_meta.osv.back().time) {
+        throw std::runtime_error("Given OSV source timespan does not cover dataset");
+    }
+
+    ProductHeader sph = {};
+    sph.Load(file_data.data() + MPH_SIZE, SPH_SIZE);
+
+    // LOGV << "SPH =";
+    // sph.PrintValues();
+
+    asar_meta.start_nadir_lat = NadirLLParse(sph.Get("START_LAT"));
+    asar_meta.start_nadir_lon = NadirLLParse(sph.Get("START_LONG"));
+    asar_meta.stop_nadir_lat = NadirLLParse(sph.Get("STOP_LAT"));
+    asar_meta.stop_nadir_lon = NadirLLParse(sph.Get("STOP_LONG"));
+
+    asar_meta.ascending = asar_meta.start_nadir_lat < asar_meta.stop_nadir_lat;
+
+    asar_meta.swath = sph.Get("SWATH");
+
+    asar_meta.polarization = sph.Get("TX_RX_POLAR");
+
+    auto dsds = ExtractDSDs(sph);
+    if (dsds.size() < 1) {
+        throw std::runtime_error("Given input dataset does not contain echos.");
+    }
+
+    return dsds.front();
+}
+
 }  // namespace
 
-void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
-                 ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data,
-                 alus::asar::specification::ProductTypes product_type, InstrumentFile& ins_file) {
-
+void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta, ASARMetadata& asar_meta,
+                 std::vector<std::complex<float>>& img_data, alus::asar::specification::ProductTypes product_type,
+                 InstrumentFile& ins_file) {
     LOGD << "Product name = " << asar_meta.product_name;
     LOGD << "SENSING START " << asar_meta.sensing_start;
     LOGD << "SENSIND END " << asar_meta.sensing_stop;
@@ -199,6 +373,10 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
     const auto start_filter_mjd = PtimeToMjd(asar_meta.sensing_start);
     const auto end_filter_mjd = PtimeToMjd(asar_meta.sensing_stop);
     std::vector<EchoMeta> echos;
+#if DEBUG_PACKETS
+    std::vector<EnvisatFepAndPacketHeader> envisat_dbg_meta;
+    std::vector<ErsFepAndPacketMetadata> ers_dbg_meta;
+#endif
     for (size_t i = 0; i < mdsr.num_dsr; i++) {
         EchoMeta echo_meta = {};
         // Source: ENVISAT-1 ASAR INTERPRETATION OF SOURCE PACKET DATA
@@ -208,14 +386,6 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
         it = CopyBSwapPOD(fep, it);
 
         if (product_type == alus::asar::specification::ProductTypes::ASA_IM0) {
-            if (echo_meta.isp_sensing_time < start_filter_mjd) {
-                it += fep.isp_length + 29;
-                continue;
-            }
-            if (echo_meta.isp_sensing_time > end_filter_mjd) {
-                it += fep.isp_length + 29;
-                continue;
-            }
             uint16_t packet_id;
             it = CopyBSwapPOD(packet_id, it);
 
@@ -227,6 +397,17 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
 
             uint16_t datafield_length;
             it = CopyBSwapPOD(datafield_length, it);
+
+            // 28 bytes from mode_id until block loop. 29 is datafield_length.
+            // Exclude also 32 bytes above (FEP, ISP sensing time).
+            if (echo_meta.isp_sensing_time < start_filter_mjd) {
+                it += (fep.isp_length - datafield_length + 28);
+                continue;
+            }
+            if (echo_meta.isp_sensing_time > end_filter_mjd) {
+                it += (fep.isp_length - datafield_length + 28);
+                break;
+            }
 
             if (datafield_length != 29) {
                 ERROR_EXIT(fmt::format("DSR nr = {} ({}) parsing error. Date Field Header Length should be 29 - is {}",
@@ -301,6 +482,7 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
             if (echo_meta.echo_flag) {
                 echo_meta.raw_data.reserve(echo_meta.echo_window_code);
                 size_t n_blocks = data_len / 64;
+                size_t remainder = data_len % 64;
                 for (size_t bi = 0; bi < n_blocks; bi++) {
                     const uint8_t* block_data = it + bi * 64;
                     uint8_t block_id = block_data[0];
@@ -313,7 +495,27 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
                         echo_meta.raw_data.emplace_back(i_samp, q_samp);
                     }
                 }
+                // Deal with the remainder
+                const uint8_t* block_data = it + n_blocks * 64;
+                uint8_t block_id = block_data[0];
+                for (size_t j = 0; j < remainder; j++) {
+                    uint8_t i_codeword = block_data[1 + j] >> 4;
+                    uint8_t q_codeword = block_data[1 + j] & 0xF;
 
+                    float i_samp = ins_file.fbp.i_LUT_fbaq4[FBAQ4Idx(block_id, i_codeword)];
+                    float q_samp = ins_file.fbp.q_LUT_fbaq4[FBAQ4Idx(block_id, q_codeword)];
+                    echo_meta.raw_data.emplace_back(i_samp, q_samp);
+                }
+
+#if DEBUG_PACKETS
+                EnvisatFepAndPacketHeader d;
+                d.fep_annotations = fep;
+                d.datafield_length = datafield_length;
+                d.packet_id = packet_id;
+                d.packet_length = packet_length;
+                d.sequence_control = sequence_control;
+                envisat_dbg_meta.push_back(d);
+#endif
                 echos.push_back(std::move(echo_meta));
             }
 
@@ -340,8 +542,8 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
 
             last_data_record_no = dr_no;
 
-            // uint8_t packet_counter = it[0];
-            // uint8_t subcommutation_counter = it[1];
+            uint8_t packet_counter = it[0];
+            uint8_t subcommutation_counter = it[1];
             it += 2;
 
             it += 8;
@@ -384,6 +586,14 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
             //            }
             it += 11232;
             echos.push_back(std::move(echo_meta));
+#if DEBUG_PACKETS
+            ErsFepAndPacketMetadata meta{};
+            meta.fep_annotations = fep;
+            meta.data_record_no = dr_no;
+            meta.packet_counter = packet_counter;
+            meta.subcommutation_counter = subcommutation_counter;
+            ers_dbg_meta.push_back(meta);
+#endif
         } else {
             std::cerr << "WAT?" << std::endl;
             exit(1);
@@ -395,6 +605,11 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
     size_t max_samples = 0;
     uint16_t swst_changes = 0;
     uint16_t prev_swst = echos.front().swst_code;
+
+#if DEBUG_PACKETS
+    DebugEnvisatPackets(echos, envisat_dbg_meta, 200);
+    DebugErsPackets(echos, ers_dbg_meta, 800);
+#endif
 
     asar_meta.first_swst_code = echos.front().swst_code;
     asar_meta.last_swst_code = echos.back().swst_code;
@@ -503,6 +718,7 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
         exit(1);
     }
 
+    LOGD << "PRF " << sar_meta.pulse_repetition_frequency << " PRI " << 1 / sar_meta.pulse_repetition_frequency;
     sar_meta.slant_range_first_sample = asar_meta.two_way_slant_range_time * c / 2;
     sar_meta.wavelength = c / sar_meta.carrier_frequency;
     sar_meta.range_spacing = c / (2 * sar_meta.chirp.range_sampling_rate);
@@ -537,12 +753,6 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
         sar_meta.total_raw_samples += n_samples;
     }
 
-    // TODO these two always seem to differ?
-//    auto first_mjd = MjdToPtime(echos.front().isp_sensing_time);
-//    LOGD << fmt::format("Sensing start = {} First ISP = {} Diff = {} us",
-//                        to_iso_extended_string(asar_meta.sensing_start), to_iso_extended_string(first_mjd),
-//                        (asar_meta.sensing_start - first_mjd).total_microseconds());
-
     // TODO init guess handling? At the moment just a naive guess from nadir point
     double init_guess_lat = (asar_meta.start_nadir_lat + asar_meta.stop_nadir_lat) / 2;
     double init_guess_lon = asar_meta.start_nadir_lon;
@@ -559,7 +769,7 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta,
     }
 
     LOGD << fmt::format("nadirs start {} {} - stop  {} {}", asar_meta.start_nadir_lat, asar_meta.start_nadir_lon,
-               asar_meta.stop_nadir_lat, asar_meta.stop_nadir_lon);
+                        asar_meta.stop_nadir_lat, asar_meta.stop_nadir_lon);
 
     LOGD << fmt::format("guess = {} {}", init_guess_lat, init_guess_lon);
 
@@ -599,4 +809,22 @@ void ParseLevel0Header(const std::vector<char>& file_data, ASARMetadata& asar_me
     asar_meta.acquistion_station = mph.Get("ACQUISITION_STATION");
     asar_meta.processing_station = mph.Get("PROC_CENTER");
 }
+
+void ParseLevel0Packets(const std::vector<char>& file_data, SARMetadata& sar_meta, ASARMetadata& asar_meta,
+                        std::vector<std::complex<float>>& img_data,
+                        alus::asar::specification::ProductTypes product_type, InstrumentFile& ins_file,
+                        boost::posix_time::ptime packets_start_filter, boost::posix_time::ptime packets_stop_filter) {
+    if (product_type == specification::ASA_IM0) {
+        const auto& mdsr = ParseSphAndGetMdsr(asar_meta, sar_meta, file_data);
+        ParseEnvisatLevel0ImPackets(file_data, mdsr, sar_meta, asar_meta, img_data, ins_file, packets_start_filter,
+                                    packets_stop_filter);
+    } else if (product_type == specification::SAR_IM0) {
+        const auto& mdsr = ParseSphAndGetMdsr(asar_meta, sar_meta, file_data);
+        ParseErsLevel0ImPackets(file_data, mdsr, sar_meta, asar_meta, img_data, ins_file, packets_start_filter,
+                                packets_stop_filter);
+    } else {
+        throw std::invalid_argument("Unsupported product type supplied for level 0 packet parsing.");
+    }
 }
+
+}  // namespace alus::asar::envformat

@@ -113,7 +113,9 @@ int main(int argc, char* argv[]) {
         const auto target_product_type =
             alus::asar::specification::TryDetermineTargetProductFrom(product_type, args.GetFocussedProductType());
         (void)target_product_type;
-        ParseIMFile(data, metadata, asar_meta, h_data, product_type, ins_file);
+        //ParseIMFile(data, metadata, asar_meta, h_data, product_type, ins_file);
+        alus::asar::envformat::ParseLevel0Packets(data, metadata, asar_meta, h_data, product_type, ins_file);
+                                                  //asar_meta.sensing_start, asar_meta.sensing_stop);
 
         {
             const auto& orbit_l1_metadata = orbit_source.GetL1ProductMetadata();

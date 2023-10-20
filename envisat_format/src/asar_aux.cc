@@ -65,12 +65,16 @@ std::string GetPathFrom(std::string aux_root, boost::posix_time::ptime start, Ty
             continue;
         }
 
+        const auto& current_sat_id = items.front();
+        if (current_sat_id != "ASA" && current_sat_id != "ER1" && current_sat_id != "ER2") {
+            continue;
+        }
+
         if (satellite_id.empty()) {
             satellite_id = items.front();
         }
 
-        const auto& current_sat_id = items.front();
-        if (current_sat_id != satellite_id && current_sat_id != "DOR") {
+        if (current_sat_id != satellite_id) {
             ERROR_EXIT("There are mixed satellite auxiliary files in the supplied aux folder - " + aux_root);
         }
 
