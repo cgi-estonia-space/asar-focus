@@ -24,7 +24,7 @@
 #include "ers_im_parse.h"
 #include "sar/orbit_state_vector.h"
 
-#define DEBUG_PACKETS 1
+#define DEBUG_PACKETS 0
 
 namespace {
 template <class T>
@@ -400,14 +400,14 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta, ASAR
 
             // 28 bytes from mode_id until block loop. 29 is datafield_length.
             // Exclude also 32 bytes above (FEP, ISP sensing time).
-            if (echo_meta.isp_sensing_time < start_filter_mjd) {
-                it += (fep.isp_length - datafield_length + 28);
-                continue;
-            }
-            if (echo_meta.isp_sensing_time > end_filter_mjd) {
-                it += (fep.isp_length - datafield_length + 28);
-                break;
-            }
+//            if (echo_meta.isp_sensing_time < start_filter_mjd) {
+//                it += (fep.isp_length - datafield_length + 28);
+//                continue;
+//            }
+//            if (echo_meta.isp_sensing_time > end_filter_mjd) {
+//                it += (fep.isp_length - datafield_length + 28);
+//                break;
+//            }
 
             if (datafield_length != 29) {
                 ERROR_EXIT(fmt::format("DSR nr = {} ({}) parsing error. Date Field Header Length should be 29 - is {}",
@@ -449,7 +449,15 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta, ASAR
             echo_meta.cycle_count = 0;
             echo_meta.cycle_count |= (it[0] & 0xF) << 8;
             echo_meta.cycle_count |= it[1] << 0;
-            it += 2;
+            it += 2//            if (echo_meta.isp_sensing_time < start_filter_mjd) {
+//                it += (fep.isp_length - datafield_length + 28);
+//                continue;
+//            }
+//            if (echo_meta.isp_sensing_time > end_filter_mjd) {
+//                it += (fep.isp_length - datafield_length + 28);
+//                break;
+//            }
+;
 
             it = CopyBSwapPOD(echo_meta.pri_code, it);
             it = CopyBSwapPOD(echo_meta.swst_code, it);
@@ -482,7 +490,7 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta, ASAR
             if (echo_meta.echo_flag) {
                 echo_meta.raw_data.reserve(echo_meta.echo_window_code);
                 size_t n_blocks = data_len / 64;
-                size_t remainder = data_len % 64;
+               // size_t remainder = data_len % 64;
                 for (size_t bi = 0; bi < n_blocks; bi++) {
                     const uint8_t* block_data = it + bi * 64;
                     uint8_t block_id = block_data[0];
@@ -496,16 +504,16 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta, ASAR
                     }
                 }
                 // Deal with the remainder
-                const uint8_t* block_data = it + n_blocks * 64;
-                uint8_t block_id = block_data[0];
-                for (size_t j = 0; j < remainder; j++) {
-                    uint8_t i_codeword = block_data[1 + j] >> 4;
-                    uint8_t q_codeword = block_data[1 + j] & 0xF;
-
-                    float i_samp = ins_file.fbp.i_LUT_fbaq4[FBAQ4Idx(block_id, i_codeword)];
-                    float q_samp = ins_file.fbp.q_LUT_fbaq4[FBAQ4Idx(block_id, q_codeword)];
-                    echo_meta.raw_data.emplace_back(i_samp, q_samp);
-                }
+//                const uint8_t* block_data = it + n_blocks * 64;
+//                uint8_t block_id = block_data[0];
+//                for (size_t j = 0; j < remainder; j++) {
+//                    uint8_t i_codeword = block_data[1 + j] >> 4;
+//                    uint8_t q_codeword = block_data[1 + j] & 0xF;
+//
+//                    float i_samp = ins_file.fbp.i_LUT_fbaq4[FBAQ4Idx(block_id, i_codeword)];
+//                    float q_samp = ins_file.fbp.q_LUT_fbaq4[FBAQ4Idx(block_id, q_codeword)];
+//                    echo_meta.raw_data.emplace_back(i_samp, q_samp);
+//                }
 
 #if DEBUG_PACKETS
                 EnvisatFepAndPacketHeader d;
@@ -542,8 +550,8 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta, ASAR
 
             last_data_record_no = dr_no;
 
-            uint8_t packet_counter = it[0];
-            uint8_t subcommutation_counter = it[1];
+            [[maybe_unused]] uint8_t packet_counter = it[0];
+            [[maybe_unused]] uint8_t subcommutation_counter = it[1];
             it += 2;
 
             it += 8;
@@ -658,8 +666,8 @@ void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta, ASAR
 
     asar_meta.swst_changes = swst_changes;
 
-    asar_meta.first_line_time = MjdToPtime(echos.front().isp_sensing_time);
-    asar_meta.last_line_time = MjdToPtime(echos.back().isp_sensing_time);
+    asar_meta.first_line_time = asar_meta.sensing_start;//MjdToPtime(echos.front().isp_sensing_time);
+    asar_meta.last_line_time = asar_meta.sensing_stop;//MjdToPtime(echos.back().isp_sensing_time);
 
     double pulse_bw = 16e6 / 255 * echos.front().chirp_pulse_bw_code;
 

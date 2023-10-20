@@ -401,8 +401,8 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
 
     asar_meta.swst_changes = swst_changes;
 
-    asar_meta.first_line_time = MjdToPtime(echos.front().isp_sensing_time);
-    asar_meta.last_line_time = MjdToPtime(echos.back().isp_sensing_time);
+    asar_meta.first_line_time = asar_meta.sensing_start;//MjdToPtime(echos.front().isp_sensing_time);
+    asar_meta.last_line_time = asar_meta.sensing_stop;//MjdToPtime(echos.back().isp_sensing_time);
 
     double pulse_bw = 16e6 / 255 * echos.front().chirp_pulse_bw_code;
 
