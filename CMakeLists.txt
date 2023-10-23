@@ -59,7 +59,7 @@ endif()
 message(STATUS "CUDA binary code will be generated for the following architecture(s) - ${CMAKE_CUDA_ARCHITECTURES}")
 set_property(TARGET asar_focus PROPERTY CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -Wextra -pedantic")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror -pedantic ")
 
 INCLUDE_DIRECTORIES(${CUDAToolkit_INCLUDE_DIRS})
 

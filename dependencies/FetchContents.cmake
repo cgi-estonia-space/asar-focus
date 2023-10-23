@@ -17,7 +17,14 @@ set(BUILD_TESTING OFF)
 set(EIGEN_BUILD_PKGCONFIG OFF)
 FetchContent_MakeAvailable(Eigen)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-maybe-uninitialized")
+# For Eigen - https://stackoverflow.com/questions/74881296/assert-leads-to-maybe-uninitialized-gcc-warning
+# https://github.com/njoy/NJOY21/issues/106
+# https://gcc.gnu.org/bugzilla/show_bug.cgi?id=108230
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 13)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-maybe-uninitialized")
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-uninitialized")
+endif ()
 
 if (ALUS_ENABLE_TESTS)
     FetchContent_Declare(
@@ -26,4 +33,7 @@ if (ALUS_ENABLE_TESTS)
             GIT_TAG        release-1.10.0
     )
     FetchContent_MakeAvailable(googletest)
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        target_compile_options(gmock PRIVATE "-Wno-deprecated-copy")
+    endif ()
 endif ()
