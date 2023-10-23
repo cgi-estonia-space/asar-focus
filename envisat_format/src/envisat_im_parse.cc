@@ -18,6 +18,7 @@
 
 #include "alus_log.h"
 #include "envisat_utils.h"
+#include "parse_util.h"
 
 #define DEBUG_PACKETS 0
 
@@ -198,7 +199,9 @@ struct EnvisatFepAndPacketHeader {
         std::cout << stream.str();
     }
 }
-}
+
+constexpr auto SEQUENCE_CONTROL_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint16_t, 14>()};
+}  // namespace
 
 namespace alus::asar::envformat {
 
@@ -212,8 +215,19 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
 #if DEBUG_PACKETS
     std::vector<EnvisatFepAndPacketHeader> envisat_dbg_meta;
 #endif
+    uint16_t last_sequence_control;
+    [[maybe_unused]] const auto discarding = CopyBSwapPOD(
+        last_sequence_control, it + sizeof(EchoMeta::isp_sensing_time) + sizeof(FEPAnnotations) + sizeof(uint16_t));
+    last_sequence_control = last_sequence_control & 0x3FFF;
+    if (last_sequence_control == 0) {
+        last_sequence_control = SEQUENCE_CONTROL_MAX;
+    } else {
+        last_sequence_control--;
+    }
     const auto start_filter_mjd = PtimeToMjd(packets_start_filter);
     const auto end_filter_mjd = PtimeToMjd(packets_stop_filter);
+    size_t out_of_sequence_count{};
+    size_t missed_packets{};
     for (size_t i = 0; i < mdsr.num_dsr; i++) {
         EchoMeta echo_meta = {};
         // Source: ENVISAT-1 ASAR INTERPRETATION OF SOURCE PACKET DATA
@@ -227,6 +241,19 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
 
         uint16_t sequence_control;
         it = CopyBSwapPOD(sequence_control, it);
+
+        [[maybe_unused]] uint8_t segmentation_flags = sequence_control >> 14;
+        sequence_control = sequence_control & 0x3FFF;  // It is 14 bit rolling value
+        // inline this as a function and unit test!
+        const auto gap = parseutil::CounterGap<uint16_t, SEQUENCE_CONTROL_MAX>(last_sequence_control, sequence_control);
+        if (gap == 1) {
+            (void)gap;  // all good;
+        } else {
+            // When gap is 0, this is not handled - could be massive overroll or double.
+            out_of_sequence_count++;
+            missed_packets += gap;
+        }
+        last_sequence_control = sequence_control;
 
         uint16_t packet_length;
         it = CopyBSwapPOD(packet_length, it);
@@ -515,5 +542,6 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
     sar_meta.azimuth_bandwidth_fraction = 0.8f;
     auto llh = xyz2geoWGS84(sar_meta.center_point);
     LOGD << "center point = " << llh.latitude << " " << llh.longitude;
+    LOGI << "Out sync sequences " << out_of_sequence_count << " missed packet count " << missed_packets;
 }
 }  // namespace alus::asar::envformat
