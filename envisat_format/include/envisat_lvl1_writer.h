@@ -1,12 +1,12 @@
 /**
-* ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
-*
-* ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
-* Creative Commons Attribution-ShareAlike 4.0 International License.
-*
-* You should have received a copy of the license along with this
-* work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
-*/
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+ *
+ * ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+ * Creative Commons Attribution-ShareAlike 4.0 International License.
+ *
+ * You should have received a copy of the license along with this
+ * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+ */
 #pragma once
 
 #include <string_view>
@@ -39,4 +39,5 @@ struct MDS {
     MDS& operator=(const MDS&) = delete;
 };
 
-void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& mds, std::string_view result_dir);
+void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& mds, std::string_view software_ver,
+               std::string_view result_dir);

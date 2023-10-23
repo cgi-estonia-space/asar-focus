@@ -229,7 +229,8 @@ void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, co
 }
 }  // namespace
 
-void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& mds, std::string_view result_dir) {
+void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& mds, std::string_view software_ver,
+               std::string_view result_dir) {
     EnvisatIMS out = {};
 
     static_assert(__builtin_offsetof(EnvisatIMS, main_processing_params) == 7516);
@@ -244,12 +245,13 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
 
         mph.Set_PRODUCT(out_name);
         mph.Set_PROC_STAGE('N');
-        mph.Set_REF_DOC("TBD.pdf");
+        // https://earth.esa.int/eogateway/documents/20142/37627/PO-RS-507316_4_C_Envisat_Product_Spec_Vol8.pdf/
+        mph.Set_REF_DOC("PO-RS-MDA-GS-2009_4/C");
 
         auto now = boost::posix_time::microsec_clock::universal_time();
 
         mph.SetDataAcqusitionProcessingInfo(asar_meta.acquistion_station, asar_meta.processing_station, PtimeToStr(now),
-                                            "alus-test-123");
+                                            std::string(software_ver));
 
         mph.Set_SBT_Defaults();
 
@@ -301,7 +303,9 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
         }
 
         sph.SetProductInfo1(asar_meta.swath, asar_meta.ascending ? "ASCENDING" : "DESCENDING", "COMPLEX", "RAN/DOP");
-        sph.SetProductInfo2(asar_meta.polarization, "", asar_meta.compression_metadata.echo_method);
+        sph.SetProductInfo2(
+            asar_meta.polarization, "",
+            asar_meta.compression_metadata.echo_method + asar_meta.compression_metadata.echo_ratio.at(0));
         sph.SetProductInfo3(1, 1);
         sph.SetProductInfo4(sar_meta.range_spacing, sar_meta.azimuth_spacing,
                             1.0 / sar_meta.pulse_repetition_frequency);

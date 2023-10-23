@@ -38,6 +38,7 @@
 #include "sar/sar_chirp.h"
 #include "status_assembly.h"
 
+namespace {
 struct IQ16 {
     int16_t i;
     int16_t q;
@@ -50,6 +51,10 @@ void ExceptionMessagePrint(const T& e) {
     LOGE << "Exiting.";
 }
 
+std::string GetSoftwareVersion() {
+    return "asar_focus/" + std::string(VERSION_STRING);
+}
+
 auto TimeStart() { return std::chrono::steady_clock::now(); }
 
 void TimeStop(std::chrono::steady_clock::time_point beg, const char* msg) {
@@ -57,6 +62,7 @@ void TimeStop(std::chrono::steady_clock::time_point beg, const char* msg) {
     auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(end - beg).count();
     LOGD << msg << " time = " << diff << " ms";
 }
+}  // namespace
 
 int main(int argc, char* argv[]) {
     std::string args_help{};
@@ -65,15 +71,14 @@ int main(int argc, char* argv[]) {
         alus::asar::Args args(args_raw);
         args_help = args.GetHelp();
         if (args.IsHelpRequested()) {
-            std::cout << "asar-focus version " << VERSION_MAJOR << "." << VERSION_MINOR << "." << VERSION_PATCH
-                      << std::endl;
+            std::cout << GetSoftwareVersion() << std::endl;
             std::cout << args.GetHelp() << std::endl;
             exit(0);
         }
 
         alus::asar::log::Initialize();
         alus::asar::log::SetLevel(args.GetLogLevel());
-        LOGI << "asar-focus version " << VERSION_MAJOR << "." << VERSION_MINOR << "." << VERSION_PATCH;
+        LOGI << GetSoftwareVersion();
         auto file_time_start = TimeStart();
         const auto in_path{args.GetInputDsPath()};
         FILE* fp = fopen(in_path.data(), "r");
@@ -310,7 +315,7 @@ int main(int argc, char* argv[]) {
         TimeStop(mds_formation, "MDS construction");
 
         auto file_write = TimeStart();
-        WriteLvl1(metadata, asar_meta, mds, args.GetOutputPath());
+        WriteLvl1(metadata, asar_meta, mds, GetSoftwareVersion(), args.GetOutputPath());
         TimeStop(file_write, "LVL1 file write");
     } catch (const boost::program_options::error& e) {
         ExceptionMessagePrint(e);

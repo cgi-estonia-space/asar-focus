@@ -83,11 +83,11 @@ struct Lvl1MPH {
 
     void Set_REF_DOC(std::string val) { SetStr(ref_doc, "REF_DOC", val); }
 
-    void SetDataAcqusitionProcessingInfo(std::string acq_station, std::string proc_center, std::string proc_time,
-                                         std::string software_version) {
+    void SetDataAcqusitionProcessingInfo(std::string acq_station, std::string processing_center,
+                                         std::string processing_time, std::string software_version) {
         SetStr(acquistion_station, "ACQUISITION_STATION", acq_station);
-        SetStr(this->proc_center, "PROC_CENTER", proc_center);
-        SetStr(this->proc_time, "PROC_TIME", proc_time);
+        SetStr(this->proc_center, "PROC_CENTER", processing_center);
+        SetStr(this->proc_time, "PROC_TIME", processing_time);
         SetStr(software_ver, "SOFTWARE_VER", software_version);
     }
 

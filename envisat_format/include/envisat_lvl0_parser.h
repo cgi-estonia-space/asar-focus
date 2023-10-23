@@ -123,10 +123,6 @@ struct ASARMetadata {
     } compression_metadata;
 };
 
-void ParseIMFile(const std::vector<char>& file_data, SARMetadata& sar_meta, ASARMetadata& asar_meta,
-                 std::vector<std::complex<float>>& img_data, alus::asar::specification::ProductTypes product_type,
-                 InstrumentFile& ins_file);
-
 namespace alus::asar::envformat {
 
 void ParseLevel0Header(const std::vector<char>& file_data, ASARMetadata& asar_meta);
