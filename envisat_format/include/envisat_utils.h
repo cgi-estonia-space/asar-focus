@@ -61,3 +61,9 @@ inline boost::posix_time::ptime StrToPtime(std::string str) {
     }
     return time;
 }
+
+inline mjd MjdAddMicros(const mjd& d, std::decay<decltype(std::declval<mjd>().micros)>::type micros_to_add) {
+    auto ticktime = MjdToPtime(d);
+    ticktime += boost::posix_time::microseconds(micros_to_add);
+    return PtimeToMjd(ticktime);
+}
