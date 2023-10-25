@@ -18,7 +18,7 @@ jobs:
     outputs:
       package_filename: ${{ steps.build-in-containers.outputs.package_filename }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
       - name: Build in containers
