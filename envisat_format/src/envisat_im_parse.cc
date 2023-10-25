@@ -138,7 +138,7 @@ int FBAQ4Idx(int block, int idx) {
 
 #if DEBUG_PACKETS
 
-constexpr auto DEBUG_ECHOS_ONLY{true};
+constexpr auto DEBUG_ECHOS_ONLY{false};
 
 struct EnvisatFepAndPacketHeader {
     FEPAnnotations fep_annotations;
@@ -223,7 +223,7 @@ void InitializeCounters(const uint8_t* packets_start, uint16_t& sequence_control
         CopyBSwapPOD(sequence_control,
                      packets_start + sizeof(EchoMeta::isp_sensing_time) + sizeof(FEPAnnotations) + sizeof(uint16_t));
     sequence_control = sequence_control & 0x3FFF;
-    if (sequence_control == 0) {
+    if (sequence_control != 0) {
         sequence_control = SEQUENCE_CONTROL_MAX;
     } else {
         sequence_control--;
@@ -237,9 +237,9 @@ void InitializeCounters(const uint8_t* packets_start, uint16_t& sequence_control
     }
     // 52 cycle-start
     FetchCyclePacketCount(packets_start + 52, cycle_packet_count);
-    if (cycle_packet_count == 0) {
-        cycle_packet_count = CYCLE_PACKET_COUNT_MAX;
-    } else {
+    // For cycle_packet_count value 0 is special (i.e. marking reset when packet header changes)
+    // and gap 0 is not implemented.
+    if (cycle_packet_count != 0) {
         cycle_packet_count--;
     }
 }
@@ -278,13 +278,15 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
     uint16_t last_sequence_control;
     uint32_t last_mode_packet_count;
     uint16_t last_cycle_packet_count;
-#endif
     InitializeCounters(it, last_sequence_control, last_mode_packet_count, last_cycle_packet_count);
+#endif
     const auto start_filter_mjd = PtimeToMjd(packets_start_filter);
     const auto end_filter_mjd = PtimeToMjd(packets_stop_filter);
     for (size_t i = 0; i < mdsr.num_dsr; i++) {
         EchoMeta echo_meta = {};
+#if HANDLE_DIAGNOSTICS
         const auto* it_start = it;
+#endif
         // Source: ENVISAT-1 ASAR INTERPRETATION OF SOURCE PACKET DATA
         // PO-TN-MMS-SR-0248
         it = CopyBSwapPOD(echo_meta.isp_sensing_time, it);
@@ -413,6 +415,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
             diagnostics.mode_packet_count_oos++;
             diagnostics.mode_packet_total_missing += (mode_packet_gap - 1);
         }
+        last_mode_packet_count = echo_meta.mode_count;
 
         const auto cycle_packet_gap =
             parseutil::CounterGap<uint16_t, CYCLE_PACKET_COUNT_MAX>(last_cycle_packet_count, echo_meta.cycle_count);
@@ -421,7 +424,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
             diagnostics.cycle_packet_count_oos++;
             diagnostics.cycle_packet_total_missing += cycle_packet_gap;
         }
-
+        last_cycle_packet_count = echo_meta.cycle_count;
 #endif
 
         size_t data_len = packet_length - 29;
@@ -457,22 +460,20 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
             echoes.push_back(std::move(echo_meta));
         } else if (echo_meta.cal_flag) {
             if (echoes.size() > 0) {
-                auto& previous_echo = echoes.back();
-                const auto micros_to_add = 1 / (sar_meta.chirp.range_sampling_rate / previous_echo.pri_code);
-                for (size_t ei{1}; ei < seq_ctrl_gap; ei++) {
-                    auto copy_echo = echoes.back();
-                    copy_echo.isp_sensing_time = MjdAddMicros(copy_echo.isp_sensing_time, micros_to_add);
-                    echoes.push_back(copy_echo);
-                }
+                auto copy_echo = echoes.back();
+                const auto prf = (sar_meta.chirp.range_sampling_rate / copy_echo.pri_code);
+                const auto micros_to_add = static_cast<ul>((1 / prf) * 10e5);
+                copy_echo.isp_sensing_time = MjdAddMicros(copy_echo.isp_sensing_time, micros_to_add);
+                echoes.push_back(copy_echo);
             }
 #if HANDLE_DIAGNOSTICS
-            last_sequence_control = 0;  // Special value to mark reset;
+            last_cycle_packet_count = 0;  // Special value to mark reset;
             diagnostics.calibration_packet_count++;
 #endif
         }
 
 #if DEBUG_PACKETS
-        if (!DEBUG_ECHOS_ONLY || echo_meta.echo_flag) {
+        if ((!DEBUG_ECHOS_ONLY && echo_meta.cal_flag) || echo_meta.echo_flag) {
             EnvisatFepAndPacketHeader d;
             d.fep_annotations = fep;
             d.datafield_length = datafield_length;
@@ -480,6 +481,9 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
             d.packet_length = packet_length;
             d.sequence_control = sequence_control;
             d.echo_meta = echo_meta;
+            if (echo_meta.cal_flag) {
+                d.echo_meta.isp_sensing_time = echoes.back().isp_sensing_time;
+            }
             envisat_dbg_meta.push_back(d);
         }
 #endif

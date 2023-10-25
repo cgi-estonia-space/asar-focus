@@ -14,6 +14,7 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include "checks.h"
+#include "envisat_types.h"
 
 
 template <size_t N>
