@@ -200,10 +200,6 @@ struct EnvisatFepAndPacketHeader {
 
 #endif
 
-constexpr auto SEQUENCE_CONTROL_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint16_t, 14>()};
-constexpr auto MODE_PACKET_COUNT_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint32_t, 24>()};
-constexpr auto CYCLE_PACKET_COUNT_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint16_t, 12>()};
-
 inline void FetchModePacketCount(const uint8_t* start_array, uint32_t& var) {
     var = 0;
     var |= static_cast<uint32_t>(start_array[0]) << 16;
@@ -216,6 +212,12 @@ inline void FetchCyclePacketCount(const uint8_t* start_array, uint16_t& var) {
     var |= (start_array[0] & 0x0F) << 8;
     var |= start_array[1] << 0;
 }
+
+#if HANDLE_DIAGNOSTICS
+
+constexpr auto SEQUENCE_CONTROL_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint16_t, 14>()};
+constexpr auto MODE_PACKET_COUNT_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint32_t, 24>()};
+constexpr auto CYCLE_PACKET_COUNT_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint16_t, 12>()};
 
 void InitializeCounters(const uint8_t* packets_start, uint16_t& sequence_control, uint32_t& mode_packet_count,
                         uint16_t& cycle_packet_count) {
@@ -244,7 +246,6 @@ void InitializeCounters(const uint8_t* packets_start, uint16_t& sequence_control
     }
 }
 
-#if HANDLE_DIAGNOSTICS
 // oos - out of sequence
 struct PacketParseDiagnostics {
     size_t sequence_control_oos;            // No. of times gap happened.
