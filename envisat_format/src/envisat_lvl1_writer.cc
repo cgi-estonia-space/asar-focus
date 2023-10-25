@@ -303,9 +303,13 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
         }
 
         sph.SetProductInfo1(asar_meta.swath, asar_meta.ascending ? "ASCENDING" : "DESCENDING", "COMPLEX", "RAN/DOP");
-        sph.SetProductInfo2(
-            asar_meta.polarization, "",
-            asar_meta.compression_metadata.echo_method + asar_meta.compression_metadata.echo_ratio.at(0));
+        if (asar_meta.compression_metadata.echo_ratio.length() > 0) {
+            sph.SetProductInfo2(
+                asar_meta.polarization, "",
+                asar_meta.compression_metadata.echo_method + asar_meta.compression_metadata.echo_ratio.front());
+        } else {
+            sph.SetProductInfo2(asar_meta.polarization, "", asar_meta.compression_metadata.echo_method);
+        }
         sph.SetProductInfo3(1, 1);
         sph.SetProductInfo4(sar_meta.range_spacing, sar_meta.azimuth_spacing,
                             1.0 / sar_meta.pulse_repetition_frequency);
