@@ -246,7 +246,11 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
         mph.Set_PRODUCT(out_name);
         mph.Set_PROC_STAGE('N');
         // https://earth.esa.int/eogateway/documents/20142/37627/PO-RS-507316_4_C_Envisat_Product_Spec_Vol8.pdf/
-        mph.Set_REF_DOC("PO-RS-MDA-GS-2009_4/C");
+        if (asar_meta.product_name.substr(0, 3) == "ASA") {
+            mph.Set_REF_DOC("PO-RS-MDA-GS-2009_4/C");
+        } else {
+            mph.Set_REF_DOC("TBD.pdf");
+        }
 
         auto now = boost::posix_time::microsec_clock::universal_time();
 
