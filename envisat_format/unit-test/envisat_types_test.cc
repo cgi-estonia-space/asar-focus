@@ -19,6 +19,15 @@ using ::testing::Eq;
 using ::testing::IsFalse;
 using ::testing::IsTrue;
 
+TEST(EnvisatTypesMjd, EqualsOperator) {
+    mjd a{10, 10, 10};
+    mjd b{10, 10, 11};
+    EXPECT_THAT(a == b, IsFalse());
+    b.micros = 10;
+    EXPECT_THAT(a == b, IsTrue());
+    EXPECT_THAT(a == a, IsTrue());
+}
+
 TEST(EnvisatTypesMjd, EqualsAreNotLessOrGreater) {
     mjd a{10, 10, 10};
     mjd b{10, 10, 10};
@@ -28,6 +37,7 @@ TEST(EnvisatTypesMjd, EqualsAreNotLessOrGreater) {
     EXPECT_THAT(a > b, IsFalse());
     EXPECT_THAT(b > a, IsFalse());
     EXPECT_THAT(a > a, IsFalse());
+    EXPECT_THAT(a == b, IsTrue());
 }
 
 TEST(EnvisatTypesMjd, LessThanCorrect) {

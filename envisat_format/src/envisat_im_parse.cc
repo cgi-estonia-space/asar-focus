@@ -294,6 +294,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
         FEPAnnotations fep;
         it = CopyBSwapPOD(fep, it);
 
+        // This is actually application process ID plus some bits, needs to be refactored, more info - PO-ID-DOR-SY-0032
         uint16_t packet_id;
         it = CopyBSwapPOD(packet_id, it);
 
