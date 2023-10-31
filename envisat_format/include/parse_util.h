@@ -22,11 +22,11 @@ constexpr T MaxValueForBits() {
     return static_cast<T>(value);
 }
 
-template <
-    typename T, T LIMIT,
-    std::enable_if_t<std::is_integral<T>::value && std::is_unsigned<T>::value && LIMIT <= std::numeric_limits<T>::max(),
-                     bool> = true>
+template <typename T, T LIMIT>
 inline T CounterGap(T last_value, T current_value) {
+    static_assert(std::is_integral<T>::value, "T must be an integral type");
+    static_assert(std::is_unsigned<T>::value, "T must be an unsigned type");
+    static_assert(LIMIT <= std::numeric_limits<T>::max(), "LIMIT must be within the range of T");
     // This aritchmetically equals the last 'else' condition.
     // It is expected that this condition is most probable first hit.
     if (last_value + 1 == current_value) {
