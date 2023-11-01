@@ -57,7 +57,7 @@ int SwathIdx(const std::string& swath) {
 struct EchoMeta {
     mjd isp_sensing_time;
 
-    uint16_t isp_length; // Part of the FEP annotation, but this is the only useful field, others are static fillers.
+    uint16_t isp_length;  // Part of the FEP annotation, but this is the only useful field, others are static fillers.
 
     uint32_t data_record_number;
     // IDHT header
@@ -101,20 +101,21 @@ struct ErsFepAndPacketMetadata {
 
 #endif
 
-inline void FetchDrNo(const uint8_t* array_start, uint32_t& dr_no) {
-    [[maybe_unused]] const auto discard = CopyBSwapPOD(dr_no, array_start);
+inline void FetchUint32(const uint8_t* array_start, uint32_t& var) {
+    [[maybe_unused]] const auto discard = CopyBSwapPOD(var, array_start);
 }
 
 #if HANDLE_DIAGNOSTICS
 constexpr auto DR_NO_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint32_t, 32>()};
 constexpr auto PACKET_COUNTER_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint8_t, 8>()};
 constexpr uint8_t SUBCOMMUTATION_COUNTER_MAX{48};
+constexpr auto IMAGE_FORMAT_COUNTER_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint32_t, 32>()};
 
 void InitializeCounters(const uint8_t* packets_start, uint32_t& dr_no, uint8_t& packet_counter,
-                        uint8_t& subcommutation_counter) {
-    FetchDrNo(packets_start + alus::asar::envformat::ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES +
-                  alus::asar::envformat::ers::highrate::FEP_ANNOTATION_SIZE_BYTES,
-              dr_no);
+                        uint8_t& subcommutation_counter, uint32_t& image_format_counter) {
+    FetchUint32(packets_start + alus::asar::envformat::ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES +
+                    alus::asar::envformat::ers::highrate::FEP_ANNOTATION_SIZE_BYTES,
+                dr_no);
     if (dr_no != 0) {
         dr_no--;
     } else {
@@ -139,6 +140,16 @@ void InitializeCounters(const uint8_t* packets_start, uint32_t& dr_no, uint8_t& 
     } else {
         subcommutation_counter--;
     };
+
+    FetchUint32(packets_start + alus::asar::envformat::ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES +
+                    alus::asar::envformat::ers::highrate::FEP_ANNOTATION_SIZE_BYTES +
+                    alus::asar::envformat::ers::highrate::DATA_RECORD_NUMBER_SIZE_BYTES + 18,
+                image_format_counter);
+    if (image_format_counter == 0) {
+        image_format_counter = IMAGE_FORMAT_COUNTER_MAX;
+    } else {
+        image_format_counter--;
+    }
 }
 
 // oos - out of sequence
@@ -147,8 +158,11 @@ struct PacketParseDiagnostics {
     size_t dr_no_total_missing;  // Total sum of all gaps' value.
     size_t packet_counter_oos;
     size_t packer_counter_total_missing;
+    size_t packet_counter_changes;
     size_t subcommutation_counter_oos;
     size_t subcommutation_counter_total_missing;
+    size_t image_format_counter_oos;
+    size_t image_format_counter_total_missing;
 };
 
 #endif
@@ -201,7 +215,8 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     uint32_t last_dr_no{};
     uint8_t last_packet_counter{};
     uint8_t last_subcommutation_counter{};
-    InitializeCounters(it, last_dr_no, last_packet_counter, last_subcommutation_counter);
+    uint32_t last_image_format_counter{};
+    InitializeCounters(it, last_dr_no, last_packet_counter, last_subcommutation_counter, last_image_format_counter);
     PacketParseDiagnostics diagnostics{};
 #endif
     uint16_t first_pri_code{};
@@ -231,7 +246,7 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         //            stash_isp_change = echo_meta.isp_sensing_time;
         //        }
         //        rolling_isp_sensing_time = echo_meta.isp_sensing_time;
-        // FEP annotation only consists of useful ISP length for ERS.
+        //        FEP annotation only consists of useful ISP length for ERS.
         it += 12;  // No MJD for ERS.
         it = CopyBSwapPOD(echo_meta.isp_length, it);
         it += 6;  // No CRC or correction count for ERS.
@@ -239,9 +254,9 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
             it = it_start + ers::highrate::MDSR_SIZE_BYTES;
 #if HANDLE_DIAGNOSTICS
             // 32 offset
-            FetchDrNo(it_start + ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES +
-                          ers::highrate::FEP_ANNOTATION_SIZE_BYTES,
-                      last_dr_no);
+            FetchUint32(it_start + ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES +
+                            ers::highrate::FEP_ANNOTATION_SIZE_BYTES,
+                        last_dr_no);
             // 36 offset (part of IDHT)
             last_packet_counter =
                 it_start[ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES + ers::highrate::FEP_ANNOTATION_SIZE_BYTES +
@@ -250,6 +265,11 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
             last_subcommutation_counter =
                 it_start[ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES + ers::highrate::FEP_ANNOTATION_SIZE_BYTES +
                          ers::highrate::DATA_RECORD_NUMBER_SIZE_BYTES + 1];
+            // 54 offset
+            FetchUint32(it_start + ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES +
+                            ers::highrate::FEP_ANNOTATION_SIZE_BYTES + ers::highrate::DATA_RECORD_NUMBER_SIZE_BYTES +
+                            18,
+                        last_image_format_counter);
 #endif
             continue;
         }
@@ -301,10 +321,14 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
 
         const auto packet_counter_gap =
             parseutil::CounterGap<uint8_t, PACKET_COUNTER_MAX>(last_packet_counter, echo_meta.packet_counter);
-        // When gap is 0, this is not handled - could be massive rollover or duplicate.
+        // Packet counter increments something like after 1679 packets?? based on IM L0 observation. When this happens
+        // subcommutation counter also resets to 1.
         if (packet_counter_gap > 1) {
             diagnostics.packet_counter_oos++;
             diagnostics.packer_counter_total_missing += (packet_counter_gap - 1);
+        }
+        if (packet_counter_gap == 1) {
+            diagnostics.packet_counter_changes++;
         }
         last_packet_counter = echo_meta.packet_counter;
 
@@ -312,11 +336,19 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
             last_subcommutation_counter, echo_meta.subcommutation_counter);
         // When gap is 0, this is not handled - could be massive rollover or duplicate.
         // Also the counter does not start from 0.
-        if (subcommutation_gap > 1 && echo_meta.subcommutation_counter != 1) {
+        if (subcommutation_gap > 1 && echo_meta.subcommutation_counter != 1 && packet_counter_gap != 1) {
             diagnostics.subcommutation_counter_oos++;
             diagnostics.subcommutation_counter_total_missing += (subcommutation_gap - 1);
         }
         last_subcommutation_counter = echo_meta.subcommutation_counter;
+
+        const auto image_format_counter_gap = parseutil::CounterGap<uint32_t, IMAGE_FORMAT_COUNTER_MAX>(
+            last_image_format_counter, echo_meta.image_format_counter);
+        if (image_format_counter_gap > 1) {
+            diagnostics.image_format_counter_oos++;
+            diagnostics.image_format_counter_total_missing += (image_format_counter_gap - 1);
+        }
+        last_image_format_counter = echo_meta.image_format_counter;
 #endif
 
         echo_meta.raw_data.reserve(ers::highrate::MEASUREMENT_DATA_SIZE_BYTES);
@@ -522,9 +554,11 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     LOGD << "Data record number field diagnostics - " << diagnostics.dr_no_oos << " "
          << diagnostics.dr_no_total_missing;
     LOGD << "Packet counter field diagnostics - " << diagnostics.packet_counter_oos << " "
-         << diagnostics.packer_counter_total_missing;
+         << diagnostics.packer_counter_total_missing << " changes " << diagnostics.packet_counter_changes;
     LOGD << "Subcommutation counter field diagnostics - " << diagnostics.subcommutation_counter_oos << " "
          << diagnostics.subcommutation_counter_total_missing;
+    LOGD << "Image format counter diagnostics - " << diagnostics.image_format_counter_oos << " "
+         << diagnostics.image_format_counter_total_missing;
 #endif
 }
 
