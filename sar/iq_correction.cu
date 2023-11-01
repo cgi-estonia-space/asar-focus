@@ -13,7 +13,7 @@
 
 #include "alus_log.h"
 #include "cuda_util/cuda_cleanup.h"
-#include "util/checks.h"
+#include "checks.h"
 
 namespace {
 

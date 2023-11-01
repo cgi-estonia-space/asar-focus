@@ -6,31 +6,6 @@ set(CMAKE_CXX_STANDARD  17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-set(ENVISAT_FORMAT_FILES
-        envisat_format/asar_aux.cc
-        envisat_format/asar_aux.h
-        envisat_format/asar_constants.cpp
-        envisat_format/asar_constants.h
-        envisat_format/envisat_lvl0_parser.cpp
-        envisat_format/envisat_lvl0_parser.h
-        envisat_format/envisat_lvl1_writer.cpp
-        envisat_format/envisat_lvl1_writer.h
-        envisat_format/bswap_util.h
-        envisat_format/envisat_mph_sph_parser.h
-        envisat_format/envisat_aux_file.cpp
-        envisat_format/envisat_aux_file.h
-        envisat_format/envisat_lvl1_ads.h
-        envisat_format/envisat_lvl1_mph.h
-        envisat_format/envisat_mph_sph_str_utils.h
-        envisat_format/envisat_lvl1_sph.h
-        envisat_format/envisat_types.h
-        envisat_format/envisat_utils.h
-        envisat_format/ers_aux_file.cc
-        envisat_format/ers_aux_file.h
-        envisat_format/doris_orbit.cc
-        envisat_format/doris_orbit.h
-        )
-
 set(SAR_SOURCES
         sar/fractional_doppler_centroid.cu
         sar/fractional_doppler_centroid.cuh
@@ -58,24 +33,8 @@ set(CUDA_UTIL_SOURCES
         cuda_util/device_padded_image.cuh
         )
 
-set(UTIL_SOURCES
-        util/checks.h
-        util/filesystem_util.cc
-        util/date_time_util.cc
-        util/date_time_util.h
-
-        util/geo_tools.cpp
-        util/geo_tools.h
-        util/img_output.cpp
-        util/img_output.h
-        util/math_utils.cpp
-        util/math_utils.h
-        util/plot.cpp
-        util/plot.h
-        )
-
 set(SOURCES
-        main.cc ${ENVISAT_FORMAT_FILES} ${SAR_SOURCES} ${CUDA_UTIL_SOURCES} ${UTIL_SOURCES}
+        main.cc main_flow.cc ${SAR_SOURCES} ${CUDA_UTIL_SOURCES}
 )
 
 add_executable(asar_focus ${SOURCES})
@@ -100,7 +59,7 @@ endif()
 message(STATUS "CUDA binary code will be generated for the following architecture(s) - ${CMAKE_CUDA_ARCHITECTURES}")
 set_property(TARGET asar_focus PROPERTY CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -Wextra -pedantic")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror -pedantic ")
 
 INCLUDE_DIRECTORIES(${CUDAToolkit_INCLUDE_DIRS})
 
@@ -117,11 +76,13 @@ include(FetchContent)
 include(dependencies/FetchContents.cmake)
 
 add_subdirectory(app)
+add_subdirectory(envisat_format)
+add_subdirectory(util)
 
 target_include_directories(asar_focus PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
     message("Also adding 'stdc++fs' for linking since the g++ version ${CMAKE_CXX_COMPILER_VERSION} requires it.")
-    target_link_libraries(asar_focus PRIVATE gdal cufft fmt::fmt Boost::date_time Boost::program_options Eigen3::Eigen stdc++fs app-static)
+    target_link_libraries(asar_focus PRIVATE gdal cufft Eigen3::Eigen stdc++fs app-static util-static envisat-format-static)
 else ()
-    target_link_libraries(asar_focus PRIVATE gdal cufft fmt::fmt Boost::date_time Boost::program_options Eigen3::Eigen app-static)
+    target_link_libraries(asar_focus PRIVATE gdal cufft Eigen3::Eigen app-static util-static envisat-format-static)
 endif()

@@ -11,7 +11,7 @@
 
 #include "cuda_util/cuda_cleanup.h"
 #include "cuda_util/cufft_plan.h"
-#include "util/checks.h"
+#include "checks.h"
 
 #define INPLACE_AZIMUTH_FFT 0  // 0 -> transpose + range FFT + transpose, 1 -> azimuth FFT
 

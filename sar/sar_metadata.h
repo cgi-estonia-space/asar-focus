@@ -4,8 +4,8 @@
 #include <vector>
 
 #include "sar/orbit_state_vector.h"
-#include "util/geo_tools.h"
-#include "util/math_utils.h"
+#include "geo_tools.h"
+#include "math_utils.h"
 
 struct ImgDimensions {
     int range_size;

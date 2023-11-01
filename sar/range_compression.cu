@@ -1,12 +1,19 @@
-
+/**
+* ENVISAT and ERS ASAR instrument focusser for QA4EO activity (c) by CGI Estonia AS
+*
+* ENVISAT and ERS ASAR instrument focusser for QA4EO activity is licensed under a
+* Creative Commons Attribution-ShareAlike 4.0 International License.
+*
+* You should have received a copy of the license along with this
+* work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
+ */
 
 #include "range_compression.cuh"
 
 #include "cuda_util/cuda_cleanup.h"
 #include "cuda_util/cuda_util.h"
 #include "cuda_util/cufft_plan.h"
-#include "util/checks.h"
-//#include "math_utils.h"
+#include "checks.h"
 
 __global__ void FrequencyDomainMultiply(cufftComplex* data_fft, const cufftComplex* chirp_fft, int range_fft_size,
                                         int azimuth_size) {
