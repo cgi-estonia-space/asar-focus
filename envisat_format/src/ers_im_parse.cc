@@ -20,7 +20,7 @@
 #include "ers_env_format.h"
 #include "parse_util.h"
 
-#define DEBUG_PACKETS 0
+#define DEBUG_PACKETS 1
 #define HANDLE_DIAGNOSTICS 1
 
 namespace {
@@ -56,17 +56,20 @@ int SwathIdx(const std::string& swath) {
 
 struct EchoMeta {
     mjd isp_sensing_time;
-    uint16_t isp_length;
+
+    uint16_t isp_length; // Part of the FEP annotation, but this is the only useful field, others are static fillers.
+
     uint32_t data_record_number;
+    // IDHT header
     uint8_t packet_counter;
     uint8_t subcommutation_counter;
-    uint64_t onboard_time;
 
+    // Auxiliary data and replica/calibration pulses
+    uint64_t onboard_time;
     uint16_t activity_task;
     uint32_t image_format_counter;
     uint16_t pri_code;
     uint16_t swst_code;
-    uint16_t echo_window_code;
 
     std::vector<std::complex<float>> raw_data;
 };
@@ -74,52 +77,24 @@ struct EchoMeta {
 #if DEBUG_PACKETS
 
 struct ErsFepAndPacketMetadata {
-    FEPAnnotations fep_annotations;
-    uint32_t data_record_no;
     EchoMeta echo_meta;
 };
 
 [[maybe_unused]] void DebugErsPackets(const std::vector<ErsFepAndPacketMetadata> dm, size_t limit,
                                       std::ostream& out_stream) {
-    out_stream << "mjd_fep,mjd_fep_micros,isp_length,crc_error_count,correction_count,spare,"
-               << "data_rec_no,packet_counter,subcomm_counter,"
-               << "isp_sense,isp_sense_micros,mode_id,onboard_time,mode_count,antenna_beam_set_no,comp_ratio,echo_flag,"
-               << "noise_flag,cal_flag,"
-               << "cal_type,cycle_count,pri_code,swst_code,echo_window_code,upconverter_raw,downconverter_raw,tx_pol,"
-               << "rx_pol,cal_row_number,tx_pulse_code,beam_adj_delta,chirp_pulse_bw_code,aux_tx_monitor_level,"
-               << "resampling_factor" << std::endl;
+    out_stream << "isp_sense,isp_sense_micros,isp_length,data_rec_no,packet_counter,subcomm_counter,onboard_time,"
+               << "activity_task,image_format_counter,pri_code,swst_code" << std::endl;
     for (size_t i{}; i < limit; i++) {
-        const auto& emi = dm.at(i).echo_meta;
-        const auto& dmi = dm.at(i);
-        std::string mjd_fep_str{"INVALID"};
-        long mjd_fep_micros{};
-        mjd mjd_fep = dmi.fep_annotations.mjd_time;
-        try {
-            const auto mjd_fep_ptime = MjdToPtime(mjd_fep);
-            mjd_fep_str = boost::posix_time::to_simple_string(mjd_fep_ptime);
-            mjd_fep_micros = mjd_fep_ptime.time_of_day().total_microseconds();
-        } catch (const std::out_of_range& e) {
-            mjd_fep_str = fmt::format("{}-{}-{}", mjd_fep.days, mjd_fep.seconds, mjd_fep.micros);
-        }
+        const auto& dmi = dm.at(i).echo_meta;
 
-        const auto isp_sensing_time_ptime = MjdToPtime(emi.isp_sensing_time);
+        const auto isp_sensing_time_ptime = MjdToPtime(dmi.isp_sensing_time);
         // clang-format off
-        out_stream << mjd_fep_str << "," << mjd_fep_micros << "," << dmi.fep_annotations.isp_length << ","
-               << dmi.fep_annotations.crcErrorCnt << "," << dmi.fep_annotations.correctionCnt << ","
-               << dmi.fep_annotations.spare << ","
-               << dmi.data_record_no << "," << (uint32_t)dmi.packet_counter  << ","
-               << (uint32_t)dmi.subcommutation_counter << ","
-               << boost::posix_time::to_simple_string(isp_sensing_time_ptime) << ","
-               << isp_sensing_time_ptime.time_of_day().total_microseconds() << ","
-               << fmt::format("{:#x},", emi.mode_id) << emi.onboard_time << "," << emi.mode_count << ","
-               << fmt::format("{:#x},{:#x},{},{},{},{}", emi.antenna_beam_set_no, emi.comp_ratio,
-                              emi.echo_flag, emi.noise_flag, emi.cal_flag, emi.cal_type) << ","
-               << emi.cycle_count << "," << emi.pri_code << "," << emi.swst_code << "," << emi.echo_window_code << ","
-               << fmt::format("{:#x},{:#x},{},{}", emi.upconverter_raw, emi.downconverter_raw, emi.tx_pol, emi.rx_pol)
-               << "," << (uint32_t)emi.cal_row_number << "," << emi.tx_pulse_code << ","
-               << fmt::format("{:#x},{:#x},{:#x}",
-                              emi.beam_adj_delta, emi.chirp_pulse_bw_code, emi.aux_tx_monitor_level) << ","
-               << emi.resampling_factor << std::endl;
+        out_stream << boost::posix_time::to_simple_string(isp_sensing_time_ptime) << ","
+                   << isp_sensing_time_ptime.time_of_day().total_microseconds() << ","
+                   << dmi.isp_length << "," << dmi.data_record_number << "," << (uint32_t)dmi.packet_counter  << ","
+                   << (uint32_t)dmi.subcommutation_counter << "," << dmi.onboard_time << ","
+                   << dmi.activity_task << "," << dmi.image_format_counter << "," << dmi.pri_code << ","
+                   << dmi.swst_code << std::endl;
         // clang-format on
     }
 }
@@ -133,7 +108,7 @@ inline void FetchDrNo(const uint8_t* array_start, uint32_t& dr_no) {
 #if HANDLE_DIAGNOSTICS
 constexpr auto DR_NO_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint32_t, 32>()};
 constexpr auto PACKET_COUNTER_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint8_t, 8>()};
-constexpr auto SUBCOMMUTATION_COUNTER_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint8_t, 8>()};
+constexpr uint8_t SUBCOMMUTATION_COUNTER_MAX{48};
 
 void InitializeCounters(const uint8_t* packets_start, uint32_t& dr_no, uint8_t& packet_counter,
                         uint8_t& subcommutation_counter) {
@@ -171,7 +146,7 @@ struct PacketParseDiagnostics {
     size_t dr_no_oos;            // No. of times gap happened.
     size_t dr_no_total_missing;  // Total sum of all gaps' value.
     size_t packet_counter_oos;
-    size_t packer_counter_missing;
+    size_t packer_counter_total_missing;
     size_t subcommutation_counter_oos;
     size_t subcommutation_counter_total_missing;
 };
@@ -227,7 +202,7 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     uint8_t last_packet_counter{};
     uint8_t last_subcommutation_counter{};
     InitializeCounters(it, last_dr_no, last_packet_counter, last_subcommutation_counter);
-    PacketParseDiagnostics diagnostics;
+    PacketParseDiagnostics diagnostics{};
 #endif
     uint16_t first_pri_code{};
     FetchPriCode(it + 60, first_pri_code);
@@ -235,9 +210,9 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     CalculatePrf(first_pri_code, first_pri_us, sar_meta.pulse_repetition_frequency);
     first_pri_us *= 10e5;
 
-//    mjd rolling_isp_sensing_time{};
-//    [[maybe_unused]] const auto discard_it = CopyBSwapPOD(rolling_isp_sensing_time, it);
-//    mjd stash_isp_change = rolling_isp_sensing_time;
+    //    mjd rolling_isp_sensing_time{};
+    //    [[maybe_unused]] const auto discard_it = CopyBSwapPOD(rolling_isp_sensing_time, it);
+    //    mjd stash_isp_change = rolling_isp_sensing_time;
 
     const auto start_filter_mjd = PtimeToMjd(packets_start_filter);
     const auto end_filter_mjd = PtimeToMjd(packets_stop_filter);
@@ -250,12 +225,12 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         const auto* it_start = it;
 #endif
         it = CopyBSwapPOD(echo_meta.isp_sensing_time, it);
-//        if (echo_meta.isp_sensing_time == stash_isp_change) {
-//            echo_meta.isp_sensing_time = MjdAddMicros(rolling_isp_sensing_time, first_pri_us);
-//        } else {
-//            stash_isp_change = echo_meta.isp_sensing_time;
-//        }
-//        rolling_isp_sensing_time = echo_meta.isp_sensing_time;
+        //        if (echo_meta.isp_sensing_time == stash_isp_change) {
+        //            echo_meta.isp_sensing_time = MjdAddMicros(rolling_isp_sensing_time, first_pri_us);
+        //        } else {
+        //            stash_isp_change = echo_meta.isp_sensing_time;
+        //        }
+        //        rolling_isp_sensing_time = echo_meta.isp_sensing_time;
         // FEP annotation only consists of useful ISP length for ERS.
         it += 12;  // No MJD for ERS.
         it = CopyBSwapPOD(echo_meta.isp_length, it);
@@ -278,9 +253,8 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
 #endif
             continue;
         }
-        
+
         if (echo_meta.isp_sensing_time > end_filter_mjd) {
-            it += 234 + 11232;
             break;
         }
 
@@ -309,7 +283,8 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         echo_meta.onboard_time |= static_cast<uint64_t>(it[2]) << 8;
         echo_meta.onboard_time |= static_cast<uint64_t>(it[3]) << 0;
         it += 4;
-        it += 6;  // activity task and image format counter;
+        it = CopyBSwapPOD(echo_meta.activity_task, it);
+        it = CopyBSwapPOD(echo_meta.image_format_counter, it);
         it = CopyBSwapPOD(echo_meta.swst_code, it);
         it = CopyBSwapPOD(echo_meta.pri_code, it);
         it += 194 + 10;
@@ -329,14 +304,15 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         // When gap is 0, this is not handled - could be massive rollover or duplicate.
         if (packet_counter_gap > 1) {
             diagnostics.packet_counter_oos++;
-            diagnostics.packer_counter_missing += (packet_counter_gap - 1);
+            diagnostics.packer_counter_total_missing += (packet_counter_gap - 1);
         }
         last_packet_counter = echo_meta.packet_counter;
 
         const auto subcommutation_gap = parseutil::CounterGap<uint8_t, SUBCOMMUTATION_COUNTER_MAX>(
             last_subcommutation_counter, echo_meta.subcommutation_counter);
         // When gap is 0, this is not handled - could be massive rollover or duplicate.
-        if (subcommutation_gap > 1) {
+        // Also the counter does not start from 0.
+        if (subcommutation_gap > 1 && echo_meta.subcommutation_counter != 1) {
             diagnostics.subcommutation_counter_oos++;
             diagnostics.subcommutation_counter_total_missing += (subcommutation_gap - 1);
         }
@@ -541,6 +517,15 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     sar_meta.azimuth_bandwidth_fraction = 0.8f;
     auto llh = xyz2geoWGS84(sar_meta.center_point);
     LOGD << "center point = " << llh.latitude << " " << llh.longitude;
+
+#if HANDLE_DIAGNOSTICS
+    LOGD << "Data record number field diagnostics - " << diagnostics.dr_no_oos << " "
+         << diagnostics.dr_no_total_missing;
+    LOGD << "Packet counter field diagnostics - " << diagnostics.packet_counter_oos << " "
+         << diagnostics.packer_counter_total_missing;
+    LOGD << "Subcommutation counter field diagnostics - " << diagnostics.subcommutation_counter_oos << " "
+         << diagnostics.subcommutation_counter_total_missing;
+#endif
 }
 
 }  // namespace alus::asar::envformat
