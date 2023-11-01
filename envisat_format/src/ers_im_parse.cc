@@ -10,7 +10,6 @@
 
 #include "ers_im_parse.h"
 
-#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -18,8 +17,11 @@
 
 #include "alus_log.h"
 #include "envisat_utils.h"
+#include "ers_env_format.h"
+#include "parse_util.h"
 
 #define DEBUG_PACKETS 0
+#define HANDLE_DIAGNOSTICS 1
 
 namespace {
 
@@ -54,62 +56,40 @@ int SwathIdx(const std::string& swath) {
 
 struct EchoMeta {
     mjd isp_sensing_time;
-    uint8_t mode_id;
+    uint16_t isp_length;
+    uint32_t data_record_number;
+    uint8_t packet_counter;
+    uint8_t subcommutation_counter;
     uint64_t onboard_time;
-    uint32_t mode_count;
-    uint8_t antenna_beam_set_no;
-    uint8_t comp_ratio;
-    bool echo_flag;
-    bool noise_flag;
-    bool cal_flag;
-    bool cal_type;
-    uint16_t cycle_count;
 
+    uint16_t activity_task;
+    uint32_t image_format_counter;
     uint16_t pri_code;
     uint16_t swst_code;
     uint16_t echo_window_code;
-    uint8_t upconverter_raw;
-    uint8_t downconverter_raw;
-    bool tx_pol;
-    bool rx_pol;
-    uint8_t cal_row_number;
-    uint16_t tx_pulse_code;
-    uint8_t beam_adj_delta;
-    uint8_t chirp_pulse_bw_code;
-    uint8_t aux_tx_monitor_level;
-    uint16_t resampling_factor;
 
     std::vector<std::complex<float>> raw_data;
 };
 
+#if DEBUG_PACKETS
+
 struct ErsFepAndPacketMetadata {
     FEPAnnotations fep_annotations;
     uint32_t data_record_no;
-    uint8_t packet_counter;
-    uint8_t subcommutation_counter;
+    EchoMeta echo_meta;
 };
 
-[[maybe_unused]] void DebugErsPackets(const std::vector<EchoMeta>& em, const std::vector<ErsFepAndPacketMetadata> dm,
-                                      size_t limit) {
-    if (em.size() != dm.size()) {
-        LOGW << "ERS dbg metadata size is not equal to echoes.";
-        return;
-    }
-
-    std::stringstream stream;
-    stream << "mjd_fep,mjd_fep_micros,isp_length,crc_error_count,correction_count,spare,"
-           << "data_rec_no,packet_counter,subcomm_counter,"
-           << "isp_sense,isp_sense_micros,mode_id,onboard_time,mode_count,antenna_beam_set_no,comp_ratio,echo_flag,"
-           << "noise_flag,cal_flag,"
-           << "cal_type,cycle_count,pri_code,swst_code,echo_window_code,upconverter_raw,downconverter_raw,tx_pol,"
-           << "rx_pol,cal_row_number,tx_pulse_code,beam_adj_delta,chirp_pulse_bw_code,aux_tx_monitor_level,"
-           << "resampling_factor" << std::endl;
-    std::cout << stream.str();
-    const auto length = em.size();
-    (void)length;
+[[maybe_unused]] void DebugErsPackets(const std::vector<ErsFepAndPacketMetadata> dm, size_t limit,
+                                      std::ostream& out_stream) {
+    out_stream << "mjd_fep,mjd_fep_micros,isp_length,crc_error_count,correction_count,spare,"
+               << "data_rec_no,packet_counter,subcomm_counter,"
+               << "isp_sense,isp_sense_micros,mode_id,onboard_time,mode_count,antenna_beam_set_no,comp_ratio,echo_flag,"
+               << "noise_flag,cal_flag,"
+               << "cal_type,cycle_count,pri_code,swst_code,echo_window_code,upconverter_raw,downconverter_raw,tx_pol,"
+               << "rx_pol,cal_row_number,tx_pulse_code,beam_adj_delta,chirp_pulse_bw_code,aux_tx_monitor_level,"
+               << "resampling_factor" << std::endl;
     for (size_t i{}; i < limit; i++) {
-        stream.str("");
-        const auto& emi = em.at(i);
+        const auto& emi = dm.at(i).echo_meta;
         const auto& dmi = dm.at(i);
         std::string mjd_fep_str{"INVALID"};
         long mjd_fep_micros{};
@@ -124,7 +104,7 @@ struct ErsFepAndPacketMetadata {
 
         const auto isp_sensing_time_ptime = MjdToPtime(emi.isp_sensing_time);
         // clang-format off
-        stream << mjd_fep_str << "," << mjd_fep_micros << "," << dmi.fep_annotations.isp_length << ","
+        out_stream << mjd_fep_str << "," << mjd_fep_micros << "," << dmi.fep_annotations.isp_length << ","
                << dmi.fep_annotations.crcErrorCnt << "," << dmi.fep_annotations.correctionCnt << ","
                << dmi.fep_annotations.spare << ","
                << dmi.data_record_no << "," << (uint32_t)dmi.packet_counter  << ","
@@ -141,9 +121,81 @@ struct ErsFepAndPacketMetadata {
                               emi.beam_adj_delta, emi.chirp_pulse_bw_code, emi.aux_tx_monitor_level) << ","
                << emi.resampling_factor << std::endl;
         // clang-format on
-        std::cout << stream.str();
     }
 }
+
+#endif
+
+inline void FetchDrNo(const uint8_t* array_start, uint32_t& dr_no) {
+    [[maybe_unused]] const auto discard = CopyBSwapPOD(dr_no, array_start);
+}
+
+#if HANDLE_DIAGNOSTICS
+constexpr auto DR_NO_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint32_t, 32>()};
+constexpr auto PACKET_COUNTER_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint8_t, 8>()};
+constexpr auto SUBCOMMUTATION_COUNTER_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint8_t, 8>()};
+
+void InitializeCounters(const uint8_t* packets_start, uint32_t& dr_no, uint8_t& packet_counter,
+                        uint8_t& subcommutation_counter) {
+    FetchDrNo(packets_start + alus::asar::envformat::ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES +
+                  alus::asar::envformat::ers::highrate::FEP_ANNOTATION_SIZE_BYTES,
+              dr_no);
+    if (dr_no != 0) {
+        dr_no--;
+    } else {
+        dr_no = DR_NO_MAX;
+    }
+    // 36 for packet counter
+    packet_counter = packets_start[alus::asar::envformat::ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES +
+                                   alus::asar::envformat::ers::highrate::FEP_ANNOTATION_SIZE_BYTES +
+                                   alus::asar::envformat::ers::highrate::DATA_RECORD_NUMBER_SIZE_BYTES];
+    if (packet_counter == 0) {
+        packet_counter = PACKET_COUNTER_MAX;
+    } else {
+        packet_counter--;
+    }
+
+    // 37 for subcommutation counter.
+    subcommutation_counter = packets_start[alus::asar::envformat::ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES +
+                                           alus::asar::envformat::ers::highrate::FEP_ANNOTATION_SIZE_BYTES +
+                                           alus::asar::envformat::ers::highrate::DATA_RECORD_NUMBER_SIZE_BYTES + 1];
+    if (subcommutation_counter == 0) {
+        subcommutation_counter = SUBCOMMUTATION_COUNTER_MAX;
+    } else {
+        subcommutation_counter--;
+    };
+}
+
+// oos - out of sequence
+struct PacketParseDiagnostics {
+    size_t dr_no_oos;            // No. of times gap happened.
+    size_t dr_no_total_missing;  // Total sum of all gaps' value.
+    size_t packet_counter_oos;
+    size_t packer_counter_missing;
+    size_t subcommutation_counter_oos;
+    size_t subcommutation_counter_total_missing;
+};
+
+#endif
+
+inline void FetchPriCode(const uint8_t* start_array, uint16_t& var) {
+    var |= static_cast<uint16_t>(start_array[0]) << 8;
+    var |= start_array[1];
+}
+
+inline void CalculatePrf(uint16_t pri_code, double& pri, double& prf) {
+    // ISCE2 uses 210.943006e-9, but
+    // ERS-1-Satellite-to-Ground-Segment-Interface-Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05
+    // note 5 in 4.4:28 specifies 210.94 ns, which draws more similar results to PF-ERS results.
+    pri = (pri_code + 2.0) * 210.94e-9;
+    prf = 1 / pri;
+
+    if (prf < 1640 || prf > 1720) {
+        LOGW << "PRF value '" << prf << "' is out of the specification (ERS-1-Satellite-to-Ground-Segment-Interface-"
+             << "Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05) range [1640, 1720] Hz" << std::endl;
+    }
+}
+
 }  // namespace
 
 namespace alus::asar::envformat {
@@ -152,53 +204,102 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
                              ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data,
                              InstrumentFile& ins_file, boost::posix_time::ptime packets_start_filter,
                              boost::posix_time::ptime packets_stop_filter) {
-    (void)packets_start_filter;
-    (void)packets_stop_filter;
     FillFbaqMeta(asar_meta);
-    std::vector<EchoMeta> echos;  // Via MDSR - the count of data records -> reserve()?
     const uint8_t* it = reinterpret_cast<const uint8_t*>(file_data.data()) + mdsr.ds_offset;
+    if (mdsr.dsr_size != ers::highrate::MDSR_SIZE_BYTES) {
+        throw std::runtime_error("Expected DSR to be " + std::to_string(ers::highrate::MDSR_SIZE_BYTES) +
+                                 " bytes, actual - " + std::to_string(mdsr.dsr_size) +
+                                 ". This is a failsafe abort, check the dataset.");
+    }
+    if (file_data.size() - mdsr.ds_offset != mdsr.num_dsr * mdsr.dsr_size) {
+        throw std::runtime_error("Actual packets BLOB array (" + std::to_string(file_data.size() - mdsr.ds_offset) +
+                                 " bytes) is not equal to dataset defined packets (" +
+                                 std::to_string(mdsr.num_dsr * mdsr.dsr_size) + " bytes).");
+    }
+    std::vector<EchoMeta> echos;
+    echos.reserve(mdsr.num_dsr);
 #if DEBUG_PACKETS
     std::vector<ErsFepAndPacketMetadata> ers_dbg_meta;
+    std::ofstream debug_stream("/tmp/" + asar_meta.product_name + ".debug.csv");
 #endif
+#if HANDLE_DIAGNOSTICS
+    uint32_t last_dr_no{};
+    uint8_t last_packet_counter{};
+    uint8_t last_subcommutation_counter{};
+    InitializeCounters(it, last_dr_no, last_packet_counter, last_subcommutation_counter);
+    PacketParseDiagnostics diagnostics;
+#endif
+    uint16_t first_pri_code{};
+    FetchPriCode(it + 60, first_pri_code);
+    double first_pri_us{};
+    CalculatePrf(first_pri_code, first_pri_us, sar_meta.pulse_repetition_frequency);
+    first_pri_us *= 10e5;
+
+//    mjd rolling_isp_sensing_time{};
+//    [[maybe_unused]] const auto discard_it = CopyBSwapPOD(rolling_isp_sensing_time, it);
+//    mjd stash_isp_change = rolling_isp_sensing_time;
+
     const auto start_filter_mjd = PtimeToMjd(packets_start_filter);
     const auto end_filter_mjd = PtimeToMjd(packets_stop_filter);
+
+    // https://earth.esa.int/eogateway/documents/20142/37627/ERS-products-specification-with-Envisat-format.pdf
+    // https://asf.alaska.edu/wp-content/uploads/2019/03/ers_ceos.pdf mixed between two.
     for (size_t i = 0; i < mdsr.num_dsr; i++) {
         EchoMeta echo_meta = {};
-        // Source: ENVISAT-1 ASAR INTERPRETATION OF SOURCE PACKET DATA
-        // PO-TN-MMS-SR-0248
+#if HANDLE_DIAGNOSTICS
+        const auto* it_start = it;
+#endif
         it = CopyBSwapPOD(echo_meta.isp_sensing_time, it);
-        FEPAnnotations fep;
-        it = CopyBSwapPOD(fep, it);
+//        if (echo_meta.isp_sensing_time == stash_isp_change) {
+//            echo_meta.isp_sensing_time = MjdAddMicros(rolling_isp_sensing_time, first_pri_us);
+//        } else {
+//            stash_isp_change = echo_meta.isp_sensing_time;
+//        }
+//        rolling_isp_sensing_time = echo_meta.isp_sensing_time;
+        // FEP annotation only consists of useful ISP length for ERS.
+        it += 12;  // No MJD for ERS.
+        it = CopyBSwapPOD(echo_meta.isp_length, it);
+        it += 6;  // No CRC or correction count for ERS.
         if (echo_meta.isp_sensing_time < start_filter_mjd) {
-            it += 234 + 11232;
+            it = it_start + ers::highrate::MDSR_SIZE_BYTES;
+#if HANDLE_DIAGNOSTICS
+            // 32 offset
+            FetchDrNo(it_start + ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES +
+                          ers::highrate::FEP_ANNOTATION_SIZE_BYTES,
+                      last_dr_no);
+            // 36 offset (part of IDHT)
+            last_packet_counter =
+                it_start[ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES + ers::highrate::FEP_ANNOTATION_SIZE_BYTES +
+                         ers::highrate::DATA_RECORD_NUMBER_SIZE_BYTES];
+            // 37 offset (part of IDHT)
+            last_subcommutation_counter =
+                it_start[ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES + ers::highrate::FEP_ANNOTATION_SIZE_BYTES +
+                         ers::highrate::DATA_RECORD_NUMBER_SIZE_BYTES + 1];
+#endif
             continue;
         }
+        
         if (echo_meta.isp_sensing_time > end_filter_mjd) {
             it += 234 + 11232;
-            continue;
+            break;
         }
-        static uint32_t last_data_record_no{0};
-        uint32_t dr_no{};
-        it = CopyBSwapPOD(dr_no, it);
-        if (last_data_record_no == 0) {
-            last_data_record_no = dr_no - 1;
+
+        // ISP size - 1.
+        if (echo_meta.isp_length != 11465) {
+            throw std::runtime_error("FEP annotation's ISP length shall be 11465. Check the dataset, current one has " +
+                                     std::to_string(echo_meta.isp_length) + " for packet no " + std::to_string(i + 1));
         }
-        //            if (last_data_record_no + 1 != dr_no) {
-        //                LOGD << "There are discrepancies between ERS data packets. Last no. " <<
-        //                last_data_record_nr << " current no. " << dr_no;
-        //            }
+        it = CopyBSwapPOD(echo_meta.data_record_number, it);
 
-        last_data_record_no = dr_no;
-
-        [[maybe_unused]] uint8_t packet_counter = it[0];
-        [[maybe_unused]] uint8_t subcommutation_counter = it[1];
+        echo_meta.packet_counter = it[0];
+        echo_meta.subcommutation_counter = it[1];
         it += 2;
 
-        it += 8;
+        it += 8;  // IDHT General header source packet
         if (it[0] != 0xAA) {
-            std::cerr << "ERS data packet's auxiliary section shall start with 0xAA, instead " << std::hex << it[0]
-                      << " was found" << std::endl;
-            exit(1);
+            throw std::runtime_error(fmt::format(
+                "ERS data packet's auxiliary section shall start with 0xAA, instead {:#x} was found for packet no {}",
+                it[0], i + 1));
         }
         it += 1;
         it += 1;  // OGRC/OBRC flag and Orbit ID code
@@ -211,10 +312,38 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         it += 6;  // activity task and image format counter;
         it = CopyBSwapPOD(echo_meta.swst_code, it);
         it = CopyBSwapPOD(echo_meta.pri_code, it);
-        // https://earth.esa.int/eogateway/documents/20142/37627/ERS-products-specification-with-Envisat-format.pdf
-        // https://asf.alaska.edu/wp-content/uploads/2019/03/ers_ceos.pdf mixed between two.
         it += 194 + 10;
-        echo_meta.raw_data.reserve(11232);
+
+#if HANDLE_DIAGNOSTICS
+        const auto dr_no_gap = parseutil::CounterGap<uint32_t, DR_NO_MAX>(last_dr_no, echo_meta.data_record_number);
+        // Value 0 denotes reset.
+        // When gap is 0, this is not handled - could be massive rollover or duplicate.
+        if (dr_no_gap > 1) {
+            diagnostics.dr_no_oos++;
+            diagnostics.dr_no_total_missing += (dr_no_gap - 1);
+        }
+        last_dr_no = echo_meta.data_record_number;
+
+        const auto packet_counter_gap =
+            parseutil::CounterGap<uint8_t, PACKET_COUNTER_MAX>(last_packet_counter, echo_meta.packet_counter);
+        // When gap is 0, this is not handled - could be massive rollover or duplicate.
+        if (packet_counter_gap > 1) {
+            diagnostics.packet_counter_oos++;
+            diagnostics.packer_counter_missing += (packet_counter_gap - 1);
+        }
+        last_packet_counter = echo_meta.packet_counter;
+
+        const auto subcommutation_gap = parseutil::CounterGap<uint8_t, SUBCOMMUTATION_COUNTER_MAX>(
+            last_subcommutation_counter, echo_meta.subcommutation_counter);
+        // When gap is 0, this is not handled - could be massive rollover or duplicate.
+        if (subcommutation_gap > 1) {
+            diagnostics.subcommutation_counter_oos++;
+            diagnostics.subcommutation_counter_total_missing += (subcommutation_gap - 1);
+        }
+        last_subcommutation_counter = echo_meta.subcommutation_counter;
+#endif
+
+        echo_meta.raw_data.reserve(ers::highrate::MEASUREMENT_DATA_SIZE_BYTES);
         // uint64_t i_avg_cumulative{0};
         // uint64_t q_avg_cumulative{0};
         for (size_t r_i{0}; r_i < 5616; r_i++) {
@@ -236,10 +365,7 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         echos.push_back(std::move(echo_meta));
 #if DEBUG_PACKETS
         ErsFepAndPacketMetadata meta{};
-        meta.fep_annotations = fep;
-        meta.data_record_no = dr_no;
-        meta.packet_counter = packet_counter;
-        meta.subcommutation_counter = subcommutation_counter;
+        meta.echo_meta = echo_meta;
         ers_dbg_meta.push_back(meta);
 #endif
     }
@@ -254,19 +380,19 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     LOGD << "Swath = " << asar_meta.swath << " idx = " << swath_idx;
 
 #if DEBUG_PACKETS
-    DebugErsPackets(echos, ers_dbg_meta, 800);
+    DebugErsPackets(ers_dbg_meta, ers_dbg_meta.size(), debug_stream);
 #endif
 
     asar_meta.first_swst_code = echos.front().swst_code;
     asar_meta.last_swst_code = echos.back().swst_code;
-    asar_meta.tx_bw_code = echos.front().chirp_pulse_bw_code;
-    asar_meta.up_code = echos.front().upconverter_raw;
-    asar_meta.down_code = echos.front().downconverter_raw;
+    asar_meta.tx_bw_code = 0;
+    asar_meta.up_code = 0;
+    asar_meta.down_code = 0;
     asar_meta.pri_code = echos.front().pri_code;
-    asar_meta.tx_pulse_len_code = echos.front().tx_pulse_code;
-    asar_meta.beam_set_num_code = echos.front().antenna_beam_set_no;
-    asar_meta.beam_adj_code = echos.front().beam_adj_delta;
-    asar_meta.resamp_code = echos.front().resampling_factor;
+    asar_meta.tx_pulse_len_code = 0;
+    asar_meta.beam_set_num_code = 0;
+    asar_meta.beam_adj_code = 0;
+    asar_meta.resamp_code = 0;
     asar_meta.first_mjd = echos.front().isp_sensing_time;
     asar_meta.first_sbt = echos.front().onboard_time;
     asar_meta.last_mjd = echos.back().isp_sensing_time;
@@ -294,7 +420,7 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     asar_meta.last_line_time = MjdToPtime(echos.back().isp_sensing_time);
     asar_meta.sensing_stop = asar_meta.last_line_time;
 
-    double pulse_bw = 16e6 / 255 * echos.front().chirp_pulse_bw_code;
+    double pulse_bw = 0;
 
     sar_meta.carrier_frequency = ins_file.flp.radar_frequency;
     sar_meta.chirp.range_sampling_rate = ins_file.flp.radar_sampling_rate;
@@ -325,7 +451,6 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
 
     asar_meta.swst_rank = n_pulses_swst;
 
-    // TODO Range gate bias must be included in this calculation
     {
         const auto delay_time = ins_file.flp.range_gate_bias;
         // ISCE2 uses 210.943006e-9, but
