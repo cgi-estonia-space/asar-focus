@@ -266,7 +266,7 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
         mph.SetOrbitInfo(asar_meta);
         mph.Set_SBT_Defaults();
         mph.Set_LEAP_Defaults();
-        mph.Set_PRODUCT_ERR('0');
+        mph.Set_PRODUCT_ERR(asar_meta.product_err ? '1' : '0');
 
         // set tot size later
 

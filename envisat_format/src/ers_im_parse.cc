@@ -20,7 +20,7 @@
 #include "ers_env_format.h"
 #include "parse_util.h"
 
-#define DEBUG_PACKETS 1
+#define DEBUG_PACKETS 0
 #define HANDLE_DIAGNOSTICS 1
 
 namespace {
@@ -205,18 +205,19 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
                                  " bytes) is not equal to dataset defined packets (" +
                                  std::to_string(mdsr.num_dsr * mdsr.dsr_size) + " bytes).");
     }
-    std::vector<EchoMeta> echos;
-    echos.reserve(mdsr.num_dsr);
+    std::vector<EchoMeta> echoes;
+    echoes.reserve(mdsr.num_dsr);
 #if DEBUG_PACKETS
     std::vector<ErsFepAndPacketMetadata> ers_dbg_meta;
     std::ofstream debug_stream("/tmp/" + asar_meta.product_name + ".debug.csv");
 #endif
-#if HANDLE_DIAGNOSTICS
+    // Data rec no. is used to detect missing lines as is in ISCE2. Image format counter seems to be suitable as well.
     uint32_t last_dr_no{};
     uint8_t last_packet_counter{};
     uint8_t last_subcommutation_counter{};
     uint32_t last_image_format_counter{};
     InitializeCounters(it, last_dr_no, last_packet_counter, last_subcommutation_counter, last_image_format_counter);
+#if HANDLE_DIAGNOSTICS
     PacketParseDiagnostics diagnostics{};
 #endif
     uint16_t first_pri_code{};
@@ -246,17 +247,17 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         //            stash_isp_change = echo_meta.isp_sensing_time;
         //        }
         //        rolling_isp_sensing_time = echo_meta.isp_sensing_time;
-        //        FEP annotation only consists of useful ISP length for ERS.
+        // FEP annotation only consists of useful ISP length for ERS.
         it += 12;  // No MJD for ERS.
         it = CopyBSwapPOD(echo_meta.isp_length, it);
         it += 6;  // No CRC or correction count for ERS.
         if (echo_meta.isp_sensing_time < start_filter_mjd) {
             it = it_start + ers::highrate::MDSR_SIZE_BYTES;
-#if HANDLE_DIAGNOSTICS
             // 32 offset
             FetchUint32(it_start + ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES +
                             ers::highrate::FEP_ANNOTATION_SIZE_BYTES,
                         last_dr_no);
+#if HANDLE_DIAGNOSTICS
             // 36 offset (part of IDHT)
             last_packet_counter =
                 it_start[ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES + ers::highrate::FEP_ANNOTATION_SIZE_BYTES +
@@ -309,16 +310,27 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         it = CopyBSwapPOD(echo_meta.pri_code, it);
         it += 194 + 10;
 
-#if HANDLE_DIAGNOSTICS
         const auto dr_no_gap = parseutil::CounterGap<uint32_t, DR_NO_MAX>(last_dr_no, echo_meta.data_record_number);
-        // Value 0 denotes reset.
         // When gap is 0, this is not handled - could be massive rollover or duplicate.
         if (dr_no_gap > 1) {
             diagnostics.dr_no_oos++;
             diagnostics.dr_no_total_missing += (dr_no_gap - 1);
+            const auto packets_to_fill = dr_no_gap - 1;
+            // 900 taken from
+            // https://github.com/gmtsar/gmtsar/blob/master/preproc/ERS_preproc/ers_line_fixer/ers_line_fixer.c#L434
+            // For ISCE2 this is 30000 which seems to be wayyyy too biig.
+            if (packets_to_fill > 900) {
+                throw std::runtime_error(
+                    fmt::format("There are {} packets missing, which is more than threshold 900 in order to continue. "
+                                "It was detected between {}th and {}th packets.",
+                                packets_to_fill, i - 1, i));
+            }
+            for (size_t pf{}; pf < packets_to_fill; pf++) {
+                echoes.push_back(echoes.back());
+            }
         }
         last_dr_no = echo_meta.data_record_number;
-
+#if HANDLE_DIAGNOSTICS
         const auto packet_counter_gap =
             parseutil::CounterGap<uint8_t, PACKET_COUNTER_MAX>(last_packet_counter, echo_meta.packet_counter);
         // Packet counter increments something like after 1679 packets?? based on IM L0 observation. When this happens
@@ -370,7 +382,7 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         //                LOGD << "average for q at MSDR no. " << i << " is OOL " << q_avg;
         //            }
         it += 11232;
-        echos.push_back(std::move(echo_meta));
+        echoes.push_back(std::move(echo_meta));
 #if DEBUG_PACKETS
         ErsFepAndPacketMetadata meta{};
         meta.echo_meta = echo_meta;
@@ -382,7 +394,7 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     uint16_t max_swst = 0;
     size_t max_samples = 0;
     uint16_t swst_changes = 0;
-    uint16_t prev_swst = echos.front().swst_code;
+    uint16_t prev_swst = echoes.front().swst_code;
     const int swst_multiplier{4};
     int swath_idx = SwathIdx(asar_meta.swath);
     LOGD << "Swath = " << asar_meta.swath << " idx = " << swath_idx;
@@ -391,23 +403,23 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     DebugErsPackets(ers_dbg_meta, ers_dbg_meta.size(), debug_stream);
 #endif
 
-    asar_meta.first_swst_code = echos.front().swst_code;
-    asar_meta.last_swst_code = echos.back().swst_code;
+    asar_meta.first_swst_code = echoes.front().swst_code;
+    asar_meta.last_swst_code = echoes.back().swst_code;
     asar_meta.tx_bw_code = 0;
     asar_meta.up_code = 0;
     asar_meta.down_code = 0;
-    asar_meta.pri_code = echos.front().pri_code;
+    asar_meta.pri_code = echoes.front().pri_code;
     asar_meta.tx_pulse_len_code = 0;
     asar_meta.beam_set_num_code = 0;
     asar_meta.beam_adj_code = 0;
     asar_meta.resamp_code = 0;
-    asar_meta.first_mjd = echos.front().isp_sensing_time;
-    asar_meta.first_sbt = echos.front().onboard_time;
-    asar_meta.last_mjd = echos.back().isp_sensing_time;
-    asar_meta.last_sbt = echos.back().onboard_time;
+    asar_meta.first_mjd = echoes.front().isp_sensing_time;
+    asar_meta.first_sbt = echoes.front().onboard_time;
+    asar_meta.last_mjd = echoes.back().isp_sensing_time;
+    asar_meta.last_sbt = echoes.back().onboard_time;
 
     std::vector<float> v;
-    for (auto& e : echos) {
+    for (auto& e : echoes) {
         if (prev_swst != e.swst_code) {
             if ((e.swst_code < 500) || (e.swst_code > 1500) || ((prev_swst - e.swst_code) % 22 != 0)) {
                 e.swst_code = prev_swst;
@@ -423,9 +435,9 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
 
     asar_meta.swst_changes = swst_changes;
 
-    asar_meta.first_line_time = MjdToPtime(echos.front().isp_sensing_time);
+    asar_meta.first_line_time = MjdToPtime(echoes.front().isp_sensing_time);
     asar_meta.sensing_start = asar_meta.first_line_time;
-    asar_meta.last_line_time = MjdToPtime(echos.back().isp_sensing_time);
+    asar_meta.last_line_time = MjdToPtime(echoes.back().isp_sensing_time);
     asar_meta.sensing_stop = asar_meta.last_line_time;
 
     double pulse_bw = 0;
@@ -464,7 +476,7 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         // ISCE2 uses 210.943006e-9, but
         // ERS-1-Satellite-to-Ground-Segment-Interface-Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05
         // note 5 in 4.4:28 specifies 210.94 ns, which draws more similar results to PF-ERS results.
-        const auto pri = (echos.front().pri_code + 2.0) * 210.94e-9;
+        const auto pri = (echoes.front().pri_code + 2.0) * 210.94e-9;
         sar_meta.pulse_repetition_frequency = 1 / pri;
 
         if (sar_meta.pulse_repetition_frequency < 1640 || sar_meta.pulse_repetition_frequency > 1720) {
@@ -495,15 +507,15 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     sar_meta.azimuth_spacing = Vg * (1 / sar_meta.pulse_repetition_frequency);
 
     sar_meta.img.range_size = range_samples;
-    sar_meta.img.azimuth_size = echos.size();
+    sar_meta.img.azimuth_size = echoes.size();
 
     img_data.clear();
     img_data.resize(sar_meta.img.range_size * sar_meta.img.azimuth_size, {NAN, NAN});
 
     sar_meta.total_raw_samples = 0;
 
-    for (size_t y = 0; y < echos.size(); y++) {
-        const auto& e = echos[y];
+    for (size_t y = 0; y < echoes.size(); y++) {
+        const auto& e = echoes[y];
         size_t idx = y * range_samples;
         idx += swst_multiplier * (e.swst_code - min_swst);
         const size_t n_samples = e.raw_data.size();
@@ -550,9 +562,14 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     auto llh = xyz2geoWGS84(sar_meta.center_point);
     LOGD << "center point = " << llh.latitude << " " << llh.longitude;
 
-#if HANDLE_DIAGNOSTICS
-    LOGD << "Data record number field diagnostics - " << diagnostics.dr_no_oos << " "
+    LOGD << "Data record number discontinuities/total missing - " << diagnostics.dr_no_oos << "/"
          << diagnostics.dr_no_total_missing;
+
+    if (diagnostics.dr_no_oos > 0) {
+        asar_meta.product_err = true;
+    }
+
+#if HANDLE_DIAGNOSTICS
     LOGD << "Packet counter field diagnostics - " << diagnostics.packet_counter_oos << " "
          << diagnostics.packer_counter_total_missing << " changes " << diagnostics.packet_counter_changes;
     LOGD << "Subcommutation counter field diagnostics - " << diagnostics.subcommutation_counter_oos << " "
