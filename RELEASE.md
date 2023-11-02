@@ -1,17 +1,47 @@
-# Release 0.2.0
+# Release 0.1.2
 
 ## Breaking changes
-* CLI arguments are defined and shall be used correctly in order to invoke processing
+* CLI arguments are defined and shall be used correctly in order to invoke processing, no more positional arguments
 
 ## Known Caveats
-* 
+* Only IMS product processing
+* Not all the auxiliary files are used/supported, only instrument (INS) and configuration (CON)
+* Range and azimuth compression windowing is yet to be done - https://github.com/cgi-estonia-space/asar-focus/issues/2
+* Processing speed (Vr) and Doppler centroid changes in azimuth direction yet to be done - https://github.com/cgi-estonia-space/asar-focus/issues/2
+  * This means that the focussing quality is not exactly on par with the reference processor
+* Packets' ISP sensing time handling might not be 100% correct
+  * It is observed for the reference products that it calculates new ISP sensing times based on PRI
+  * Therefore products by this processor differ in sensing start/stop and first/last line times (always inside the specified sensing filter)
+  * Best knowledge/effort basis changes has been implemented - https://github.com/cgi-estonia-space/asar-focus/issues/17 and https://github.com/cgi-estonia-space/asar-focus/issues/16
+* ERS time is not corrected according to PATM/N/C files - https://github.com/cgi-estonia-space/asar-focus/issues/15
+* Metadata for SQ_ADS, CHIRP_PARAM_ADS, etc. is not constructed currently - https://github.com/cgi-estonia-space/asar-focus/issues/10
+  * Other non DSD specific metadata as well - LEAP_SIGN, LEAP_ERR, ORBIT etc...
 
 ## Major Features and Improvements
-*
+* Sensing start and end arguments
+* ERS and ENVISAT missing packets insertion
+* For ENVISAT all calibration packets are inserted with echo packet
+* Different modes/products generation is tracked and handled accordingly
+* Less explicit exits, everything is routed through exceptions with descriptive messages
+* Proper log system setup using Boost log, with 5 levels. Can be set when invoking the processor
+* Aux folder handling more robust - can identify aux files implicitly
+* Can parse proper orbit file out of the folder with miscellaneous aux files (TDS sets)
+* Echo metadata is ERS and ENVISAT specific, more fields parsed and used during processing (packet counters for example)
+* Diagnostic metric by default enabled, they are printed out after parsing step (different counters out of sequence and gap metrics)
+* Minor metadata improvements regarding processor, ref doc, compression method
+* FEP annotations' MJD for ENVISAT is parsed correctly
+* Faster parsing/preparing of echos from input dataset, from 1++ second to ~0.7 second
 
 ## Bug Fixes and Other Changes
+* Output file `FILE` handle check and other undefined states now guarded
+* Half of the modules are now CMake modules with unit tests
+* Can be compiled with clang (version 14 tested) as well, compiler flags and build improvements executed for this
 
 ## Thanks to our Contributors
+
+Kajal Haria, Fabiano Costantini from Telespazio UK\
+Sabrina Pinori, Marco Galli from SERCO\
+Andrea Recchia from aresys
 
 # Release 0.1.1
 
@@ -47,5 +77,6 @@
 
 ## Thanks to our Contributors
 
-Kajal Haria, Sabrina Pinori, Fabiano Costantini, Marco Galli from SERCO\
+Kajal Haria, Fabiano Costantini from Telespazio UK\
+Sabrina Pinori, Marco Galli from SERCO\
 Andrea Recchia from aresys
