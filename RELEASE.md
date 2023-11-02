@@ -16,6 +16,8 @@
 * ERS time is not corrected according to PATM/N/C files - https://github.com/cgi-estonia-space/asar-focus/issues/15
 * Metadata for SQ_ADS, CHIRP_PARAM_ADS, etc. is not constructed currently - https://github.com/cgi-estonia-space/asar-focus/issues/10
   * Other non DSD specific metadata as well - LEAP_SIGN, LEAP_ERR, ORBIT etc...
+* Final results' calibration constant is yet to be determined, currently it is not matching exactly the reference processor
+  * With the current experience/knowledge it must be experimented and tested, no known specific formula for it
 
 ## Major Features and Improvements
 * Sensing start and end arguments
