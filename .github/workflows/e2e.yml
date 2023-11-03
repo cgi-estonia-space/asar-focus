@@ -30,7 +30,6 @@ jobs:
           ip_address=$(cat trigger_out.txt | tail -n 1)
           echo "instance_ip=$ip_address" >> $GITHUB_OUTPUT
           sleep 5
-
   end-to-end-testing:
     name: End-to-end testing
     runs-on: ubuntu-latest
@@ -76,13 +75,27 @@ jobs:
           echo "aws_secret_access_key=${SECRET_ACCESS_KEY}" >> /tmp/cred
           scp -o "StrictHostKeyChecking no" /tmp/cred $INSTANCE_USERNAME@$instance_ip:/tmp/
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "/tmp/asar-focus/build-automation/run_e2e_container.sh /dev/shm/e2e $exe_image_name /tmp/cred"
-          # Fetch from RAM disk
-          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "cp -r /dev/shm/e2e/last_run /home/$INSTANCE_USERNAME/."
+  # Separate step because when tests fail we would like to analyze the results still
+  stash-assets-from-ramdisk:
+    name: Stash E2E assets from ramdisk to persistent disk
+    runs-on: ubuntu-latest
+    needs: [start-gpu-instance, end-to-end-testing]
+    if: |
+      needs.end-to-end-testing.result != 'skipped' &&
+      needs.end-to-end-testing.result != 'cancelled'
+    steps:
+      - name: Modify ownership and move assets
+        env:
+          INSTANCE_USERNAME: ${{ secrets.EAGLE_USERNAME }}
+        run: |
+          instance_ip=${{ needs.start-gpu-instance.outputs.instance_ip }}
+          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "sudo chown -R $INSTANCE_USERNAME:$INSTANCE_USERNAME /dev/shm/e2e"
+          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "cp -r /dev/shm/e2e /home/$INSTANCE_USERNAME/."
 
   stop-gpu-instance:
     name: Stop GPU instance
     runs-on: ubuntu-latest
-    needs: [start-gpu-instance, end-to-end-testing]
+    needs: [start-gpu-instance, end-to-end-testing, stash-assets-from-ramdisk]
     if: |
       always() &&
       needs.start-gpu-instance.result == 'success'
