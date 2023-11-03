@@ -32,7 +32,11 @@ struct mjd {
     ul seconds;
     ul micros;
 
-    bool operator <(const mjd& o) const {
+    bool operator ==(const mjd& o) const{
+        return days == o.days && seconds == o.seconds && micros == o.micros;
+    }
+
+    bool operator <(const mjd& o) const{
         if (days == o.days) {
             if (seconds == o.seconds) {
                 return micros < o.micros;

@@ -45,6 +45,7 @@ struct ASARMetadata {
     boost::posix_time::ptime sensing_stop;
     boost::posix_time::ptime first_line_time;
     boost::posix_time::ptime last_line_time;
+    bool product_err{false};
 
     std::string swath;
     std::string polarization;

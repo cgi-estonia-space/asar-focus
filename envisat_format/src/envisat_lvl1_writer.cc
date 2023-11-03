@@ -245,9 +245,12 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
 
         mph.Set_PRODUCT(out_name);
         mph.Set_PROC_STAGE('N');
-        // https://earth.esa.int/eogateway/documents/20142/37627/PO-RS-507316_4_C_Envisat_Product_Spec_Vol8.pdf/
         if (asar_meta.product_name.substr(0, 3) == "ASA") {
+            // https://earth.esa.int/eogateway/documents/20142/37627/PO-RS-507316_4_C_Envisat_Product_Spec_Vol8.pdf/
             mph.Set_REF_DOC("PO-RS-MDA-GS-2009_4/C");
+        } else if (asar_meta.product_name.substr(0, 3) == "SAR") {
+            // https://earth.esa.int/eogateway/documents/20142/37627/ERS-products-specification-with-Envisat-format.pdf
+            mph.Set_REF_DOC("PX-SP-50-9105_3/1");
         } else {
             mph.Set_REF_DOC("TBD.pdf");
         }
@@ -263,7 +266,7 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
         mph.SetOrbitInfo(asar_meta);
         mph.Set_SBT_Defaults();
         mph.Set_LEAP_Defaults();
-        mph.Set_PRODUCT_ERR('0');
+        mph.Set_PRODUCT_ERR(asar_meta.product_err ? '1' : '0');
 
         // set tot size later
 
