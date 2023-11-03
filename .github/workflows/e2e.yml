@@ -84,13 +84,23 @@ jobs:
       needs.end-to-end-testing.result != 'skipped' &&
       needs.end-to-end-testing.result != 'cancelled'
     steps:
+      - name: Create SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EAGLE_SSH_KEY }}
+        run: |
+          key_location=~/.ssh/
+          mkdir -p $key_location
+          key_path=$key_location/id_rsa
+          echo "$SSH_PRIVATE_KEY" > $key_path
+          sudo chmod 600 $key_path
+          ssh-keygen -f $key_path -y > $key_path.pub
       - name: Modify ownership and move assets
         env:
           INSTANCE_USERNAME: ${{ secrets.EAGLE_USERNAME }}
         run: |
           instance_ip=${{ needs.start-gpu-instance.outputs.instance_ip }}
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "sudo chown -R $INSTANCE_USERNAME:$INSTANCE_USERNAME /dev/shm/e2e"
-          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "cp -r /dev/shm/e2e /home/$INSTANCE_USERNAME/."
+          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "rsync -av /dev/shm/e2e /home/$INSTANCE_USERNAME/"
 
   stop-gpu-instance:
     name: Stop GPU instance
