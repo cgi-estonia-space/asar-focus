@@ -58,6 +58,8 @@ jobs:
           rm -rf $GITHUB_WORKSPACE/.git
           scp -o "StrictHostKeyChecking no" -r $GITHUB_WORKSPACE $INSTANCE_USERNAME@$instance_ip:/tmp/
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "CUDAARCHS=\"50;52\" CMAKE_BUILD_TYPE=Release /tmp/asar-focus/build-automation/create_exe_in_container.sh /tmp/asar-focus cgialus/alus-ootpa-devel-extra"
+          # To RAM disk
+          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "cp -r /home/$INSTANCE_USERNAME/e2e /dev/shm/"
       - uses: actions/checkout@v4
       - name: End-to-end tests
         env:
@@ -73,7 +75,9 @@ jobs:
           echo "aws_access_key_id=${ACCESS_KEY_ID}" >> /tmp/cred
           echo "aws_secret_access_key=${SECRET_ACCESS_KEY}" >> /tmp/cred
           scp -o "StrictHostKeyChecking no" /tmp/cred $INSTANCE_USERNAME@$instance_ip:/tmp/
-          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "/tmp/asar-focus/build-automation/run_e2e_container.sh /home/$INSTANCE_USERNAME/e2e $exe_image_name /tmp/cred"
+          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "/tmp/asar-focus/build-automation/run_e2e_container.sh /dev/shm/e2e $exe_image_name /tmp/cred"
+          # Fetch from RAM disk
+          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "cp -r /dev/shm/e2e/last_run /home/$INSTANCE_USERNAME/."
 
   stop-gpu-instance:
     name: Stop GPU instance
