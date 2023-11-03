@@ -14,7 +14,11 @@ fi
 repo_dir="$1"
 build_output="$2"
 
-cmake -B "${build_output}" "${repo_dir}"
+if [ -n "$CMAKE_BUILD_TYPE" ]; then
+  cmake_build_type_option="-DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE"
+fi
+
+cmake "${cmake_build_type_option}" -B "${build_output}" "${repo_dir}"
 cd "${build_output}" && make -j8
 
 result=0
