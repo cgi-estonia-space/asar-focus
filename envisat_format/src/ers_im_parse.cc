@@ -66,7 +66,8 @@ struct EchoMeta {
 
     // Auxiliary data and replica/calibration pulses
     uint64_t onboard_time;
-    uint16_t activity_task;
+    uint8_t activity_task;
+    uint8_t sample_flags;
     uint32_t image_format_counter;
     uint16_t pri_code;
     uint16_t swst_code;
@@ -109,7 +110,7 @@ inline void FetchUint32(const uint8_t* array_start, uint32_t& var) {
 constexpr auto DR_NO_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint32_t, 32>()};
 constexpr auto PACKET_COUNTER_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint8_t, 8>()};
 constexpr uint8_t SUBCOMMUTATION_COUNTER_MAX{48};
-constexpr auto IMAGE_FORMAT_COUNTER_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint32_t, 32>()};
+constexpr auto IMAGE_FORMAT_COUNTER_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint32_t, 24>()};
 
 void InitializeCounters(const uint8_t* packets_start, uint32_t& dr_no, uint8_t& packet_counter,
                         uint8_t& subcommutation_counter, uint32_t& image_format_counter) {
@@ -234,7 +235,7 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     const auto end_filter_mjd = PtimeToMjd(packets_stop_filter);
 
     // https://earth.esa.int/eogateway/documents/20142/37627/ERS-products-specification-with-Envisat-format.pdf
-    // https://asf.alaska.edu/wp-content/uploads/2019/03/ers_ceos.pdf mixed between two.
+    // https://asf.alaska.edu/wp-content/uploads/2019/03/ers_ceos.pdf and ER-IS-ESA-GS-0002 mixed between three.
     for (size_t i = 0; i < mdsr.num_dsr; i++) {
         EchoMeta echo_meta = {};
 #if HANDLE_DIAGNOSTICS
@@ -286,28 +287,87 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         }
         it = CopyBSwapPOD(echo_meta.data_record_number, it);
 
+        // ER-IS-ESA-GS-0002 4.4.2.4.5
+        /*
+         * It is a binary counter which is incremented each time a new source packet of general IDHT header data is
+         * transmitted (about every 1 second). It is reset to zero with power-on of the IDHT-DCU.
+         * The first format transmitted after power-on will show the value "1". Bit O is defined as MSB. bit 7 as LSB.
+         */
         echo_meta.packet_counter = it[0];
+        /*
+         * binary counter counting the 8 byte segments from 1 to 48; it is reset for each new source packet.
+         * Bit o is defined as MSB, bit 7 as LSB.
+         */
         echo_meta.subcommutation_counter = it[1];
         it += 2;
 
-        it += 8;  // IDHT General header source packet
+        /*
+         * These segments ot 8 bytes contain the subcommutated IDHT General Header source packet.
+         */
+        it += 8;
+        // Table 4.4.2.6-2 in ER-IS-ESA-GS-0002
         if (it[0] != 0xAA) {
             throw std::runtime_error(fmt::format(
                 "ERS data packet's auxiliary section shall start with 0xAA, instead {:#x} was found for packet no {}",
                 it[0], i + 1));
         }
         it += 1;
-        it += 1;  // OGRC/OBRC flag and Orbit ID code
+        // OBRC - On-Board Range Compressed | OGRC - On-Ground Range Compressed - See ER-IS-EPO-GS-0201
+        it += 1;  // bit 0 - OGRC/OBRC flag (0/1 respectively). Bits 1-4 Orbit number (0-15 -> 1-16)
+        /*
+         * The update of that binary counter shall occur every 4th PRI.
+         * The time relation to the echo data in the format is as following:
+         * the transfer of the ICU on-board time to the auxiliary memory
+         * occurs t2 before the RF transmit pulse as depicted in
+         * Fig. 4.4.2.4.6-3. The last significant bit is equal to 1/256 sec.
+         *
+         * ER-IS-ESA-GS-0002  - pg. 4.4 - 24
+         */
         echo_meta.onboard_time = 0;
         echo_meta.onboard_time |= static_cast<uint64_t>(it[0]) << 24;
         echo_meta.onboard_time |= static_cast<uint64_t>(it[1]) << 16;
         echo_meta.onboard_time |= static_cast<uint64_t>(it[2]) << 8;
         echo_meta.onboard_time |= static_cast<uint64_t>(it[3]) << 0;
         it += 4;
-        it = CopyBSwapPOD(echo_meta.activity_task, it);
+        /*
+         * This word shall define the activity task within the mode of
+         * operation, accompanied by the validity flag bits and the first
+         * sample flag bits. The update of the activity task word is controlled by the 4th PRI interrupt.
+         * ER-IS-ESA-GS-0002  - pg. 4.4 - 25
+         *
+         * Pg. 4.4-25
+         * Activity means generation of noise, echo, calibration or replica data.
+         *
+         * MSB  LSB
+         * 10001000 - Noise; no calibration
+         * 10011001 - No echo; Cal. drift (EM only)
+         * 10101001 - Echo; Cal. drift
+         * 10101010 - Echo; Replica
+         * 10100000 - Echo; no Replica (because of OBRC)
+         */
+        echo_meta.activity_task = it[0];
+        /*
+         * ...continued from activity task's pg. 4.4-25
+         * Bit
+         * 0 - echo invalid/valid (0/1)
+         * 1 - Cal. data/Replica data invalid/valid (0/1)
+         * 2 - Is noise
+         * 3 - Is Cal/Repl.
+         * 4 - Is echo
+         * ... spare bits
+         *
+         * The bits 2 to 4 (noise/cal/repl/echo) of byte 23 can only be set or reset with a 4 x PRI interval,
+         * therefore the start of a new activity is flagged for the first four formats.
+         */
+        echo_meta.sample_flags = it[1];
+        it += 2;
+        // Updated every format. Reset at the beginning of a transmission.
         it = CopyBSwapPOD(echo_meta.image_format_counter, it);
         it = CopyBSwapPOD(echo_meta.swst_code, it);
         it = CopyBSwapPOD(echo_meta.pri_code, it);
+        // Next item - Cal. S/S attenuation select - ER-IS-ESA-GS-0002 Table 4.4.2.4.6-2
+        // Drift calibration data
+        // Lets skip all of that
         it += 194 + 10;
 
         const auto dr_no_gap = parseutil::CounterGap<uint32_t, DR_NO_MAX>(last_dr_no, echo_meta.data_record_number);
