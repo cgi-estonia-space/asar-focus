@@ -17,6 +17,8 @@
 #include <gdal/gdal_priv.h>
 #include <boost/algorithm/string.hpp>
 
+#include <fmt/format.h>
+
 #include "VERSION"
 #include "alus_log.h"
 #include "args.h"
@@ -37,6 +39,7 @@
 #include "sar/range_doppler_algorithm.cuh"
 #include "sar/sar_chirp.h"
 #include "status_assembly.h"
+#include "sar/terrain_correction.cuh"
 
 namespace {
 struct IQ16 {
@@ -270,6 +273,77 @@ int main(int argc, char* argv[]) {
 
         TimeStop(az_comp_start, "Azimuth compression");
         cudaDeviceSynchronize();
+
+        if(!args.GetDem().empty()) {
+            LOGI << "Terrain Correction";
+            auto dem_time = TimeStart();
+            GDALDataset* dem_ds = (GDALDataset*)GDALOpen(args.GetDem().c_str(), GA_ReadOnly);
+
+            auto db = dem_ds->GetRasterBand(1);
+            int dem_w = db->GetXSize();
+            int dem_h = db->GetYSize();
+            if (dem_w != 6000 || dem_h != 6000) {
+                LOGI << "Not SRTM dimensions!?";
+                return 1;
+            }
+
+            std::vector<int16_t> h_dem(6000 * 6000);
+
+            auto d_e = db->RasterIO(GF_Read, 0, 0, dem_w, dem_h, h_dem.data(), dem_w, dem_h, GDT_Int16, 0, 0);
+            (void)d_e;
+
+            int16_t* d_dem;
+            cudaMalloc(&d_dem, 6000 * 6000 * sizeof(int16_t));
+            cudaMemcpy(d_dem, h_dem.data(), 6000 * 6000 * sizeof(int16_t), cudaMemcpyHostToDevice);
+
+            TimeStop(dem_time, fmt::format("{} -> GPU time ", args.GetDem()).c_str());
+            DEM dem_arg = {};
+
+            double dem_gt[6];
+            dem_ds->GetGeoTransform(dem_gt);
+
+            dem_arg.d_data = d_dem;
+            dem_arg.x_orig = dem_gt[0];
+            dem_arg.y_orig = dem_gt[3];
+            fmt::println("gt = {} {} {} {} {} {}\n", dem_gt[0], dem_gt[1], dem_gt[2], dem_gt[3], dem_gt[4], dem_gt[5]);
+            auto tc_time = TimeStart();
+            auto tc = RDTerrainCorrection(out, dem_arg, metadata);
+            cudaDeviceSynchronize();
+            TimeStop(tc_time, "TC calculation time");
+
+            auto tc_write_time = TimeStart();
+            size_t n_tc = tc.x_size * tc.y_size;
+            std::vector<float> h_tc(tc.x_size * tc.y_size);
+            cudaMemcpy(h_tc.data(), tc.d_data, n_tc * sizeof(float), cudaMemcpyDeviceToHost);
+
+            auto out_ds = GetGDALDriverManager()->GetDriverByName("gtiff")->Create("/tmp/tc.tiff", tc.x_size, tc.y_size,
+                                                                                   1, GDT_Float32, nullptr);
+            auto b = out_ds->GetRasterBand(1);
+            auto e =
+                b->RasterIO(GF_Write, 0, 0, tc.x_size, tc.y_size, h_tc.data(), tc.x_size, tc.y_size, GDT_Float32, 0, 0);
+            (void)e;
+
+            double gt[6] = {};
+            gt[0] = tc.x_start;
+            gt[1] = tc.x_spacing;
+            gt[3] = tc.y_start;
+            gt[5] = tc.y_spacing;
+            out_ds->SetGeoTransform(gt);
+
+
+            OGRSpatialReference target_crs;
+            // EPSG:4326 is a WGS84 code
+            target_crs.importFromEPSG(4326);
+            char* projection_wkt = nullptr;
+            target_crs.exportToWkt(&projection_wkt);
+            out_ds->SetProjection(projection_wkt);
+
+            GDALClose(out_ds);
+            TimeStop(tc_write_time, "TC GPU->File time");
+            LOGI << "TC done!";
+
+            return 0;
+        }
 
         if (args.StoreIntensity()) {
             std::string path = std::string(args.GetOutputPath()) + "/";

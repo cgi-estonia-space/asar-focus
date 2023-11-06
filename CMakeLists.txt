@@ -21,6 +21,8 @@ set(SAR_SOURCES
         sar/range_doppler_algorithm.cuh
         sar/sar_chirp.h
         sar/sar_metadata.h
+        sar/terrain_correction.cu
+        sar/terrain_correction.cuh
 )
 
 set(CUDA_UTIL_SOURCES

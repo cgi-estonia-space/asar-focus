@@ -39,6 +39,7 @@ void Args::Construct() {
 
     // clang-format off
     visible_args_.add_options()
+    ("dem", po::value<std::string>(&dem_path_), "srtm")
     ("input,i", po::value<std::string>(&ds_path_)->required(), "Level 0 ERS or ENVISAT dataset")
     ("aux", po::value<std::string>(&aux_path_)->required(), "Auxiliary files folder path")
     ("orb", po::value<std::string>(&orbit_path_)->required(), "Doris Orbit file or folder path")

@@ -37,6 +37,7 @@ public:
     [[nodiscard]] log::Level GetLogLevel() const { return log_level_; }
     [[nodiscard]] bool StorePlots() const { return plots_on_; }
     [[nodiscard]] bool StoreIntensity() const { return store_intensity_; }
+    std::string GetDem() const { return dem_path_; }
 
 private:
     void Construct();
@@ -49,6 +50,7 @@ private:
     boost::program_options::options_description hidden_args_{""};
 
     bool precheck_help{false};
+    std::string dem_path_{};
     std::string ds_path_{};
     std::string aux_path_{};
     std::string orbit_path_{};
