@@ -99,7 +99,7 @@ inline __device__ __host__ double getDopplerFrequency(Vec3d earthPoint, Vec3d se
 inline __device__ double GetEarthPointZeroDopplerTimeImpl(double first_line_utc, double line_time_interval,
                                                           double wavelength, Vec3d earth_point, int n_azimuth,
                                                           const Vec3d* sensor_position, const Vec3d* sensor_velocity,
-                                                          bool debug) {
+                                                          bool ) {
     // binary search is used in finding the zero doppler time
     int lower_bound = 0;
     int upper_bound = n_azimuth - 1;
@@ -108,17 +108,6 @@ inline __device__ double GetEarthPointZeroDopplerTimeImpl(double first_line_utc,
     auto upper_bound_freq =
         getDopplerFrequency(earth_point, sensor_position[upper_bound], sensor_velocity[upper_bound], wavelength);
 
-    if (debug) {
-        printf("df = %f %f, wv\n", lower_bound_freq, wavelength);
-        auto vel1 = sensor_velocity[lower_bound];
-        printf("lb vel %f %f %f\n", vel1.x, vel1.y, vel1.z);
-        auto vel2 = sensor_velocity[upper_bound];
-        printf("ub vel %f %f %f\n", vel2.x, vel2.y, vel2.z);
-        auto pos1 = sensor_position[lower_bound];
-        printf("lb pos %f %f %f\n", pos1.x, pos1.y, pos1.z);
-        auto pos2 = sensor_position[upper_bound];
-        printf("ub pos %f %f %f\n", pos2.x, pos2.y, pos2.z);
-    }
 
     if (std::abs(lower_bound_freq) < 1.0) {
         return first_line_utc + lower_bound * line_time_interval;
@@ -152,7 +141,7 @@ inline __device__ double GetEarthPointZeroDopplerTimeImpl(double first_line_utc,
     return first_line_utc + y0 * line_time_interval;
 }
 
-inline __device__ __host__ Vec3d GetPosition(double time, OrbitStateVectorCalc* vectors, int n_osv, bool debug) {
+inline __device__ __host__ Vec3d GetPosition(double time, OrbitStateVectorCalc* vectors, int n_osv, bool ) {
     const int nv{8};
     const int vectorsSize = n_osv;
     // TODO: This should be done once.
@@ -172,9 +161,6 @@ inline __device__ __host__ Vec3d GetPosition(double time, OrbitStateVectorCalc* 
 
     // i0 = 0;
     // iN = n_osv;
-    if (debug) {
-        printf("osv iN = %d %d %f\n", iN, vectorsSize, dt);
-    }
     Vec3d result{0, 0, 0};
     for (int i = 0; i <= n_osv; ++i) {
         auto const orbI = vectors[i];
@@ -193,7 +179,7 @@ inline __device__ __host__ Vec3d GetPosition(double time, OrbitStateVectorCalc* 
     return result;
 }
 
-__device__ float GetAltitude(double latitude, double longitude, DEM dem, bool debug) {
+__device__ float GetAltitude(double latitude, double longitude, DEM dem, bool) {
     const double dem_spacing = 5 / 6000.0;
     if (latitude < dem.y_orig - 5.0 || latitude > dem.y_orig) {
         return NAN;
@@ -205,9 +191,6 @@ __device__ float GetAltitude(double latitude, double longitude, DEM dem, bool de
     int x = std::round((longitude - dem.x_orig) / dem_spacing);
     int y = std::round((dem.y_orig - latitude) / dem_spacing);
 
-    if (debug) {
-        printf("dem debug = %f %f , idx = %d %d\n", longitude, latitude, x, y);
-    }
     int16_t val = dem.d_data[x + y * 6000];
     if (val == -32768) {
         return NAN;
@@ -261,13 +244,6 @@ __global__ void TerrainCorrectionKernel(float* out, int out_x_size, int out_y_si
     // azimuth idx
     double az_idx = (az_time - args.first_line_utc) / args.line_time_interval;
 
-    if ((x % 1000) == 0 && (y % 1000) == 0) {
-        printf("pix %d %d %f %f az idx = %f\n", x, y, lat, lon, az_idx);
-    }
-
-    // az_idx += 50;
-
-
 
     if (std::isnan(az_idx) || az_idx < 0.0 || az_idx >= in_az_size) {
         out[out_idx] = 0.0f;
@@ -276,26 +252,8 @@ __global__ void TerrainCorrectionKernel(float* out, int out_x_size, int out_y_si
 
     // slant range
 
-    if (x == out_x_size / 2 && y == out_y_size / 2) {
-        for (int i = 0; i < args.n_osv; i++) {
-            printf("osv tp = %d %f\n", i, args.osv[i].time_point);
-        }
-        printf("n az = %d\n", in_az_size);
-        printf("az time = %f first tp = %f, lti = %f\n", az_time, args.first_line_utc, args.line_time_interval);
-        printf("KERNEL az idx = %f %f %f %f\n", az_idx, earth_point.x, earth_point.y, earth_point.z);
-    }
 
     Vec3d sat_pos = GetPosition(az_time, args.osv, args.n_osv, debug);
-
-    if (x == out_x_size / 2 && (y % 1000) == 0) {
-        printf("n az = %d\n", in_az_size);
-        printf("az time = %f first tp = %f, lti = %f\n", az_time, args.first_line_utc, args.line_time_interval);
-        printf("KERNEL az idx = %f %f %f %f\n", az_idx, earth_point.x, earth_point.y, earth_point.z);
-        printf("const tc_ep%d =viewer.entities.add({position: new Cesium.Cartesian3(%.15f, %.15f, %.15f), point: {pixelSize: "
-            "10, color: Cesium.Color.GREEN,},});\n", y, earth_point.x, earth_point.y, earth_point.z);
-        printf("const tc_sat_pos%d =viewer.entities.add({position: new Cesium.Cartesian3(%.15f, %.15f, %.15f), point: {pixelSize: "
-            "10, color: Cesium.Color.GREEN,},});\n", y, sat_pos.x, sat_pos.y, sat_pos.z);
-    }
 
 
     // range idx
@@ -305,13 +263,6 @@ __global__ void TerrainCorrectionKernel(float* out, int out_x_size, int out_y_si
     double slant_range = sqrt(dx * dx + dy * dy + dz * dz);
     double rg_idx = (slant_range - args.slant_range_first_sample) / args.range_spacing;
 
-
-    if (x == out_x_size / 2 && y == out_y_size / 2) {
-        printf("slr = %f , range spacing = %f\n", args.slant_range_first_sample, args.range_spacing);
-        printf("ep rg idx = %f %f %f\n", earth_point.x, earth_point.y, earth_point.z);
-        printf("sat rg idx = %f %f %f\n", sat_pos.x, sat_pos.y, sat_pos.z);
-        printf("KERNEL rg idx = %f %f %f\n", rg_idx, slant_range, args.slant_range_first_sample);
-    }
 
     if (rg_idx >= in_range_sz || rg_idx < 0.0) {
         out[out_idx] = 0.0f;
@@ -361,12 +312,6 @@ TCResult RDTerrainCorrection(const DevicePaddedImage& d_img, DEM dem, const SARM
         auto osv = InterpolateOrbit(sar_meta.osv, CalcAzimuthTime(sar_meta, i));
         h_pos[i] = {osv.x_pos, osv.y_pos, osv.z_pos};
         h_vel[i] = {osv.x_vel, osv.y_vel, osv.z_vel};
-        if ((i % 1000) == 0) {
-            fmt::println(
-                "const osv{} =viewer.entities.add({{position: new Cesium.Cartesian3({}, {}, {}), point: {{pixelSize: "
-                "10, color: Cesium.Color.BLUE,}},}});",
-                i, osv.x_pos, osv.y_pos, osv.z_pos);
-        }
     }
 
     Vec3d* d_pos;
@@ -397,6 +342,8 @@ TCResult RDTerrainCorrection(const DevicePaddedImage& d_img, DEM dem, const SARM
 
     std::vector<int> az_idx = {0, 0, sar_meta.img.azimuth_size - 1, sar_meta.img.azimuth_size - 1};
     std::vector<int> rg_idx = {0, sar_meta.img.range_size - 1, 0, sar_meta.img.range_size - 1};
+
+    std::string corner_info = "SLC Corner points: ";
     for (int i = 0; i < 4; i++) {
         const int range_samp = rg_idx[i];
         double R = sar_meta.slant_range_first_sample + sar_meta.range_spacing * range_samp;
@@ -406,9 +353,10 @@ TCResult RDTerrainCorrection(const DevicePaddedImage& d_img, DEM dem, const SARM
         auto llh = xyz2geoWGS84(xyz);
         lats.push_back(llh.latitude);
         lons.push_back(llh.longitude);
-        fmt::println("{} {}", llh.longitude, llh.latitude
-            );
+        corner_info += fmt::format("{{{} , {}}} ", llh.longitude, llh.latitude);
     }
+
+    LOGI << corner_info;
 
     double lat_max = *std::max_element(lats.begin(), lats.end());
     double lat_min = *std::min_element(lats.begin(), lats.end());
@@ -431,7 +379,7 @@ TCResult RDTerrainCorrection(const DevicePaddedImage& d_img, DEM dem, const SARM
     float* d_result;
     cudaMalloc(&d_result, sizeof(float) * total);
 
-    LOGI << fmt::format("TC dims = {} {}", x_size, y_size);
+    LOGI << fmt::format("Terrain correction output dimensions = {} {}, pixel spacing = {} m", x_size, y_size, pixel_spacing_in_meter);
 
     args.lat_start = lat_max;
     args.lon_start = lon_min;
