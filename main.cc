@@ -296,7 +296,7 @@ int main(int argc, char* argv[]) {
             cudaMalloc(&d_dem, 6000 * 6000 * sizeof(int16_t));
             cudaMemcpy(d_dem, h_dem.data(), 6000 * 6000 * sizeof(int16_t), cudaMemcpyHostToDevice);
 
-            TimeStop(dem_time, fmt::format("{} -> GPU time ", args.GetDem()).c_str());
+            TimeStop(dem_time, fmt::format("{} load to GPU time ", args.GetDem()).c_str());
             DEM dem_arg = {};
 
             double dem_gt[6];
@@ -305,7 +305,7 @@ int main(int argc, char* argv[]) {
             dem_arg.d_data = d_dem;
             dem_arg.x_orig = dem_gt[0];
             dem_arg.y_orig = dem_gt[3];
-            fmt::println("gt = {} {} {} {} {} {}\n", dem_gt[0], dem_gt[1], dem_gt[2], dem_gt[3], dem_gt[4], dem_gt[5]);
+            //fmt::println("gt = {} {} {} {} {} {}\n", dem_gt[0], dem_gt[1], dem_gt[2], dem_gt[3], dem_gt[4], dem_gt[5]);
             auto tc_time = TimeStart();
             auto tc = RDTerrainCorrection(out, dem_arg, metadata);
             cudaDeviceSynchronize();
