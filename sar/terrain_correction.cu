@@ -210,7 +210,7 @@ __device__ float GetAltitude(double latitude, double longitude, DEM dem, bool de
     }
     int16_t val = dem.d_data[x + y * 6000];
     if (val == -32768) {
-        return 0;
+        return NAN;
     }
     return val;
 }
@@ -261,20 +261,13 @@ __global__ void TerrainCorrectionKernel(float* out, int out_x_size, int out_y_si
     // azimuth idx
     double az_idx = (az_time - args.first_line_utc) / args.line_time_interval;
 
-
-    if((x % 1000) == 0 && (y % 1000) == 0)
-    {
+    if ((x % 1000) == 0 && (y % 1000) == 0) {
         printf("pix %d %d %f %f az idx = %f\n", x, y, lat, lon, az_idx);
     }
 
+    // az_idx += 50;
 
-    //az_idx += 50;
 
-    if (x == out_x_size / 2 && y == out_y_size / 2) {
-        printf("n az = %d\n", in_az_size);
-        printf("az time = %f first tp = %f, lti = %f\n", az_time, args.first_line_utc, args.line_time_interval);
-        printf("KERNEL az idx = %f %f %f %f\n", az_idx, earth_point.x, earth_point.y, earth_point.z);
-    }
 
     if (std::isnan(az_idx) || az_idx < 0.0 || az_idx >= in_az_size) {
         out[out_idx] = 0.0f;
@@ -294,6 +287,17 @@ __global__ void TerrainCorrectionKernel(float* out, int out_x_size, int out_y_si
 
     Vec3d sat_pos = GetPosition(az_time, args.osv, args.n_osv, debug);
 
+    if (x == out_x_size / 2 && (y % 1000) == 0) {
+        printf("n az = %d\n", in_az_size);
+        printf("az time = %f first tp = %f, lti = %f\n", az_time, args.first_line_utc, args.line_time_interval);
+        printf("KERNEL az idx = %f %f %f %f\n", az_idx, earth_point.x, earth_point.y, earth_point.z);
+        printf("const tc_ep%d =viewer.entities.add({position: new Cesium.Cartesian3(%.15f, %.15f, %.15f), point: {pixelSize: "
+            "10, color: Cesium.Color.GREEN,},});\n", y, earth_point.x, earth_point.y, earth_point.z);
+        printf("const tc_sat_pos%d =viewer.entities.add({position: new Cesium.Cartesian3(%.15f, %.15f, %.15f), point: {pixelSize: "
+            "10, color: Cesium.Color.GREEN,},});\n", y, sat_pos.x, sat_pos.y, sat_pos.z);
+    }
+
+
     // range idx
     double dx = earth_point.x - sat_pos.x;
     double dy = earth_point.y - sat_pos.y;
@@ -301,7 +305,6 @@ __global__ void TerrainCorrectionKernel(float* out, int out_x_size, int out_y_si
     double slant_range = sqrt(dx * dx + dy * dy + dz * dz);
     double rg_idx = (slant_range - args.slant_range_first_sample) / args.range_spacing;
 
-    //rg_idx += 50;
 
     if (x == out_x_size / 2 && y == out_y_size / 2) {
         printf("slr = %f , range spacing = %f\n", args.slant_range_first_sample, args.range_spacing);
@@ -334,8 +337,8 @@ __global__ void TerrainCorrectionKernel(float* out, int out_x_size, int out_y_si
 
     // write result
 
-    //out[out_idx] = 10.0f * logf(data);
-    out[out_idx] = data;// * 0.0f + 1.0f;
+    // out[out_idx] = 10.0f * logf(data);
+    out[out_idx] = data;  // * 0.0f + 1.0f;
 }
 
 TCResult RDTerrainCorrection(const DevicePaddedImage& d_img, DEM dem, const SARMetadata& sar_meta) {
@@ -349,8 +352,6 @@ TCResult RDTerrainCorrection(const DevicePaddedImage& d_img, DEM dem, const SARM
         h_osv[i].x_vel = sar_meta.osv[i].x_vel;
         h_osv[i].y_vel = sar_meta.osv[i].y_vel;
         h_osv[i].z_vel = sar_meta.osv[i].z_vel;
-        // LOGI << fmt::format("{} p{} {} {} v{} {} {}", h_osv[i].time_point, h_osv[i].x_pos, h_osv[i].y_pos,
-        //                     h_osv[i].z_pos, h_osv[i].x_vel, h_osv[i].y_vel, h_osv[i].z_vel);
     }
 
     std::vector<Vec3d> h_pos(sar_meta.img.azimuth_size);
@@ -360,6 +361,12 @@ TCResult RDTerrainCorrection(const DevicePaddedImage& d_img, DEM dem, const SARM
         auto osv = InterpolateOrbit(sar_meta.osv, CalcAzimuthTime(sar_meta, i));
         h_pos[i] = {osv.x_pos, osv.y_pos, osv.z_pos};
         h_vel[i] = {osv.x_vel, osv.y_vel, osv.z_vel};
+        if ((i % 1000) == 0) {
+            fmt::println(
+                "const osv{} =viewer.entities.add({{position: new Cesium.Cartesian3({}, {}, {}), point: {{pixelSize: "
+                "10, color: Cesium.Color.BLUE,}},}});",
+                i, osv.x_pos, osv.y_pos, osv.z_pos);
+        }
     }
 
     Vec3d* d_pos;
@@ -399,6 +406,8 @@ TCResult RDTerrainCorrection(const DevicePaddedImage& d_img, DEM dem, const SARM
         auto llh = xyz2geoWGS84(xyz);
         lats.push_back(llh.latitude);
         lons.push_back(llh.longitude);
+        fmt::println("{} {}", llh.longitude, llh.latitude
+            );
     }
 
     double lat_max = *std::max_element(lats.begin(), lats.end());
