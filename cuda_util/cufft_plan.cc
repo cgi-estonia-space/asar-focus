@@ -9,7 +9,7 @@
  */
 #include "cufft_plan.h"
 
-#include "checks.h"
+#include "cufft_checks.h"
 
 namespace {
     int IntPow(int base, int power) {

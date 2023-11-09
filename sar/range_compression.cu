@@ -13,7 +13,7 @@
 #include "cuda_util/cuda_cleanup.h"
 #include "cuda_util/cuda_util.h"
 #include "cuda_util/cufft_plan.h"
-#include "checks.h"
+#include "cufft_checks.h"
 
 __global__ void FrequencyDomainMultiply(cufftComplex* data_fft, const cufftComplex* chirp_fft, int range_fft_size,
                                         int azimuth_size) {
@@ -80,7 +80,7 @@ void RangeCompression(DevicePaddedImage& data, const std::vector<std::complex<fl
     // inplace FFT on each range row of the SAR data
     cufftHandle range_fft_plan = PlanRangeFFT(range_fft_size, azimuth_size, false);
     CufftPlanCleanup range_fft_cleanup(range_fft_plan);
-    CheckCufftSize(d_workspace.ByteSize(), range_fft_plan);
+    alus::cuda::CheckCufftSize(d_workspace.ByteSize(), range_fft_plan);
     CHECK_CUFFT_ERR(cufftSetWorkArea(range_fft_plan, d_workspace.Get()));
     CHECK_CUFFT_ERR(cufftExecC2C(range_fft_plan, d_data, d_data, CUFFT_FORWARD));
 

@@ -21,8 +21,9 @@
 #include "alus_log.h"
 #include "args.h"
 #include "asar_constants.h"
-#include "cuda_util/cufft_plan.h"
-#include "cuda_util/device_padded_image.cuh"
+#include "cufft_plan.h"
+#include "device_padded_image.cuh"
+#include "cuda_device_init.h"
 #include "envisat_aux_file.h"
 #include "envisat_lvl1_writer.h"
 #include "geo_tools.h"
@@ -36,7 +37,6 @@
 #include "sar/range_compression.cuh"
 #include "sar/range_doppler_algorithm.cuh"
 #include "sar/sar_chirp.h"
-#include "status_assembly.h"
 
 namespace {
 struct IQ16 {
@@ -78,6 +78,8 @@ int main(int argc, char* argv[]) {
 
         alus::asar::log::Initialize();
         alus::asar::log::SetLevel(args.GetLogLevel());
+        auto cuda_init = alus::cuda::CudaInit();
+
         LOGI << GetSoftwareVersion();
         auto file_time_start = TimeStart();
         const auto in_path{args.GetInputDsPath()};
@@ -118,6 +120,8 @@ int main(int argc, char* argv[]) {
         const auto target_product_type =
             alus::asar::specification::TryDetermineTargetProductFrom(product_type, args.GetFocussedProductType());
         (void)target_product_type;
+        while(!cuda_init.IsFinished());
+        cuda_init.CheckErrors();
         alus::asar::envformat::ParseLevel0Packets(data, metadata, asar_meta, h_data, product_type, ins_file,
                                                   asar_meta.sensing_start, asar_meta.sensing_stop);
 
