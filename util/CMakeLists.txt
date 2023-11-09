@@ -18,10 +18,12 @@ target_include_directories(util-static
 )
 target_link_libraries(util-static
         PUBLIC
+        CUDA::cudart
         gdal
         Boost::date_time
         Eigen3::Eigen
         app-static
+        cuda-util-static
 )
 set_target_properties(util-static
         PROPERTIES
