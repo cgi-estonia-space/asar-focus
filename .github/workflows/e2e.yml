@@ -102,21 +102,21 @@ jobs:
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "sudo chown -R $INSTANCE_USERNAME:$INSTANCE_USERNAME /dev/shm/e2e"
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "rsync -av /dev/shm/e2e /home/$INSTANCE_USERNAME/"
 
-#  stop-gpu-instance:
-#    name: Stop GPU instance
-#    runs-on: ubuntu-latest
-#    needs: [start-gpu-instance, end-to-end-testing, stash-assets-from-ramdisk]
-#    if: |
-#      always() &&
-#      needs.start-gpu-instance.result == 'success'
-#    steps:
-#      - name: Configure AWS Credentials
-#        uses: aws-actions/configure-aws-credentials@v4
-#        with:
-#          aws-access-key-id: ${{ secrets.FALCON_ACCESS_KEY_ID }}
-#          aws-secret-access-key: ${{ secrets.FALCON_SECRET_ACCESS_KEY }}
-#          aws-region: ${{ secrets.EAGLE_INSTANCE_REGION }}
-#      - uses: actions/checkout@v4
-#      - name: Stop GPU instance
-#        run: |
-#          $GITHUB_WORKSPACE/build-automation/stop_ec2_instance.sh ${{ secrets.EAGLE_INSTANCE_ID }}
+  stop-gpu-instance:
+    name: Stop GPU instance
+    runs-on: ubuntu-latest
+    needs: [start-gpu-instance, end-to-end-testing, stash-assets-from-ramdisk]
+    if: |
+      always() &&
+      needs.start-gpu-instance.result == 'success'
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.FALCON_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.FALCON_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.EAGLE_INSTANCE_REGION }}
+      - uses: actions/checkout@v4
+      - name: Stop GPU instance
+        run: |
+          $GITHUB_WORKSPACE/build-automation/stop_ec2_instance.sh ${{ secrets.EAGLE_INSTANCE_ID }}
