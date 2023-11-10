@@ -88,7 +88,7 @@ jobs:
   stop-gpu-instance:
     name: Stop GPU instance
     runs-on: ubuntu-latest
-    needs: [start-gpu-instance, end-to-end-testing, stash-assets-from-ramdisk]
+    needs: [start-gpu-instance, end-to-end-testing]
     if: |
       always() &&
       needs.start-gpu-instance.result == 'success'
