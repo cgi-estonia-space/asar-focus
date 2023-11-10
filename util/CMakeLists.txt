@@ -23,6 +23,7 @@ target_link_libraries(util-static
         Boost::date_time
         Eigen3::Eigen
         app-static
+        cuda-util-static
 )
 set_target_properties(util-static
         PROPERTIES

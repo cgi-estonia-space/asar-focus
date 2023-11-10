@@ -23,18 +23,8 @@ set(SAR_SOURCES
         sar/sar_metadata.h
 )
 
-set(CUDA_UTIL_SOURCES
-        cuda_util/cuda_cleanup.h
-        cuda_util/cuda_util.h
-        cuda_util/cuda_workplace.h
-        cuda_util/cufft_plan.cpp
-        cuda_util/cufft_plan.h
-        cuda_util/device_padded_image.cu
-        cuda_util/device_padded_image.cuh
-        )
-
 set(SOURCES
-        main.cc main_flow.cc ${SAR_SOURCES} ${CUDA_UTIL_SOURCES}
+        main.cc main_flow.cc ${SAR_SOURCES}
 )
 
 add_executable(asar_focus ${SOURCES})
@@ -76,13 +66,14 @@ include(FetchContent)
 include(dependencies/FetchContents.cmake)
 
 add_subdirectory(app)
+add_subdirectory(cuda_util)
 add_subdirectory(envisat_format)
 add_subdirectory(util)
 
 target_include_directories(asar_focus PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
     message("Also adding 'stdc++fs' for linking since the g++ version ${CMAKE_CXX_COMPILER_VERSION} requires it.")
-    target_link_libraries(asar_focus PRIVATE gdal cufft Eigen3::Eigen stdc++fs app-static util-static envisat-format-static)
+    target_link_libraries(asar_focus PRIVATE gdal cufft Eigen3::Eigen stdc++fs app-static util-static envisat-format-static cuda-util-static)
 else ()
-    target_link_libraries(asar_focus PRIVATE gdal cufft Eigen3::Eigen app-static util-static envisat-format-static)
+    target_link_libraries(asar_focus PRIVATE gdal cufft Eigen3::Eigen app-static util-static envisat-format-static cuda-util-static)
 endif()

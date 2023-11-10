@@ -10,18 +10,14 @@
 
 #include "img_output.h"
 
-#include <condition_variable>
 #include <queue>
 #include <thread>
 
 #include <gdal/gdal_priv.h>
-#include <boost/date_time.hpp>
 
 #include "alus_log.h"
-#include "checks.h"
-//#include "gdal_util.h"
+#include "device_padded_image.cuh"
 #include "math_utils.h"
-//#include "pugixml.hpp"
 
 namespace {
 

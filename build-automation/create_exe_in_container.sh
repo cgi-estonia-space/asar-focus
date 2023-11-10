@@ -40,6 +40,8 @@ docker pull "${docker_image}"
 set +e
 docker stop "${container_name}"
 docker rm "${container_name}"
+# Also remove images built before along with children.
+docker rmi -f "${container_name}-exe"
 set -e
 docker run -t -d --name "${container_name}" "${docker_image}"
 docker cp "${repo_dir}" "${container_name}":"${container_work_dir}/"

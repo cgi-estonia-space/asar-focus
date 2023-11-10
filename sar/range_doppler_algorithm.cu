@@ -9,9 +9,10 @@
  */
 #include "range_doppler_algorithm.cuh"
 
-#include "cuda_util/cuda_cleanup.h"
-#include "cuda_util/cufft_plan.h"
 #include "checks.h"
+#include "cuda_cleanup.h"
+#include "cufft_plan.h"
+#include "cufft_checks.h"
 
 #define INPLACE_AZIMUTH_FFT 0  // 0 -> transpose + range FFT + transpose, 1 -> azimuth FFT
 
@@ -298,7 +299,7 @@ void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_i
         src_img.Transpose(d_workspace);
         auto azimuth_fft = PlanRangeFFT(src_img.XStride(), src_img.YSize(), false);
         CufftPlanCleanup fft_cleanup(azimuth_fft);
-        CheckCufftSize(d_workspace.ByteSize(), azimuth_fft);
+        alus::cuda::CheckCufftSize(d_workspace.ByteSize(), azimuth_fft);
         CHECK_CUFFT_ERR(cufftSetWorkArea(azimuth_fft, d_workspace.Get()));
         CHECK_CUFFT_ERR(cufftExecC2C(azimuth_fft, src_img.Data(), src_img.Data(), CUFFT_FORWARD));
         // TODO(priit) not actually needed, can fixed by inverting indexing in RCMC and Azimuth Ref multiply
@@ -363,7 +364,7 @@ void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_i
         out_img.Transpose(d_workspace);
         auto azimuth_fft = PlanRangeFFT(out_img.XStride(), out_img.YSize(), false);
         CufftPlanCleanup fft_cleanup(azimuth_fft);
-        CheckCufftSize(d_workspace.ByteSize(), azimuth_fft);
+        alus::cuda::CheckCufftSize(d_workspace.ByteSize(), azimuth_fft);
         CHECK_CUFFT_ERR(cufftSetWorkArea(azimuth_fft, d_workspace.Get()));
         CHECK_CUFFT_ERR(cufftExecC2C(azimuth_fft, out_img.Data(), out_img.Data(), CUFFT_INVERSE));
         out_img.Transpose(d_workspace);

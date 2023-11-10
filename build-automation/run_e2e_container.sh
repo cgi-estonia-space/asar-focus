@@ -20,7 +20,7 @@ if [ -d "$e2e_dir" ]; then
   # Extract the last folder name
   e2e_dir_name=$(basename "$e2e_dir")
 else
-  echo "Given repo dir ${e2e_dir} is not a directory or does not exist."
+  echo "Given E2E dir '${e2e_dir}' is not a directory or does not exist."
   exit 1
 fi
 
