@@ -101,6 +101,7 @@ jobs:
           instance_ip=${{ needs.start-gpu-instance.outputs.instance_ip }}
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "sudo chown -R $INSTANCE_USERNAME:$INSTANCE_USERNAME /dev/shm/e2e"
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "rsync -av /dev/shm/e2e /home/$INSTANCE_USERNAME/"
+          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "rm -rf /dev/shm/e2e"
 
 #  stop-gpu-instance:
 #    name: Stop GPU instance
