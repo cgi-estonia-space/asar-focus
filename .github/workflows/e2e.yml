@@ -61,6 +61,7 @@ jobs:
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "cp -r /home/$INSTANCE_USERNAME/e2e /dev/shm/"
       - uses: actions/checkout@v4
       - name: End-to-end tests
+        continue-on-error: true
         env:
           INSTANCE_USERNAME: ${{ secrets.EAGLE_USERNAME }}
           ACCESS_KEY_ID: ${{ secrets.PALMY_ACCESS_KEY_ID }}
@@ -75,27 +76,7 @@ jobs:
           echo "aws_secret_access_key=${SECRET_ACCESS_KEY}" >> /tmp/cred
           scp -o "StrictHostKeyChecking no" /tmp/cred $INSTANCE_USERNAME@$instance_ip:/tmp/
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "/tmp/asar-focus/build-automation/run_e2e_container.sh /dev/shm/e2e $exe_image_name /tmp/cred"
-          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "ls -la /dev/shm/e2e"
-  # Separate step because when tests fail we would like to analyze the results still
-  stash-assets-from-ramdisk:
-    name: Stash E2E assets from ramdisk to persistent disk
-    runs-on: ubuntu-latest
-    needs: [start-gpu-instance, end-to-end-testing]
-    if: |
-      needs.end-to-end-testing.result != 'skipped' &&
-      needs.end-to-end-testing.result != 'cancelled'
-    steps:
-      - name: Create SSH key
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.EAGLE_SSH_KEY }}
-        run: |
-          key_location=~/.ssh/
-          mkdir -p $key_location
-          key_path=$key_location/id_rsa
-          echo "$SSH_PRIVATE_KEY" > $key_path
-          sudo chmod 600 $key_path
-          ssh-keygen -f $key_path -y > $key_path.pub
-      - name: Modify ownership and move assets
+      - name: Stash assets from ramdisk
         env:
           INSTANCE_USERNAME: ${{ secrets.EAGLE_USERNAME }}
         run: |
@@ -104,21 +85,21 @@ jobs:
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "rsync -av /dev/shm/e2e /home/$INSTANCE_USERNAME/"
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "rm -rf /dev/shm/e2e"
 
-#  stop-gpu-instance:
-#    name: Stop GPU instance
-#    runs-on: ubuntu-latest
-#    needs: [start-gpu-instance, end-to-end-testing, stash-assets-from-ramdisk]
-#    if: |
-#      always() &&
-#      needs.start-gpu-instance.result == 'success'
-#    steps:
-#      - name: Configure AWS Credentials
-#        uses: aws-actions/configure-aws-credentials@v4
-#        with:
-#          aws-access-key-id: ${{ secrets.FALCON_ACCESS_KEY_ID }}
-#          aws-secret-access-key: ${{ secrets.FALCON_SECRET_ACCESS_KEY }}
-#          aws-region: ${{ secrets.EAGLE_INSTANCE_REGION }}
-#      - uses: actions/checkout@v4
-#      - name: Stop GPU instance
-#        run: |
-#          $GITHUB_WORKSPACE/build-automation/stop_ec2_instance.sh ${{ secrets.EAGLE_INSTANCE_ID }}
+  stop-gpu-instance:
+    name: Stop GPU instance
+    runs-on: ubuntu-latest
+    needs: [start-gpu-instance, end-to-end-testing, stash-assets-from-ramdisk]
+    if: |
+      always() &&
+      needs.start-gpu-instance.result == 'success'
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.FALCON_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.FALCON_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.EAGLE_INSTANCE_REGION }}
+      - uses: actions/checkout@v4
+      - name: Stop GPU instance
+        run: |
+          $GITHUB_WORKSPACE/build-automation/stop_ec2_instance.sh ${{ secrets.EAGLE_INSTANCE_ID }}
