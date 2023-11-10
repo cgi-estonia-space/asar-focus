@@ -75,6 +75,7 @@ jobs:
           echo "aws_secret_access_key=${SECRET_ACCESS_KEY}" >> /tmp/cred
           scp -o "StrictHostKeyChecking no" /tmp/cred $INSTANCE_USERNAME@$instance_ip:/tmp/
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "/tmp/asar-focus/build-automation/run_e2e_container.sh /dev/shm/e2e $exe_image_name /tmp/cred"
+          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "ls -la /dev/shm/e2e"
   # Separate step because when tests fail we would like to analyze the results still
   stash-assets-from-ramdisk:
     name: Stash E2E assets from ramdisk to persistent disk
