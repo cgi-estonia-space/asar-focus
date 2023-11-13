@@ -299,24 +299,24 @@ int main(int argc, char* argv[]) {
         {
             const int range_size = out.XSize();
             //const int range_stride = out.XStride();
-            std::vector<IQ16> row(range_size);
+//            std::vector<IQ16> row(range_size);
             for (int y = 0; y < out.YSize(); y++) {
                 // LOGV << "y = " << y;
-                for (int x = 0; x < out.XSize(); x++) {
-                    auto pix = res[x + y * range_size];
+//                for (int x = 0; x < out.XSize(); x++) {
+//                    auto pix = res[x + y * range_size];
 //                    float tambov = 120000 / 100;
                     // LOGV << "scaling tambov = " << tambov;
                     // IQ16 iq16;
                     //iq16.i = std::clamp<float>(pix.x * tambov, INT16_MIN, INT16_MAX);
                     //iq16.q = std::clamp<float>(pix.y * tambov, INT16_MIN, INT16_MAX);
 
-                    pix.i = bswap(pix.i);
-                    pix.q = bswap(pix.q);
-                    row[x] = pix;
-                }
+//                    pix.i = bswap(pix.i);
+//                    pix.q = bswap(pix.q);
+//                    row[x] = pix;
+//                }
 
                 memset(&mds.buf[y * mds.record_size], 0, 17);  // TODO each row mjd
-                memcpy(&mds.buf[y * mds.record_size + 17], row.data(), row.size() * 4);
+                memcpy(&mds.buf[y * mds.record_size + 17], res.get() + (y * range_size), range_size * sizeof(IQ16));
             }
         }
         TimeStop(mds_formation, "MDS construction");

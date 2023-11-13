@@ -341,8 +341,8 @@ __global__ void ApplyResultsCorrection(cufftComplex* data, int x_size_stride, in
         result.i = static_cast<int16_t>(alus::cuda::algorithm::clamp<float>(pix.x * calibration_constant, INT16_MIN, INT16_MAX));
         result.q = static_cast<int16_t>(alus::cuda::algorithm::clamp<float>(pix.y * calibration_constant, INT16_MIN, INT16_MAX));
 
-        //        pix.x = alus::cuda::bit::byteswap(pix.x);
-        //        pix.y = alus::cuda::bit::byteswap(pix.y);
+        result.i = alus::cuda::bit::Byteswap(result.i);
+        result.q = alus::cuda::bit::Byteswap(result.q);
         dest_space[dest_idx] = result;
     }
 }

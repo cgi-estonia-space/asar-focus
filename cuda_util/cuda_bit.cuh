@@ -10,21 +10,12 @@
 
 #pragma once
 
-#include <algorithm>
+#include <cstdint>
 
 namespace alus::cuda::bit {
 
-__device__ inline float byteswap(const float& v) {
-    uint32_t int_value;
-    std::memcpy(&int_value, &v, sizeof(float));
-
-    uint32_t swapped_value = ((int_value >> 24) & 0xFF) | ((int_value >> 8) & 0xFF00) | ((int_value << 8) & 0xFF0000) |
-                             ((int_value << 24) & 0xFF000000);
-
-    float result;
-    std::memcpy(&result, &swapped_value, sizeof(float));
-
-    return result;
+__device__ inline int16_t Byteswap(const int16_t& v) {
+    return (v << 8) | ((v >> 8) & 0xFF);
 }
 
 }  // namespace alus::cuda::bit
