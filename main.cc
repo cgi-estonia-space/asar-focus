@@ -26,6 +26,7 @@
 #include "cuda_device_init.h"
 #include "envisat_aux_file.h"
 #include "envisat_lvl1_writer.h"
+#include "envisat_types.h"
 #include "geo_tools.h"
 #include "img_output.h"
 #include "main_flow.h"
@@ -39,10 +40,6 @@
 #include "sar/sar_chirp.h"
 
 namespace {
-struct IQ16 {
-    int16_t i;
-    int16_t q;
-};
 
 template <typename T>
 void ExceptionMessagePrint(const T& e) {
@@ -268,7 +265,7 @@ int main(int argc, char* argv[]) {
 
         auto az_comp_start = TimeStart();
         DevicePaddedImage out;
-        RangeDopplerAlgorithm(metadata, img, out, std::move(d_workspace));
+        RangeDopplerAlgorithm(metadata, img, out, d_workspace);
 
         out.ZeroFillPaddings();
 
@@ -281,11 +278,17 @@ int main(int argc, char* argv[]) {
             WriteIntensityPaddedImg(out, path.c_str());
         }
 
-        auto cpu_transfer_start = TimeStart();
-        cufftComplex* res = new cufftComplex[out.XStride() * out.YStride()];
-        out.CopyToHostPaddedSize(res);
+        auto result_correction_start = TimeStart();
+        constexpr float tambov{120000 / 100};
+        auto res = ResultsCorrection(out, d_workspace, tambov);
+        TimeStop(result_correction_start, "Image results correction");
 
-        TimeStop(cpu_transfer_start, "Image GPU->CPU");
+//        auto cpu_transfer_start = TimeStart();
+//        cufftComplex* res = new cufftComplex[out.XStride() * out.YStride()];
+//        out.CopyToHostPaddedSize(res);
+//
+//
+//        TimeStop(cpu_transfer_start, "Image GPU->CPU");
 
         auto mds_formation = TimeStart();
         MDS mds;
@@ -294,22 +297,22 @@ int main(int argc, char* argv[]) {
         mds.buf = new char[mds.n_records * mds.record_size];
 
         {
-            int range_size = out.XSize();
-            int range_stride = out.XStride();
+            const int range_size = out.XSize();
+            //const int range_stride = out.XStride();
             std::vector<IQ16> row(range_size);
             for (int y = 0; y < out.YSize(); y++) {
                 // LOGV << "y = " << y;
                 for (int x = 0; x < out.XSize(); x++) {
-                    auto pix = res[x + y * range_stride];
-                    float tambov = 120000 / 100;
+                    auto pix = res[x + y * range_size];
+//                    float tambov = 120000 / 100;
                     // LOGV << "scaling tambov = " << tambov;
-                    IQ16 iq16;
-                    iq16.i = std::clamp<float>(pix.x * tambov, INT16_MIN, INT16_MAX);
-                    iq16.q = std::clamp<float>(pix.y * tambov, INT16_MIN, INT16_MAX);
+                    // IQ16 iq16;
+                    //iq16.i = std::clamp<float>(pix.x * tambov, INT16_MIN, INT16_MAX);
+                    //iq16.q = std::clamp<float>(pix.y * tambov, INT16_MIN, INT16_MAX);
 
-                    iq16.i = bswap(iq16.i);
-                    iq16.q = bswap(iq16.q);
-                    row[x] = iq16;
+                    pix.i = bswap(pix.i);
+                    pix.q = bswap(pix.q);
+                    row[x] = pix;
                 }
 
                 memset(&mds.buf[y * mds.record_size], 0, 17);  // TODO each row mjd

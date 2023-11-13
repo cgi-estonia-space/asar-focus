@@ -12,8 +12,11 @@
 #include <numeric>
 
 #include "alus_log.h"
-#include "cuda_util/cuda_cleanup.h"
 #include "checks.h"
+#include "cuda_util/cuda_algorithm.cuh"
+#include "cuda_util/cuda_bit.cuh"
+#include "cuda_util/cuda_cleanup.h"
+#include "envisat_types.h"
 
 namespace {
 
@@ -322,4 +325,40 @@ void RawDataCorrection(DevicePaddedImage& img, CorrectionParams par, SARResults&
             ApplyPhaseCorrection<<<grid_sz, block_sz>>>(img.Data(), x_size, y_size, sin_corr, cos_corr);
         }
     }
+}
+
+__global__ void ApplyResultsCorrection(cufftComplex* data, int x_size_stride, int x_size, int y_size,
+                                       IQ16* dest_space, float calibration_constant) {
+    const int x = threadIdx.x + blockIdx.x * blockDim.x;
+    const int y = threadIdx.y + blockIdx.y * blockDim.y;
+
+    const int src_idx = (y * x_size_stride) + x;
+    const int dest_idx = (y * x_size) + x;
+
+    if (x < x_size && y < y_size) {
+        auto pix = data[src_idx];
+        IQ16 result;
+        result.i = static_cast<int16_t>(alus::cuda::algorithm::clamp<float>(pix.x * calibration_constant, INT16_MIN, INT16_MAX));
+        result.q = static_cast<int16_t>(alus::cuda::algorithm::clamp<float>(pix.y * calibration_constant, INT16_MIN, INT16_MAX));
+
+        //        pix.x = alus::cuda::bit::byteswap(pix.x);
+        //        pix.y = alus::cuda::bit::byteswap(pix.y);
+        dest_space[dest_idx] = result;
+    }
+}
+
+std::unique_ptr<IQ16[]> ResultsCorrection(DevicePaddedImage& img, CudaWorkspace& dest_space, float calibration_constant) {
+    const auto x_size_stride = img.XStride();  // Need to count for FFT padding when rows are concerned
+    const auto x_size = img.XSize();
+    const auto y_size = img.YSize();  // No need to calculate on Y padded FFT data
+    dim3 block_sz(16, 16);
+    dim3 grid_sz((x_size_stride + 15) / 16, (y_size + 15) / 16);
+    auto dest_array = dest_space.GetAs<IQ16>();
+    ApplyResultsCorrection<<<grid_sz, block_sz>>>(img.Data(), x_size_stride, x_size, y_size, dest_array,
+                                                  calibration_constant);
+    CHECK_CUDA_ERR(cudaDeviceSynchronize());
+    CHECK_CUDA_ERR(cudaGetLastError());
+    auto result_host_buffer = std::unique_ptr<IQ16[]>(new IQ16[x_size * y_size]);
+    CHECK_CUDA_ERR(cudaMemcpy(result_host_buffer.get(), dest_array, x_size * y_size * sizeof(IQ16), cudaMemcpyDeviceToHost));
+    return result_host_buffer;
 }

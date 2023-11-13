@@ -10,4 +10,4 @@
  * RCMC use no interpolator/nearest neighbor
  */
 void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_img, DevicePaddedImage& out_img,
-                           CudaWorkspace d_workspace);
+                           CudaWorkspace& d_workspace);

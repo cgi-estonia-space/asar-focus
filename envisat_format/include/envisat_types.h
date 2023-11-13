@@ -72,3 +72,10 @@ struct FEPAnnotations {
 };
 
 static_assert(sizeof(FEPAnnotations) == 20);
+
+struct IQ16 {
+    int16_t i;
+    int16_t q;
+};
+
+static_assert(sizeof(IQ16) == 4);
