@@ -10,6 +10,7 @@
 
 #include <complex>
 #include <filesystem>
+#include <future>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -144,17 +145,17 @@ int main(int argc, char* argv[]) {
         std::string wif_name_base = asar_meta.product_name;
         wif_name_base.resize(wif_name_base.size() - 3);
 
-        int az_size = metadata.img.azimuth_size;
-        int rg_size = metadata.img.range_size;
-        auto fft_sizes = GetOptimalFFTSizes();
+        const int az_size = metadata.img.azimuth_size;
+        const int rg_size = metadata.img.range_size;
+        const auto fft_sizes = GetOptimalFFTSizes();
 
-        auto rg_plan_sz = fft_sizes.upper_bound(rg_size + metadata.chirp.n_samples);
+        const auto rg_plan_sz = fft_sizes.upper_bound(rg_size + metadata.chirp.n_samples);
         LOGD << "Range FFT padding sz = " << rg_plan_sz->first << "(2 ^ " << rg_plan_sz->second[0] << " * 3 ^ "
              << rg_plan_sz->second[1] << " * 5 ^ " << rg_plan_sz->second[2] << " * 7 ^ " << rg_plan_sz->second[3]
              << ")";
-        int rg_padded = rg_plan_sz->first;
+        const int rg_padded = rg_plan_sz->first;
 
-        auto az_plan_sz = fft_sizes.upper_bound(az_size);
+        const auto az_plan_sz = fft_sizes.upper_bound(az_size);
 
         LOGD << "azimuth FFT padding sz = " << az_plan_sz->first << " (2 ^ " << az_plan_sz->second[0] << " * 3 ^ "
              << az_plan_sz->second[1] << " * 5 ^ " << az_plan_sz->second[2] << " * 7 ^ " << az_plan_sz->second[3]
@@ -262,14 +263,25 @@ int main(int argc, char* argv[]) {
             WriteIntensityPaddedImg(img, path.c_str());
         }
 
+        constexpr size_t record_header_bytes = 12 + 1 + 4;
+        const auto mds_record_size = img.XSize() * sizeof(IQ16) + record_header_bytes;
+        const auto mds_record_count = img.YSize();
+        MDS mds;
+        mds.n_records = mds_record_count;
+        mds.record_size = mds_record_size;
+        auto mds_buffer_init = std::async(std::launch::async, [&mds] {
+            mds.buf = new char[mds.n_records * mds.record_size];
+            mds.buf[0] = 0;
+        });
+
         auto az_comp_start = TimeStart();
         DevicePaddedImage out;
         RangeDopplerAlgorithm(metadata, img, out, d_workspace);
 
         out.ZeroFillPaddings();
 
-        TimeStop(az_comp_start, "Azimuth compression");
         CHECK_CUDA_ERR(cudaDeviceSynchronize());
+        TimeStop(az_comp_start, "Azimuth compression");
 
         if (args.StoreIntensity()) {
             std::string path = std::string(args.GetOutputPath()) + "/";
@@ -278,11 +290,6 @@ int main(int argc, char* argv[]) {
         }
 
         auto result_correction_start = TimeStart();
-        MDS mds;
-        mds.n_records = out.YSize();
-        constexpr size_t record_header_bytes = 12 + 1 + 4;
-        mds.record_size = out.XSize() * sizeof(IQ16) + record_header_bytes;
-        mds.buf = new char[mds.n_records * mds.record_size];
         if (d_workspace.ByteSize() < static_cast<size_t>(mds.record_size * mds.n_records)) {
             throw std::logic_error(
                 "Implementation error occurred - CUDA workspace buffer shall be made larger or equal to what is "
@@ -294,6 +301,16 @@ int main(int argc, char* argv[]) {
         TimeStop(result_correction_start, "Image results correction");
 
         auto mds_formation = TimeStart();
+
+        if (!mds_buffer_init.valid()) {
+            throw std::runtime_error("MDS output buffer initialization went into invalid state");
+        }
+        const auto mds_buffer_init_result = mds_buffer_init.wait_for(std::chrono::seconds(10));
+        if (mds_buffer_init_result != std::future_status::ready) {
+            throw std::runtime_error(
+                "Initializing MDS buffer failed. Please check the platform. The timeout 10 seconds was reached.");
+        }
+        mds_buffer_init.get();
 
         CHECK_CUDA_ERR(cudaMemcpy(mds.buf, device_mds_buf, mds.n_records * mds.record_size, cudaMemcpyDeviceToHost));
         TimeStop(mds_formation, "MDS construction");
