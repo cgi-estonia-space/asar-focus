@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(asar_focus CUDA CXX)
 
+message(STATUS "CMake version: ${CMAKE_VERSION}")
+
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CXX_STANDARD  17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -44,7 +46,12 @@ set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --Werror all-warnings")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda")
 if (NOT DEFINED ENV{CUDAARCHS})
     message(STATUS "CUDAARCHS not set, defaulting")
-    set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures" FORCE)
+    # https://cmake.org/cmake/help/latest/prop_tgt/CUDA_ARCHITECTURES.html
+    if (CMAKE_VERSION VERSION_LESS "3.24")
+        set(CMAKE_CUDA_ARCHITECTURES 60 CACHE STRING "CUDA architectures" FORCE)
+    else()
+        set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures" FORCE)
+    endif()
 endif()
 message(STATUS "CUDA binary code will be generated for the following architecture(s) - ${CMAKE_CUDA_ARCHITECTURES}")
 set_property(TARGET asar_focus PROPERTY CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
