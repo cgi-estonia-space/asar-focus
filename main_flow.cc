@@ -105,16 +105,7 @@ void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, ASARM
     }
 }
 
-std::unique_ptr<IQ16[]> FormatResults(DevicePaddedImage& img, CudaWorkspace& dest_space, float calibration_constant) {
-    auto dest_array = dest_space.GetAs<IQ16>();
-    ConditionResults(img, dest_array, calibration_constant);
-    const auto x_size = img.XSize();
-    const auto y_size = img.YSize();
-    auto result_host_buffer = std::unique_ptr<IQ16[]>(new IQ16[x_size * y_size]);
-    CHECK_CUDA_ERR(
-        cudaMemcpy(result_host_buffer.get(), dest_array, x_size * y_size * sizeof(IQ16), cudaMemcpyDeviceToHost));
-
-    return result_host_buffer;
+void FormatResults(DevicePaddedImage& img, char* dest_space, size_t record_header_size, float calibration_constant) {
+    ConditionResults(img, dest_space, record_header_size, calibration_constant);
 }
-
 }  // namespace alus::asar::mainflow

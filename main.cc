@@ -21,9 +21,9 @@
 #include "alus_log.h"
 #include "args.h"
 #include "asar_constants.h"
+#include "cuda_device_init.h"
 #include "cufft_plan.h"
 #include "device_padded_image.cuh"
-#include "cuda_device_init.h"
 #include "envisat_aux_file.h"
 #include "envisat_lvl1_writer.h"
 #include "envisat_types.h"
@@ -48,9 +48,7 @@ void ExceptionMessagePrint(const T& e) {
     LOGE << "Exiting.";
 }
 
-std::string GetSoftwareVersion() {
-    return "asar_focus/" + std::string(VERSION_STRING);
-}
+std::string GetSoftwareVersion() { return "asar_focus/" + std::string(VERSION_STRING); }
 
 auto TimeStart() { return std::chrono::steady_clock::now(); }
 
@@ -117,7 +115,8 @@ int main(int argc, char* argv[]) {
         const auto target_product_type =
             alus::asar::specification::TryDetermineTargetProductFrom(product_type, args.GetFocussedProductType());
         (void)target_product_type;
-        while(!cuda_init.IsFinished());
+        while (!cuda_init.IsFinished())
+            ;
         cuda_init.CheckErrors();
         alus::asar::envformat::ParseLevel0Packets(data, metadata, asar_meta, h_data, product_type, ins_file,
                                                   asar_meta.sensing_start, asar_meta.sensing_stop);
@@ -279,23 +278,24 @@ int main(int argc, char* argv[]) {
         }
 
         auto result_correction_start = TimeStart();
+        MDS mds;
+        mds.n_records = out.YSize();
+        constexpr size_t record_header_bytes = 12 + 1 + 4;
+        mds.record_size = out.XSize() * sizeof(IQ16) + record_header_bytes;
+        mds.buf = new char[mds.n_records * mds.record_size];
+        if (d_workspace.ByteSize() < static_cast<size_t>(mds.record_size * mds.n_records)) {
+            throw std::logic_error(
+                "Implementation error occurred - CUDA workspace buffer shall be made larger or equal to what is "
+                "required for MDS buffer.");
+        }
         constexpr float tambov{120000 / 100};
-        auto res = alus::asar::mainflow::FormatResults(out, d_workspace, tambov);
+        auto device_mds_buf = d_workspace.GetAs<char>();
+        alus::asar::mainflow::FormatResults(out, device_mds_buf, record_header_bytes, tambov);
         TimeStop(result_correction_start, "Image results correction");
 
         auto mds_formation = TimeStart();
-        MDS mds;
-        mds.n_records = out.YSize();
-        mds.record_size = out.XSize() * 4 + 12 + 1 + 4;
-        mds.buf = new char[mds.n_records * mds.record_size];
 
-        {
-            const int range_size = out.XSize();
-            for (int y = 0; y < out.YSize(); y++) {
-                memset(&mds.buf[y * mds.record_size], 0, 17);  // TODO each row mjd
-                memcpy(&mds.buf[y * mds.record_size + 17], res.get() + (y * range_size), range_size * sizeof(IQ16));
-            }
-        }
+        CHECK_CUDA_ERR(cudaMemcpy(mds.buf, device_mds_buf, mds.n_records * mds.record_size, cudaMemcpyDeviceToHost));
         TimeStop(mds_formation, "MDS construction");
 
         auto file_write = TimeStart();
