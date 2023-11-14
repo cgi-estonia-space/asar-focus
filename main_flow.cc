@@ -17,6 +17,7 @@
 #include "alus_log.h"
 #include "date_time_util.h"
 #include "ers_aux_file.h"
+#include "sar/iq_correction.cuh"
 #include "status_assembly.h"
 
 namespace alus::asar::mainflow {
@@ -102,6 +103,18 @@ void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, ASARM
         LOGE << "Implementation error for this type of product while trying to fetch auxiliary files";
         exit(alus::asar::status::EXIT_CODE::ASSERT_FAILURE);
     }
+}
+
+std::unique_ptr<IQ16[]> FormatResults(DevicePaddedImage& img, CudaWorkspace& dest_space, float calibration_constant) {
+    auto dest_array = dest_space.GetAs<IQ16>();
+    ConditionResults(img, dest_array, calibration_constant);
+    const auto x_size = img.XSize();
+    const auto y_size = img.YSize();
+    auto result_host_buffer = std::unique_ptr<IQ16[]>(new IQ16[x_size * y_size]);
+    CHECK_CUDA_ERR(
+        cudaMemcpy(result_host_buffer.get(), dest_array, x_size * y_size * sizeof(IQ16), cudaMemcpyDeviceToHost));
+
+    return result_host_buffer;
 }
 
 }  // namespace alus::asar::mainflow

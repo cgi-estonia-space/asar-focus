@@ -227,7 +227,6 @@ double SumSmallDeviceArray(double* d_data, int n) {
     CHECK_CUDA_ERR(cudaMemcpy(h_data.data(), d_data, n * sizeof(h_data[0]), cudaMemcpyDeviceToHost));
     return std::accumulate(h_data.begin(), h_data.begin() + n, 0.0);
 }
-
 }  // namespace
 
 void RawDataCorrection(DevicePaddedImage& img, CorrectionParams par, SARResults& results) {
@@ -327,8 +326,8 @@ void RawDataCorrection(DevicePaddedImage& img, CorrectionParams par, SARResults&
     }
 }
 
-__global__ void ApplyResultsCorrection(cufftComplex* data, int x_size_stride, int x_size, int y_size,
-                                       IQ16* dest_space, float calibration_constant) {
+__global__ void CalibrateClampToBigEndian(cufftComplex* data, int x_size_stride, int x_size, int y_size,
+                                          IQ16* dest_space, float calibration_constant) {
     const int x = threadIdx.x + blockIdx.x * blockDim.x;
     const int y = threadIdx.y + blockIdx.y * blockDim.y;
 
@@ -338,27 +337,29 @@ __global__ void ApplyResultsCorrection(cufftComplex* data, int x_size_stride, in
     if (x < x_size && y < y_size) {
         auto pix = data[src_idx];
         IQ16 result;
-        result.i = static_cast<int16_t>(alus::cuda::algorithm::clamp<float>(pix.x * calibration_constant, INT16_MIN, INT16_MAX));
-        result.q = static_cast<int16_t>(alus::cuda::algorithm::clamp<float>(pix.y * calibration_constant, INT16_MIN, INT16_MAX));
+        result.i = static_cast<int16_t>(
+            alus::cuda::algorithm::clamp<float>(pix.x * calibration_constant, INT16_MIN, INT16_MAX));
+        result.q = static_cast<int16_t>(
+            alus::cuda::algorithm::clamp<float>(pix.y * calibration_constant, INT16_MIN, INT16_MAX));
 
         result.i = alus::cuda::bit::Byteswap(result.i);
         result.q = alus::cuda::bit::Byteswap(result.q);
         dest_space[dest_idx] = result;
+        //        if (x == 0) {
+        //            // Modify buffer as plain char*
+        //            dest_space[dest_idx - 17] = {};
+        //        }
     }
 }
 
-std::unique_ptr<IQ16[]> ResultsCorrection(DevicePaddedImage& img, CudaWorkspace& dest_space, float calibration_constant) {
+void ConditionResults(DevicePaddedImage& img, IQ16* dest_buffer, float calibration_constant) {
     const auto x_size_stride = img.XStride();  // Need to count for FFT padding when rows are concerned
     const auto x_size = img.XSize();
     const auto y_size = img.YSize();  // No need to calculate on Y padded FFT data
     dim3 block_sz(16, 16);
     dim3 grid_sz((x_size_stride + 15) / 16, (y_size + 15) / 16);
-    auto dest_array = dest_space.GetAs<IQ16>();
-    ApplyResultsCorrection<<<grid_sz, block_sz>>>(img.Data(), x_size_stride, x_size, y_size, dest_array,
-                                                  calibration_constant);
+    CalibrateClampToBigEndian<<<grid_sz, block_sz>>>(img.Data(), x_size_stride, x_size, y_size, dest_buffer,
+                                                     calibration_constant);
     CHECK_CUDA_ERR(cudaDeviceSynchronize());
     CHECK_CUDA_ERR(cudaGetLastError());
-    auto result_host_buffer = std::unique_ptr<IQ16[]>(new IQ16[x_size * y_size]);
-    CHECK_CUDA_ERR(cudaMemcpy(result_host_buffer.get(), dest_array, x_size * y_size * sizeof(IQ16), cudaMemcpyDeviceToHost));
-    return result_host_buffer;
 }

@@ -9,7 +9,7 @@
  */
 #pragma once
 
-
+#include <memory>
 #include <optional>
 #include <string_view>
 
@@ -17,8 +17,11 @@
 
 #include "asar_constants.h"
 #include "doris_orbit.h"
+#include "cuda_workplace.h"
+#include "device_padded_image.cuh"
 #include "envisat_aux_file.h"
 #include "envisat_lvl0_parser.h"
+#include "envisat_types.h"
 #include "sar/sar_metadata.h"
 
 namespace alus::asar::mainflow {
@@ -33,5 +36,7 @@ void TryFetchOrbit(alus::dorisorbit::Parsable& orbit_source, ASARMetadata& asar_
 
 void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, ASARMetadata& asar_meta,
                    specification::ProductTypes product_type, std::string_view aux_path);
+
+std::unique_ptr<IQ16[]> FormatResults(DevicePaddedImage& img, CudaWorkspace& dest_space, float calibration_constant);
 
 }  // namespace alus::asar::mainflow

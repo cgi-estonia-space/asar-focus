@@ -270,7 +270,7 @@ int main(int argc, char* argv[]) {
         out.ZeroFillPaddings();
 
         TimeStop(az_comp_start, "Azimuth compression");
-        cudaDeviceSynchronize();
+        CHECK_CUDA_ERR(cudaDeviceSynchronize());
 
         if (args.StoreIntensity()) {
             std::string path = std::string(args.GetOutputPath()) + "/";
@@ -280,15 +280,8 @@ int main(int argc, char* argv[]) {
 
         auto result_correction_start = TimeStart();
         constexpr float tambov{120000 / 100};
-        auto res = ResultsCorrection(out, d_workspace, tambov);
+        auto res = alus::asar::mainflow::FormatResults(out, d_workspace, tambov);
         TimeStop(result_correction_start, "Image results correction");
-
-//        auto cpu_transfer_start = TimeStart();
-//        cufftComplex* res = new cufftComplex[out.XStride() * out.YStride()];
-//        out.CopyToHostPaddedSize(res);
-//
-//
-//        TimeStop(cpu_transfer_start, "Image GPU->CPU");
 
         auto mds_formation = TimeStart();
         MDS mds;
@@ -298,23 +291,7 @@ int main(int argc, char* argv[]) {
 
         {
             const int range_size = out.XSize();
-            //const int range_stride = out.XStride();
-//            std::vector<IQ16> row(range_size);
             for (int y = 0; y < out.YSize(); y++) {
-                // LOGV << "y = " << y;
-//                for (int x = 0; x < out.XSize(); x++) {
-//                    auto pix = res[x + y * range_size];
-//                    float tambov = 120000 / 100;
-                    // LOGV << "scaling tambov = " << tambov;
-                    // IQ16 iq16;
-                    //iq16.i = std::clamp<float>(pix.x * tambov, INT16_MIN, INT16_MAX);
-                    //iq16.q = std::clamp<float>(pix.y * tambov, INT16_MIN, INT16_MAX);
-
-//                    pix.i = bswap(pix.i);
-//                    pix.q = bswap(pix.q);
-//                    row[x] = pix;
-//                }
-
                 memset(&mds.buf[y * mds.record_size], 0, 17);  // TODO each row mjd
                 memcpy(&mds.buf[y * mds.record_size + 17], res.get() + (y * range_size), range_size * sizeof(IQ16));
             }

@@ -12,4 +12,5 @@ struct CorrectionParams {
 };
 void RawDataCorrection(DevicePaddedImage& img, CorrectionParams par, SARResults& results);
 
-std::unique_ptr<IQ16[]> ResultsCorrection(DevicePaddedImage& img, CudaWorkspace& dest_space, float calibration_constant);
+// dest_buffer must be on device and have enough capacity to accommodate original image (complex float) without padding.
+void ConditionResults(DevicePaddedImage& img, IQ16* dest_buffer, float calibration_constant);
