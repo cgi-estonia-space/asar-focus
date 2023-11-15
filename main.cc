@@ -171,11 +171,8 @@ int main(int argc, char* argv[]) {
         img.InitPadded(rg_size, az_size, rg_padded, az_padded);
         img.ZeroMemory();
 
-        for (int y = 0; y < az_size; y++) {
-            auto* dest = img.Data() + y * rg_padded;
-            auto* src = h_data.data() + y * rg_size;
-            CHECK_CUDA_ERR(cudaMemcpy(dest, src, rg_size * 8, cudaMemcpyHostToDevice));
-        }
+        CHECK_CUDA_ERR(
+            cudaMemcpy2D(img.Data(), rg_padded * 8, h_data.data(), rg_size * 8, rg_size * 8, az_size, cudaMemcpyHostToDevice));
 
         TimeStop(gpu_transfer_start, "GPU image formation");
 
