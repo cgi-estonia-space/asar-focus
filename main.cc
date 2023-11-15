@@ -106,7 +106,6 @@ int main(int argc, char* argv[]) {
         auto orbit_source = alus::dorisorbit::Parsable::TryCreateFrom(args.GetOrbitPath());
         TimeStop(file_time_start, "Orbit file fetch");
         file_time_start = TimeStart();
-        std::vector<std::complex<float>> h_data;
         alus::asar::envformat::ParseLevel0Header(data, asar_meta);
         const auto product_type = alus::asar::mainflow::TryDetermineProductType(asar_meta.product_name);
         alus::asar::mainflow::CheckAndLimitSensingStartEnd(asar_meta.sensing_start, asar_meta.sensing_stop,
@@ -121,7 +120,8 @@ int main(int argc, char* argv[]) {
         while (!cuda_init.IsFinished())
             ;
         cuda_init.CheckErrors();
-        alus::asar::envformat::ParseLevel0Packets(data, metadata, asar_meta, h_data, product_type, ins_file,
+        cufftComplex* d_parsed_packets;
+        alus::asar::envformat::ParseLevel0Packets(data, metadata, asar_meta, &d_parsed_packets, product_type, ins_file,
                                                   asar_meta.sensing_start, asar_meta.sensing_stop);
 
         {
@@ -172,7 +172,8 @@ int main(int argc, char* argv[]) {
         img.ZeroMemory();
 
         CHECK_CUDA_ERR(
-            cudaMemcpy2D(img.Data(), rg_padded * 8, h_data.data(), rg_size * 8, rg_size * 8, az_size, cudaMemcpyHostToDevice));
+            cudaMemcpy2D(img.Data(), rg_padded * 8, d_parsed_packets, rg_size * 8, rg_size * 8, az_size, cudaMemcpyDeviceToDevice));
+        CHECK_CUDA_ERR(cudaFree(d_parsed_packets));
 
         TimeStop(gpu_transfer_start, "GPU image formation");
 
