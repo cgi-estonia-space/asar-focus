@@ -426,7 +426,7 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         echo_meta.raw_data.reserve(ers::highrate::MEASUREMENT_DATA_SIZE_BYTES);
         // uint64_t i_avg_cumulative{0};
         // uint64_t q_avg_cumulative{0};
-        for (size_t r_i{0}; r_i < 5616; r_i++) {
+        for (size_t r_i{0}; r_i < ers::highrate::MEASUREMENT_DATA_SAMPLE_COUNT; r_i++) {
             uint8_t i_sample = it[r_i * 2 + 0];
             // i_avg_cumulative += i_sample;
             uint8_t q_sample = it[r_i * 2 + 1];
@@ -441,7 +441,7 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         //            if (q_avg > 16.0 || q_avg < 15.0) {
         //                LOGD << "average for q at MSDR no. " << i << " is OOL " << q_avg;
         //            }
-        it += 11232;
+        it += ers::highrate::MEASUREMENT_DATA_SIZE_BYTES;
         echoes.push_back(std::move(echo_meta));
 #if DEBUG_PACKETS
         ErsFepAndPacketMetadata meta{};
@@ -452,7 +452,7 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
 
     uint16_t min_swst = UINT16_MAX;
     uint16_t max_swst = 0;
-    size_t max_samples = 0;
+    size_t max_samples = ers::highrate::MEASUREMENT_DATA_SAMPLE_COUNT;
     uint16_t swst_changes = 0;
     uint16_t prev_swst = echoes.front().swst_code;
     const int swst_multiplier{4};
@@ -490,7 +490,6 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         }
         min_swst = std::min(min_swst, e.swst_code);
         max_swst = std::max(max_swst, e.swst_code);
-        max_samples = std::max(max_samples, e.raw_data.size());
     }
 
     asar_meta.swst_changes = swst_changes;
