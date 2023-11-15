@@ -16,6 +16,7 @@
 #include "fmt/format.h"
 
 #include "alus_log.h"
+#include "cuda_util.h"
 #include "envisat_utils.h"
 #include "ers_env_format.h"
 #include "parse_util.h"
@@ -191,8 +192,8 @@ inline void CalculatePrf(uint16_t pri_code, double& pri, double& prf) {
 namespace alus::asar::envformat {
 
 void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0& mdsr, SARMetadata& sar_meta,
-                             ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data,
-                             InstrumentFile& ins_file, boost::posix_time::ptime packets_start_filter,
+                             ASARMetadata& asar_meta, cufftComplex** d_parsed_packets, InstrumentFile& ins_file,
+                             boost::posix_time::ptime packets_start_filter,
                              boost::posix_time::ptime packets_stop_filter) {
     FillFbaqMeta(asar_meta);
     const uint8_t* it = reinterpret_cast<const uint8_t*>(file_data.data()) + mdsr.ds_offset;
@@ -568,8 +569,10 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     sar_meta.img.range_size = range_samples;
     sar_meta.img.azimuth_size = echoes.size();
 
-    img_data.clear();
-    img_data.resize(sar_meta.img.range_size * sar_meta.img.azimuth_size, {NAN, NAN});
+    CHECK_CUDA_ERR(
+        cudaMalloc(d_parsed_packets, sar_meta.img.range_size * sar_meta.img.azimuth_size * sizeof(cufftComplex)));
+    //    img_data.clear();
+    //    img_data.resize(sar_meta.img.range_size * sar_meta.img.azimuth_size, {NAN, NAN});
 
     sar_meta.total_raw_samples = 0;
 
@@ -578,7 +581,8 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         size_t idx = y * range_samples;
         idx += swst_multiplier * (e.swst_code - min_swst);
         const size_t n_samples = e.raw_data.size();
-        memcpy(&img_data[idx], e.raw_data.data(), n_samples * 8);
+        CHECK_CUDA_ERR(cudaMemcpy(*d_parsed_packets + idx, e.raw_data.data(), n_samples * 8, cudaMemcpyHostToDevice));
+        // memcpy(&img_data[idx], e.raw_data.data(), n_samples * 8);
         sar_meta.total_raw_samples += n_samples;
     }
 
