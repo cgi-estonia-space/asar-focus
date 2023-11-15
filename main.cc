@@ -28,6 +28,7 @@
 #include "envisat_aux_file.h"
 #include "envisat_lvl1_writer.h"
 #include "envisat_types.h"
+#include "file_async.h"
 #include "geo_tools.h"
 #include "img_output.h"
 #include "main_flow.h"
@@ -274,11 +275,25 @@ int main(int argc, char* argv[]) {
             mds.buf[0] = 0;
         });
 
+        std::string lvl1_out_name = asar_meta.product_name;
+        lvl1_out_name.at(6) = 'S';
+        lvl1_out_name.at(8) = '1';
+        const std::string lvl1_out_full_path =
+            std::string(args.GetOutputPath()) + std::filesystem::path::preferred_separator + lvl1_out_name;
+        auto lvl1_file_handle = alus::util::FileAsync(lvl1_out_full_path);
+
         auto az_comp_start = TimeStart();
         DevicePaddedImage out;
         RangeDopplerAlgorithm(metadata, img, out, d_workspace);
 
         out.ZeroFillPaddings();
+
+        EnvisatIMS ims{};
+        ConstructIMS(ims, metadata, asar_meta, mds, GetSoftwareVersion());
+        if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
+            throw std::runtime_error("Could not create L1 file at " + lvl1_out_full_path);
+        }
+        lvl1_file_handle.Write(&ims, sizeof(ims));
 
         CHECK_CUDA_ERR(cudaDeviceSynchronize());
         TimeStop(az_comp_start, "Azimuth compression");
@@ -313,10 +328,14 @@ int main(int argc, char* argv[]) {
         mds_buffer_init.get();
 
         CHECK_CUDA_ERR(cudaMemcpy(mds.buf, device_mds_buf, mds.n_records * mds.record_size, cudaMemcpyDeviceToHost));
-        TimeStop(mds_formation, "MDS construction");
+        TimeStop(mds_formation, "MDS Host buffer transfer");
 
         auto file_write = TimeStart();
-        WriteLvl1(metadata, asar_meta, mds, GetSoftwareVersion(), args.GetOutputPath());
+        if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
+            throw std::runtime_error("Writing headers and DSDs of Level 1 product at " + lvl1_out_full_path +
+                                     " did not finish in 10 seconds. Check platform for the performance issues.");
+        }
+        lvl1_file_handle.WriteSync(mds.buf, mds.n_records * mds.record_size);
         TimeStop(file_write, "LVL1 file write");
     } catch (const boost::program_options::error& e) {
         ExceptionMessagePrint(e);

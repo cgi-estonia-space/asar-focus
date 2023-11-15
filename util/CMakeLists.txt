@@ -3,6 +3,7 @@ list(APPEND UTIL_INCLUDE_DIRS
 
 list(APPEND UTIL_SOURCES
         ${CMAKE_CURRENT_LIST_DIR}/src/date_time_util.cc
+        ${CMAKE_CURRENT_LIST_DIR}/src/file_async.cc
         ${CMAKE_CURRENT_LIST_DIR}/src/filesystem_util.cc
         ${CMAKE_CURRENT_LIST_DIR}/src/geo_tools.cc
         ${CMAKE_CURRENT_LIST_DIR}/src/img_output.cc
