@@ -571,8 +571,9 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
 
     CHECK_CUDA_ERR(
         cudaMalloc(d_parsed_packets, sar_meta.img.range_size * sar_meta.img.azimuth_size * sizeof(cufftComplex)));
-    //    img_data.clear();
-    //    img_data.resize(sar_meta.img.range_size * sar_meta.img.azimuth_size, {NAN, NAN});
+    std::vector<std::complex<float>> img_data;
+    img_data.clear();
+    img_data.resize(sar_meta.img.range_size * sar_meta.img.azimuth_size, {NAN, NAN});
 
     sar_meta.total_raw_samples = 0;
 
@@ -581,10 +582,11 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         size_t idx = y * range_samples;
         idx += swst_multiplier * (e.swst_code - min_swst);
         const size_t n_samples = e.raw_data.size();
-        CHECK_CUDA_ERR(cudaMemcpy(*d_parsed_packets + idx, e.raw_data.data(), n_samples * 8, cudaMemcpyHostToDevice));
-        // memcpy(&img_data[idx], e.raw_data.data(), n_samples * 8);
+        memcpy(&img_data[idx], e.raw_data.data(), n_samples * 8);
         sar_meta.total_raw_samples += n_samples;
     }
+    CHECK_CUDA_ERR(cudaMemcpy(*d_parsed_packets, img_data.data(),
+                              sar_meta.img.range_size * sar_meta.img.azimuth_size * 8, cudaMemcpyHostToDevice));
 
     // TODO init guess handling? At the moment just a naive guess from nadir point
     double init_guess_lat = (asar_meta.start_nadir_lat + asar_meta.stop_nadir_lat) / 2;
