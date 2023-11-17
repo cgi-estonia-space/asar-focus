@@ -16,6 +16,7 @@
 #include "fmt/format.h"
 
 #include "alus_log.h"
+#include "cuda_stdio.h"
 #include "cuda_util.h"
 #include "envisat_utils.h"
 #include "ers_env_format.h"
@@ -569,24 +570,38 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     sar_meta.img.range_size = range_samples;
     sar_meta.img.azimuth_size = echoes.size();
 
+    const auto range_az_total_items = sar_meta.img.range_size * sar_meta.img.azimuth_size;
+    const auto range_az_total_bytes = range_az_total_items * sizeof(cufftComplex);
     CHECK_CUDA_ERR(
-        cudaMalloc(d_parsed_packets, sar_meta.img.range_size * sar_meta.img.azimuth_size * sizeof(cufftComplex)));
-    std::vector<std::complex<float>> img_data;
-    img_data.clear();
-    img_data.resize(sar_meta.img.range_size * sar_meta.img.azimuth_size, {NAN, NAN});
+        cudaMalloc(d_parsed_packets, range_az_total_bytes));
+    constexpr auto CLEAR_VALUE = NAN;
+    constexpr cufftComplex CLEAR_VALUE_COMPLEX{CLEAR_VALUE, CLEAR_VALUE};
+    //    uint32_t value_fill = 0x7FC00000;
+//    uint32_t value_fill;
+    static_assert(sizeof(CLEAR_VALUE_COMPLEX) == sizeof(CLEAR_VALUE) * 2);
+//    memcpy(&value_fill, &CLEAR_VALUE, sizeof(CLEAR_VALUE));
+    cuda::stdio::Memset(*d_parsed_packets, CLEAR_VALUE_COMPLEX, range_az_total_items);
+//    std::vector<std::complex<float>> img_data;
+    //    img_data.clear();
+//    img_data.resize(range_az_total_items, {0, 0});
+//    CHECK_CUDA_ERR(cudaMemcpy(img_data.data(), *d_parsed_packets,
+//                              range_az_total_bytes,
+//                              cudaMemcpyDeviceToHost));
 
     sar_meta.total_raw_samples = 0;
+
 
     for (size_t y = 0; y < echoes.size(); y++) {
         const auto& e = echoes[y];
         size_t idx = y * range_samples;
         idx += swst_multiplier * (e.swst_code - min_swst);
         const size_t n_samples = e.raw_data.size();
-        memcpy(&img_data[idx], e.raw_data.data(), n_samples * 8);
+        CHECK_CUDA_ERR(cudaMemcpy(*d_parsed_packets + idx, e.raw_data.data(), n_samples * 8, cudaMemcpyHostToDevice));
+        //        memcpy(&img_data[idx], e.raw_data.data(), n_samples * 8);
         sar_meta.total_raw_samples += n_samples;
     }
-    CHECK_CUDA_ERR(cudaMemcpy(*d_parsed_packets, img_data.data(),
-                              sar_meta.img.range_size * sar_meta.img.azimuth_size * 8, cudaMemcpyHostToDevice));
+    //    CHECK_CUDA_ERR(cudaMemcpy(*d_parsed_packets, img_data.data(),
+    //                              sar_meta.img.range_size * sar_meta.img.azimuth_size * 8, cudaMemcpyHostToDevice));
 
     // TODO init guess handling? At the moment just a naive guess from nadir point
     double init_guess_lat = (asar_meta.start_nadir_lat + asar_meta.stop_nadir_lat) / 2;
