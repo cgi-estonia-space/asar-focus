@@ -15,8 +15,8 @@
 namespace alus::cuda::algorithm {
 
 template <typename T>
-__device__ inline const T clamp(const T& v, const T& lo, const T& hi) {
-    return max(lo, min(hi, v));
+__device__ __host__ inline const T clamp(const T& v, const T& lo, const T& hi) {
+    return v > hi ? hi : (v < lo ? lo : v);
 }
 
 }  // namespace alus::cuda::algorithm

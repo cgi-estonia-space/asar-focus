@@ -33,6 +33,7 @@
 #include "img_output.h"
 #include "main_flow.h"
 #include "math_utils.h"
+#include "mem_alloc.h"
 #include "plot.h"
 #include "sar/fractional_doppler_centroid.cuh"
 #include "sar/iq_correction.cuh"
@@ -271,8 +272,7 @@ int main(int argc, char* argv[]) {
         mds.n_records = mds_record_count;
         mds.record_size = mds_record_size;
         auto mds_buffer_init = std::async(std::launch::async, [&mds] {
-            mds.buf = new char[mds.n_records * mds.record_size];
-            mds.buf[0] = 0;
+            mds.buf = static_cast<char*>(alus::util::Memalloc(mds.n_records * mds.record_size));
         });
 
         std::string lvl1_out_name = asar_meta.product_name;

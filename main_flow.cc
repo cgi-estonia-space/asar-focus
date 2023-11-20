@@ -16,6 +16,7 @@
 
 #include "alus_log.h"
 #include "date_time_util.h"
+#include "envisat_format_kernels.h"
 #include "ers_aux_file.h"
 #include "sar/iq_correction.cuh"
 #include "status_assembly.h"
@@ -106,6 +107,6 @@ void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, ASARM
 }
 
 void FormatResults(DevicePaddedImage& img, char* dest_space, size_t record_header_size, float calibration_constant) {
-    ConditionResults(img, dest_space, record_header_size, calibration_constant);
+    envformat::ConditionResults(img, dest_space, record_header_size, calibration_constant);
 }
 }  // namespace alus::asar::mainflow
