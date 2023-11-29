@@ -39,5 +39,5 @@ struct MDS {
     MDS& operator=(const MDS&) = delete;
 };
 
-void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& mds, std::string_view software_ver,
-               std::string_view result_dir);
+void ConstructIMS(EnvisatIMS& ims, const SARMetadata& sar_meta, const ASARMetadata& asar_meta, const MDS& mds,
+                  std::string_view software_ver);

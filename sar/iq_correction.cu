@@ -12,8 +12,9 @@
 #include <numeric>
 
 #include "alus_log.h"
-#include "cuda_util/cuda_cleanup.h"
 #include "checks.h"
+#include "cuda_util/cuda_algorithm.cuh"
+#include "cuda_util/cuda_cleanup.h"
 
 namespace {
 
@@ -224,7 +225,6 @@ double SumSmallDeviceArray(double* d_data, int n) {
     CHECK_CUDA_ERR(cudaMemcpy(h_data.data(), d_data, n * sizeof(h_data[0]), cudaMemcpyDeviceToHost));
     return std::accumulate(h_data.begin(), h_data.begin() + n, 0.0);
 }
-
 }  // namespace
 
 void RawDataCorrection(DevicePaddedImage& img, CorrectionParams par, SARResults& results) {

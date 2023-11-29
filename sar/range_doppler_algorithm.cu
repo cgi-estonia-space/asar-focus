@@ -291,7 +291,7 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
 }  // namespace
 
 void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_img, DevicePaddedImage& out_img,
-                           CudaWorkspace d_workspace) {
+                           CudaWorkspace& d_workspace) {
 #if INPLACE_AZIMUTH_FFT == 0
     {
         // 2D time domain -> range Doppler domain via Azimuth FFT

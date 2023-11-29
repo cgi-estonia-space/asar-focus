@@ -7,13 +7,16 @@
  * You should have received a copy of the license along with this
  * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
  */
+
 #pragma once
 
-#include "cuda_util/device_padded_image.cuh"
-#include "sar_metadata.h"
+#include <algorithm>
 
-struct CorrectionParams {
-    size_t n_total_samples;
-    // int n_sm;
-};
-void RawDataCorrection(DevicePaddedImage& img, CorrectionParams par, SARResults& results);
+namespace alus::cuda::algorithm {
+
+template <typename T>
+__device__ __host__ inline const T clamp(const T& v, const T& lo, const T& hi) {
+    return v > hi ? hi : (v < lo ? lo : v);
+}
+
+}  // namespace alus::cuda::algorithm

@@ -61,6 +61,7 @@ jobs:
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "cp -r /home/$INSTANCE_USERNAME/e2e /dev/shm/"
       - uses: actions/checkout@v4
       - name: End-to-end tests
+        id: e2e-run
         continue-on-error: true
         env:
           INSTANCE_USERNAME: ${{ secrets.EAGLE_USERNAME }}
@@ -84,6 +85,10 @@ jobs:
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "sudo chown -R $INSTANCE_USERNAME:$INSTANCE_USERNAME /dev/shm/e2e"
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "rsync -av /dev/shm/e2e /home/$INSTANCE_USERNAME/"
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "rm -rf /dev/shm/e2e"
+      # This is needed because 'continue-on-error: true' for 'e2e-run' would not make this step failure in actions UI
+      - name: Report E2E run error
+        if: steps.e2e-run.outcome != 'success'
+        run: exit 1
 
   stop-gpu-instance:
     name: Stop GPU instance

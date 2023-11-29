@@ -229,10 +229,8 @@ void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, co
 }
 }  // namespace
 
-void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& mds, std::string_view software_ver,
-               std::string_view result_dir) {
-    EnvisatIMS out = {};
-
+void ConstructIMS(EnvisatIMS& ims, const SARMetadata& sar_meta, const ASARMetadata& asar_meta, const MDS& mds,
+                  std::string_view software_ver) {
     static_assert(__builtin_offsetof(EnvisatIMS, main_processing_params) == 7516);
 
     std::string out_name = asar_meta.product_name;
@@ -240,7 +238,7 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
     out_name.at(8) = '1';
 
     {
-        auto& mph = out.mph;
+        auto& mph = ims.mph;
         mph.SetDefaults();
 
         mph.Set_PRODUCT(out_name);
@@ -270,12 +268,12 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
 
         // set tot size later
 
-        size_t tot = sizeof(out);
+        size_t tot = sizeof(ims);
         tot += mds.n_records * mds.record_size;
-        mph.SetProductSizeInformation(tot, sizeof(out.sph), 18, 6);
+        mph.SetProductSizeInformation(tot, sizeof(ims.sph), 18, 6);
     }
     {
-        auto& sph = out.sph;
+        auto& sph = ims.sph;
         sph.SetDefaults();
         sph.SetHeader("Image Mode SLC Image", 0, 1, 1);
 
@@ -321,14 +319,17 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
         sph.SetProductInfo4(sar_meta.range_spacing, sar_meta.azimuth_spacing,
                             1.0 / sar_meta.pulse_repetition_frequency);
 
-        CHECK_BOOL(sar_meta.img.range_size * 4 == mds.record_size - 17);
+        if (sar_meta.img.range_size * 4 != mds.record_size - 17) {
+            throw std::runtime_error(
+                "Range value for SAR metadata does not match MDS record size - this is an implementation error");
+        }
         sph.SetProductInfo5(sar_meta.img.range_size, "SWORD");
 
-        out.main_processing_params.general_summary.num_samples_per_line = sar_meta.img.range_size;
+        ims.main_processing_params.general_summary.num_samples_per_line = sar_meta.img.range_size;
 
         {
-            size_t offset = offsetof(decltype(out), summary_quality);
-            constexpr size_t size = sizeof(out.summary_quality);
+            size_t offset = offsetof(EnvisatIMS, summary_quality);
+            constexpr size_t size = sizeof(ims.summary_quality);
             static_assert(size == 170);
             sph.dsds[0].SetInternalDSD("MDS1 SQ ADS", 'A', offset, 1, size);
         }
@@ -336,24 +337,24 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
         { sph.dsds[1].SetEmptyDSD("MDS2 SQ ADS", 'A'); }
 
         {
-            size_t offset = offsetof(decltype(out), main_processing_params);
-            constexpr size_t size = sizeof(out.main_processing_params);
+            size_t offset = offsetof(EnvisatIMS, main_processing_params);
+            constexpr size_t size = sizeof(ims.main_processing_params);
             static_assert(size == 2009);
-            FillMainProcessingParams(sar_meta, asar_meta, out.main_processing_params);
-            out.main_processing_params.BSwap();
+            FillMainProcessingParams(sar_meta, asar_meta, ims.main_processing_params);
+            ims.main_processing_params.BSwap();
             sph.dsds[2].SetInternalDSD("MAIN PROCESSING PARAMS ADS", 'A', offset, 1, size);
         }
 
         /*{
-            size_t offset = offsetof(decltype(out), main_processing_params);
-            constexpr size_t size = sizeof(out.main_processing_params);
+            size_t offset = offsetof(decltype(ims), main_processing_params);
+            constexpr size_t size = sizeof(ims.main_processing_params);
             static_assert(size == 2009);
             sph.dsds[2].SetInternalDSD("MAIN PROCESSING PARAMS ADS", 'A', offset, 1, size);
         }*/
 
         {
-            size_t offset = offsetof(decltype(out), dop_centroid_coeffs);
-            constexpr size_t size = sizeof(out.dop_centroid_coeffs);
+            size_t offset = offsetof(EnvisatIMS, dop_centroid_coeffs);
+            constexpr size_t size = sizeof(ims.dop_centroid_coeffs);
             static_assert(size == 55);
 
             // convert DC polynomial to Envisat format
@@ -361,20 +362,20 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
             //  starting from first sample
             const double dt = 1 / sar_meta.chirp.range_sampling_rate;
             const auto& poly = sar_meta.results.doppler_centroid_poly;
-            out.dop_centroid_coeffs.zero_doppler_time = PtimeToMjd(sar_meta.first_line_time);
-            out.dop_centroid_coeffs.slant_range_time = asar_meta.two_way_slant_range_time * 1e9;
-            out.dop_centroid_coeffs.dop_coef[0] = poly.at(2);
-            out.dop_centroid_coeffs.dop_coef[1] = poly.at(1) / dt;
-            out.dop_centroid_coeffs.dop_coef[2] = poly.at(0) / (dt * dt);
-            out.dop_centroid_coeffs.BSwap();
+            ims.dop_centroid_coeffs.zero_doppler_time = PtimeToMjd(sar_meta.first_line_time);
+            ims.dop_centroid_coeffs.slant_range_time = asar_meta.two_way_slant_range_time * 1e9;
+            ims.dop_centroid_coeffs.dop_coef[0] = poly.at(2);
+            ims.dop_centroid_coeffs.dop_coef[1] = poly.at(1) / dt;
+            ims.dop_centroid_coeffs.dop_coef[2] = poly.at(0) / (dt * dt);
+            ims.dop_centroid_coeffs.BSwap();
             sph.dsds[3].SetInternalDSD("DOP CENTROID COEFFS ADS", 'A', offset, 1, size);
         }
 
         sph.dsds[4].SetEmptyDSD("SR GR ADS", 'A');
 
         {
-            size_t offset = offsetof(decltype(out), chirp_params);
-            constexpr size_t size = sizeof(out.chirp_params);
+            size_t offset = offsetof(EnvisatIMS, chirp_params);
+            constexpr size_t size = sizeof(ims.chirp_params);
             static_assert(size == 1483);
             sph.dsds[5].SetInternalDSD("CHIRP PARAMS ADS", 'A', offset, 1, size);
         }
@@ -383,17 +384,17 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
         sph.dsds[7].SetEmptyDSD("MDS2 ANTENNA ELEV PATT ADS", 'A');
 
         {
-            size_t offset = offsetof(decltype(out), geolocation_grid);
-            constexpr size_t size = sizeof(out.geolocation_grid[0]);
-            size_t n = std::size(out.geolocation_grid);
+            size_t offset = offsetof(EnvisatIMS, geolocation_grid);
+            constexpr size_t size = sizeof(ims.geolocation_grid[0]);
+            size_t n = std::size(ims.geolocation_grid);
 
             static_assert(size == 521);
 
             int step = sar_meta.img.azimuth_size / (n - 1);
             for (size_t i = 0; i < n; i++) {
                 int az_idx = i * sar_meta.img.azimuth_size / (n - 1);
-                FillGeoLocationAds(az_idx, az_idx + step - 1, sar_meta, asar_meta, out.geolocation_grid[i]);
-                out.geolocation_grid[i].BSwap();
+                FillGeoLocationAds(az_idx, az_idx + step - 1, sar_meta, asar_meta, ims.geolocation_grid[i]);
+                ims.geolocation_grid[i].BSwap();
             }
             sph.dsds[8].SetInternalDSD("GEOLOCATION GRID ADS", 'A', offset, n, size);
         }
@@ -413,16 +414,4 @@ void WriteLvl1(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, MDS& 
         sph.dsds[16].SetReferenceDSD("EXTERNAL CALIBRATION", "DUMMY FILE NAME");
         sph.dsds[17].SetReferenceDSD("ORBIT STATE VECTOR 1", asar_meta.orbit_dataset_name);
     }
-
-    std::string out_path = std::string(result_dir) + "/" + out_name;
-    FILE* fp = fopen(out_path.c_str(), "w");
-    if (fp == nullptr) {
-        throw std::runtime_error("Failed to create output dataset file at " + out_path);
-    }
-
-    fwrite(&out, sizeof(out), 1, fp);
-    fwrite(mds.buf, mds.record_size, mds.n_records, fp);
-    fclose(fp);
-
-    LOGI << "Focussed product saved at " << out_path;
 }
