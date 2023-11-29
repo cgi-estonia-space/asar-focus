@@ -23,6 +23,9 @@ public:
     FileAsync() = delete;
     FileAsync(std::string_view path);
 
+    FileAsync(const FileAsync&) = delete;
+    FileAsync& operator=(const FileAsync&) = delete;
+
     bool CanWrite(const std::chrono::milliseconds& timeout = std::chrono::milliseconds(0));
     void Write(const void* data, size_t bytes);
     void Write(size_t position, const void* data, size_t bytes);

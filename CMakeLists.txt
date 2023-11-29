@@ -84,12 +84,3 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_
 else ()
     target_link_libraries(asar_focus PRIVATE gdal cufft Eigen3::Eigen app-static util-static envisat-format-static cuda-util-static)
 endif()
-
-if (DEFINED ENV{ALUS_ENABLE_EXPERIMENTS})
-    set(ALUS_ENABLE_EXPERIMENTS $ENV{ALUS_ENABLE_EXPERIMENTS})
-endif ()
-
-if (ALUS_ENABLE_EXPERIMENTS)
-    set(ALUS_EXPERIMENTS_BINARY_OUTPUT_DIR ${PROJECT_BINARY_DIR}/experiments)
-    add_subdirectory(experiments)
-endif ()
