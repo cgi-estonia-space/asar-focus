@@ -8,7 +8,6 @@
  * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
  */
 
-#include <complex>
 #include <filesystem>
 #include <future>
 #include <iostream>

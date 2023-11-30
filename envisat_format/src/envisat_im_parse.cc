@@ -17,6 +17,7 @@
 
 #include "alus_log.h"
 #include "cuda_util.h"
+#include "envisat_parse_util.h"
 #include "envisat_utils.h"
 #include "parse_util.h"
 
@@ -81,62 +82,6 @@ struct EchoMeta {
 
     std::vector<std::complex<float>> raw_data;
 };
-
-int FBAQ4Idx(int block, int idx) {
-    switch (idx) {
-        case 0b1111:
-            idx = 0;
-            break;
-        case 0b1110:
-            idx = 1;
-            break;
-        case 0b1101:
-            idx = 2;
-            break;
-        case 0b1100:
-            idx = 3;
-            break;
-        case 0b1011:
-            idx = 4;
-            break;
-        case 0b1010:
-            idx = 5;
-            break;
-        case 0b1001:
-            idx = 6;
-            break;
-        case 0b1000:
-            idx = 7;
-            break;
-        case 0b0000:
-            idx = 8;
-            break;
-        case 0b0001:
-            idx = 9;
-            break;
-        case 0b0010:
-            idx = 10;
-            break;
-        case 0b0011:
-            idx = 11;
-            break;
-        case 0b0100:
-            idx = 12;
-            break;
-        case 0b0101:
-            idx = 13;
-            break;
-        case 0b0110:
-            idx = 14;
-            break;
-        case 0b0111:
-            idx = 15;
-            break;
-    }
-
-    return 256 * idx + block;
-}
-
 #if DEBUG_PACKETS
 
 constexpr auto DEBUG_ECHOS_ONLY{false};
@@ -442,8 +387,8 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
                     uint8_t i_codeword = block_data[1 + j] >> 4;
                     uint8_t q_codeword = block_data[1 + j] & 0xF;
 
-                    float i_samp = ins_file.fbp.i_LUT_fbaq4[FBAQ4Idx(block_id, i_codeword)];
-                    float q_samp = ins_file.fbp.q_LUT_fbaq4[FBAQ4Idx(block_id, q_codeword)];
+                    float i_samp = ins_file.fbp.i_LUT_fbaq4[Fbaq4Index(block_id, i_codeword)];
+                    float q_samp = ins_file.fbp.q_LUT_fbaq4[Fbaq4Index(block_id, q_codeword)];
                     echo_meta.raw_data.emplace_back(i_samp, q_samp);
                 }
             }
@@ -455,8 +400,8 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
                 uint8_t i_codeword = block_data[1 + j] >> 4;
                 uint8_t q_codeword = block_data[1 + j] & 0xF;
 
-                float i_samp = ins_file.fbp.i_LUT_fbaq4[FBAQ4Idx(block_id, i_codeword)];
-                float q_samp = ins_file.fbp.q_LUT_fbaq4[FBAQ4Idx(block_id, q_codeword)];
+                float i_samp = ins_file.fbp.i_LUT_fbaq4[Fbaq4Index(block_id, i_codeword)];
+                float q_samp = ins_file.fbp.q_LUT_fbaq4[Fbaq4Index(block_id, q_codeword)];
                 echo_meta.raw_data.emplace_back(i_samp, q_samp);
             }
 
