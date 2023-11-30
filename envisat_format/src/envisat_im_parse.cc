@@ -79,8 +79,6 @@ struct EchoMeta {
     uint8_t chirp_pulse_bw_code;
     uint8_t aux_tx_monitor_level;
     uint16_t resampling_factor;
-
-    std::vector<std::complex<float>> raw_data;
 };
 #if DEBUG_PACKETS
 
@@ -159,6 +157,50 @@ inline void FetchCyclePacketCount(const uint8_t* start_array, uint16_t& var) {
     var |= start_array[1] << 0;
 }
 
+inline size_t ForecastDataLength(const uint8_t* mdsr_start) {
+    std::vector<uint16_t> echo_datablock_lengths{};
+    const uint8_t* rolling_start = mdsr_start;
+    size_t dsr_no{1};
+    while (echo_datablock_lengths.size() < 3) {
+        rolling_start += 12;  // MJD
+        FEPAnnotations fep;
+        rolling_start = CopyBSwapPOD(fep, rolling_start);
+        rolling_start += 4;  // packet ID, sequence control.
+
+        uint16_t packet_length;
+        rolling_start = CopyBSwapPOD(packet_length, rolling_start);
+        uint16_t datafield_length;
+        rolling_start = CopyBSwapPOD(datafield_length, rolling_start);
+        if (datafield_length != 29) {
+            throw std::runtime_error(
+                fmt::format("DSR sequence = {} parsing error. Date Field Header Length should be 29 - is {}", dsr_no,
+                            datafield_length));
+        }
+
+        dsr_no += 1;
+        // ??, MODE ID, Onboard time, spare, mode count, comp/beam
+        bool is_echo = rolling_start[12] & 0x80;
+        if (is_echo) {
+            echo_datablock_lengths.push_back(packet_length - 29);
+        }
+        rolling_start += fep.isp_length - datafield_length + 28;
+    }
+
+    if (echo_datablock_lengths.size() < 3) {
+        throw std::runtime_error(
+            "Could not gather 3 echo packets in order to forecast data block lengths - invalid dataset?");
+    }
+
+    size_t avg{};
+    for (const auto& a : echo_datablock_lengths) {
+        avg += a;
+    }
+
+    avg = avg / echo_datablock_lengths.size();
+
+    return avg;
+}
+
 #if HANDLE_DIAGNOSTICS
 
 constexpr auto SEQUENCE_CONTROL_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint16_t, 14>()};
@@ -201,6 +243,8 @@ struct PacketParseDiagnostics {
     size_t cycle_packet_count_oos;
     size_t cycle_packet_total_missing;
     size_t calibration_packet_count;
+    size_t packet_data_blocks_min;
+    size_t packet_data_blocks_max;
 };
 #endif
 }  // namespace
@@ -226,9 +270,17 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
     uint32_t last_mode_packet_count;
     uint16_t last_cycle_packet_count;
     InitializeCounters(it, last_sequence_control, last_mode_packet_count, last_cycle_packet_count);
+    diagnostics.packet_data_blocks_min = UINT64_MAX;
+    diagnostics.packet_data_blocks_max = 0;
 #endif
     const auto start_filter_mjd = PtimeToMjd(packets_start_filter);
     const auto end_filter_mjd = PtimeToMjd(packets_stop_filter);
+
+    const auto forecasted_data_block_lengths = ForecastDataLength(it);
+    LOGD << "Forecasted data block length " << forecasted_data_block_lengths;
+
+    std::vector<std::vector<std::complex<float>>> raw_data;
+    raw_data.reserve(mdsr.num_dsr);
     for (size_t i = 0; i < mdsr.num_dsr; i++) {
         EchoMeta echo_meta = {};
 #if HANDLE_DIAGNOSTICS
@@ -378,7 +430,12 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
         size_t data_len = packet_length - 29;
 
         if (echo_meta.echo_flag) {
-            echo_meta.raw_data.reserve(echo_meta.echo_window_code);
+#if HANDLE_DIAGNOSTICS
+            diagnostics.packet_data_blocks_min = std::min(diagnostics.packet_data_blocks_min, data_len);
+            diagnostics.packet_data_blocks_max = std::max(diagnostics.packet_data_blocks_max, data_len);
+#endif
+            raw_data.push_back({});
+            raw_data.at(echoes.size()).reserve(echo_meta.echo_window_code);
             size_t n_blocks = data_len / 64;
             for (size_t bi = 0; bi < n_blocks; bi++) {
                 const uint8_t* block_data = it + bi * 64;
@@ -389,7 +446,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
 
                     float i_samp = ins_file.fbp.i_LUT_fbaq4[Fbaq4Index(block_id, i_codeword)];
                     float q_samp = ins_file.fbp.q_LUT_fbaq4[Fbaq4Index(block_id, q_codeword)];
-                    echo_meta.raw_data.emplace_back(i_samp, q_samp);
+                    raw_data.at(echoes.size()).emplace_back(i_samp, q_samp);
                 }
             }
             // Deal with the remainder
@@ -402,7 +459,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
 
                 float i_samp = ins_file.fbp.i_LUT_fbaq4[Fbaq4Index(block_id, i_codeword)];
                 float q_samp = ins_file.fbp.q_LUT_fbaq4[Fbaq4Index(block_id, q_codeword)];
-                echo_meta.raw_data.emplace_back(i_samp, q_samp);
+                raw_data.at(echoes.size()).emplace_back(i_samp, q_samp);
             }
 
             echoes.push_back(std::move(echo_meta));
@@ -412,6 +469,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
                 const auto prf = (sar_meta.chirp.range_sampling_rate / copy_echo.pri_code);
                 const auto micros_to_add = static_cast<ul>((1 / prf) * 10e5);
                 copy_echo.isp_sensing_time = MjdAddMicros(copy_echo.isp_sensing_time, micros_to_add);
+                raw_data.push_back(raw_data.back());
                 echoes.push_back(copy_echo);
             }
 #if HANDLE_DIAGNOSTICS
@@ -437,6 +495,12 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
 #endif
 
         it += (fep.isp_length - 29);
+    }
+
+    if (raw_data.size() != echoes.size()) {
+        throw std::runtime_error(
+            fmt::format("Programming error detected - echoes meta count '{}' is not equal to raw data set count '{}'",
+                        echoes.size(), raw_data.size()));
     }
 
     uint16_t min_swst = UINT16_MAX;
@@ -466,6 +530,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
     asar_meta.last_sbt = echoes.back().onboard_time;
 
     std::vector<float> v;
+    size_t echo_nr{0};
     for (auto& e : echoes) {
         if (prev_swst != e.swst_code) {
             prev_swst = e.swst_code;
@@ -473,7 +538,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
         }
         min_swst = std::min(min_swst, e.swst_code);
         max_swst = std::max(max_swst, e.swst_code);
-        max_samples = std::max(max_samples, e.raw_data.size());
+        max_samples = std::max(max_samples, raw_data.at(echo_nr).size());
     }
 
     int swath_idx = SwathIdx(asar_meta.swath);
@@ -553,8 +618,8 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
         const auto& e = echoes[y];
         size_t idx = y * range_samples;
         idx += swst_multiplier * (e.swst_code - min_swst);
-        const size_t n_samples = e.raw_data.size();
-        memcpy(&img_data[idx], e.raw_data.data(), n_samples * 8);
+        const size_t n_samples = raw_data.at(y).size();
+        memcpy(&img_data[idx], raw_data.at(y).data(), n_samples * 8);
         sar_meta.total_raw_samples += n_samples;
     }
 
@@ -608,6 +673,8 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
          << diagnostics.mode_packet_total_missing;
     LOGD << "Cycle packet [oos total] " << diagnostics.cycle_packet_count_oos << " "
          << diagnostics.cycle_packet_total_missing;
+    LOGD << "MIN|MAX datablock lengths in bytes " << diagnostics.packet_data_blocks_min << "|"
+         << diagnostics.packet_data_blocks_max;
 #endif
 }
 }  // namespace alus::asar::envformat
