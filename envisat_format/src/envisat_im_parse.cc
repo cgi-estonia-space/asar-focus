@@ -652,25 +652,13 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
     CHECK_CUDA_ERR(cudaMemcpy(*d_parsed_packets, img_data.data(),
                               sar_meta.img.range_size * sar_meta.img.azimuth_size * 8, cudaMemcpyHostToDevice));
 
-// This warning is disabled only because of FBAQ4 LUT constant sized arrays.
-#ifdef __GNUC__
-#pragma GCC diagnostic ignored "-Waddress-of-packed-member"
-#endif
-#ifdef __clang__
-// Disable specific warning for "taking address of packed member" in Clang
-#pragma clang diagnostic ignored "-Waddress-of-packed-member"
-#endif
-
+//    std::vector<float> i_lut(4096);
+//    memcpy(i_lut.data(), ins_file.fbp.i_LUT_fbaq4, 4096 * sizeof(float));
+//    std::vector<float> q_lut(4096);
+//    memcpy(q_lut.data(), ins_file.fbp.q_LUT_fbaq4, 4096 * sizeof(float));
 //    ConvertAsarImBlocksToComplex(block_data_buffer, data_block_buffer_item_length, echoes.size(), swst_codes.data(),
-//                                 min_swst, *d_parsed_packets, sar_meta.img.range_size, ins_file.fbp.i_LUT_fbaq4,
-//                                 ins_file.fbp.q_LUT_fbaq4, 4096);
-
-#ifdef __GNUC__
-#pragma GCC diagnostic warning "-Waddress-of-packed-member"
-#endif
-#ifdef __clang__
-#pragma clang diagnostic warning "-Waddress-of-packed-member"
-#endif
+//                                 min_swst, *d_parsed_packets, sar_meta.img.range_size, i_lut.data(),
+//                                 q_lut.data(), 4096);
 
     // TODO init guess handling? At the moment just a naive guess from nadir point
     double init_guess_lat = (asar_meta.start_nadir_lat + asar_meta.stop_nadir_lat) / 2;
