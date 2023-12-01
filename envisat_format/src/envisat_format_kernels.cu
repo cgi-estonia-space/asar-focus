@@ -122,6 +122,7 @@ __global__ void ConvertAsarImBlocksToComplexKernel(uint8_t* block_samples, int b
             return;
         }
         const auto block_samples_item_length_address = block_samples + y * block_samples_item_length_bytes;
+        // TODO manually or check if length correct.
         const auto block_samples_item_length = reinterpret_cast<uint16_t*>(block_samples_item_length_address)[0];
         // No data for this entry.
         if (x >= block_samples_item_length) {
