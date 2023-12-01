@@ -450,7 +450,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
             size_t remainder = data_len % 64;
             const uint8_t* block_data = it + n_blocks * 64;
             uint8_t block_id = block_data[0];
-            for (size_t j = 0; j < remainder; j++) {
+            for (size_t j = 0; j < remainder - 1; j++) {
                 uint8_t i_codeword = block_data[1 + j] >> 4;
                 uint8_t q_codeword = block_data[1 + j] & 0xF;
 
