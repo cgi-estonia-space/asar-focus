@@ -81,6 +81,7 @@ struct EchoMeta {
     uint8_t chirp_pulse_bw_code;
     uint8_t aux_tx_monitor_level;
     uint16_t resampling_factor;
+    size_t raw_samples;
 };
 #if DEBUG_PACKETS
 
@@ -287,6 +288,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
 
     size_t max_samples{};
     size_t compressed_sample_measurements_stored_in_buf{};
+    sar_meta.total_raw_samples = 0;
 
     for (size_t i = 0; i < mdsr.num_dsr; i++) {
         EchoMeta echo_meta = {};
@@ -452,9 +454,12 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
             compressed_sample_measurements_stored_in_buf++;
             // First item is the count of whole blocks times 63 samples which is included in block, lastly is added
             // any samples from remainder block that does not consist full 63 samples
-            max_samples = std::max(
-                max_samples, static_cast<size_t>(((sample_blocks_length / 64) * 63) + (sample_blocks_length % 64) -
-                                                 ((sample_blocks_length % 64) > 0 ? 1 : 0)));
+            const auto current_samples =
+                static_cast<size_t>(((sample_blocks_length / 64) * 63) + (sample_blocks_length % 64) -
+                                    ((sample_blocks_length % 64) > 0 ? 1 : 0));
+            max_samples = std::max(max_samples, current_samples);
+            echo_meta.raw_samples = current_samples;
+            sar_meta.total_raw_samples += current_samples;
 
             echoes.push_back(std::move(echo_meta));
         } else if (echo_meta.cal_flag) {
@@ -469,6 +474,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
                            (echoes.size() - 1) * compressed_sample_blocks_with_length_single_range_item_bytes,
                        compressed_sample_blocks_with_length_single_range_item_bytes);
                 compressed_sample_measurements_stored_in_buf++;
+                sar_meta.total_raw_samples += copy_echo.raw_samples;
                 echoes.push_back(copy_echo);
             }
 #if HANDLE_DIAGNOSTICS
@@ -618,85 +624,67 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
     static_assert(sizeof(CLEAR_VALUE_COMPLEX) == sizeof(CLEAR_VALUE) * 2);
     cuda::stdio::Memset(*d_parsed_packets, CLEAR_VALUE_COMPLEX, range_az_total_items);
 
-    std::vector<std::vector<std::complex<float>>> raw_data_check;
-    {
-        LOGD << "Measurements total parsed " << echoes.size();
-        for (size_t ri{}; ri < echoes.size(); ri++) {
-            auto sample_blocks_start =
-                compressed_sample_blocks_buffer + ri * compressed_sample_blocks_with_length_single_range_item_bytes;
-            uint16_t data_len{};
-            data_len |= 0x00FF & sample_blocks_start[0];
-            data_len |= 0xFF00 & (static_cast<uint16_t>(sample_blocks_start[1]) << 8);
-            sample_blocks_start += 2;
+//    std::vector<std::vector<std::complex<float>>> raw_data_check;
+//    {
+//        LOGD << "Measurements total parsed " << echoes.size();
+//        for (size_t ri{}; ri < echoes.size(); ri++) {
+//            auto sample_blocks_start =
+//                compressed_sample_blocks_buffer + ri * compressed_sample_blocks_with_length_single_range_item_bytes;
+//            uint16_t data_len{};
+//            data_len |= 0x00FF & sample_blocks_start[0];
+//            data_len |= 0xFF00 & (static_cast<uint16_t>(sample_blocks_start[1]) << 8);
+//            sample_blocks_start += 2;
+//
+//            raw_data_check.push_back({});
+//            size_t bytes_for_compressed_samples{};
+//            const auto n_blocks = data_len / 64;
+//            // echo_window_code specifies how many samples, without block ID bytes e.g. data_len - block count.
+//            raw_data_check.back().reserve(data_len - n_blocks);
+//            for (int bi = 0; bi < n_blocks; bi++) {
+//                const uint8_t* block_data = sample_blocks_start + bi * 64;
+//                uint8_t block_id = block_data[0];
+//                bytes_for_compressed_samples++;
+//                for (size_t j = 0; j < 63; j++) {
+//                    uint8_t i_codeword = block_data[1 + j] >> 4;
+//                    uint8_t q_codeword = block_data[1 + j] & 0xF;
+//                    bytes_for_compressed_samples++;
+//
+//                    float i_samp = ins_file.fbp.i_LUT_fbaq4[Fbaq4Index(block_id, i_codeword)];
+//                    float q_samp = ins_file.fbp.q_LUT_fbaq4[Fbaq4Index(block_id, q_codeword)];
+//                    raw_data_check.back().emplace_back(i_samp, q_samp);
+//                }
+//            }
+//            // Deal with the remainder
+//            size_t remainder = data_len % 64;
+//            const uint8_t* block_data = sample_blocks_start + n_blocks * 64;
+//            uint8_t block_id = block_data[0];
+//            bytes_for_compressed_samples++;
+//            for (size_t j = 0; j < remainder - 1; j++) {
+//                uint8_t i_codeword = block_data[1 + j] >> 4;
+//                uint8_t q_codeword = block_data[1 + j] & 0xF;
+//                bytes_for_compressed_samples++;
+//
+//                float i_samp = ins_file.fbp.i_LUT_fbaq4[Fbaq4Index(block_id, i_codeword)];
+//                float q_samp = ins_file.fbp.q_LUT_fbaq4[Fbaq4Index(block_id, q_codeword)];
+//                raw_data_check.back().emplace_back(i_samp, q_samp);
+//            }
+//        }
+//    }
 
-            raw_data_check.push_back({});
-            size_t bytes_for_compressed_samples{};
-            const auto n_blocks = data_len / 64;
-            // echo_window_code specifies how many samples, without block ID bytes e.g. data_len - block count.
-            raw_data_check.back().reserve(data_len - n_blocks);
-            for (int bi = 0; bi < n_blocks; bi++) {
-                const uint8_t* block_data = sample_blocks_start + bi * 64;
-                uint8_t block_id = block_data[0];
-                bytes_for_compressed_samples++;
-                for (size_t j = 0; j < 63; j++) {
-                    uint8_t i_codeword = block_data[1 + j] >> 4;
-                    uint8_t q_codeword = block_data[1 + j] & 0xF;
-                    bytes_for_compressed_samples++;
-
-                    float i_samp = ins_file.fbp.i_LUT_fbaq4[Fbaq4Index(block_id, i_codeword)];
-                    float q_samp = ins_file.fbp.q_LUT_fbaq4[Fbaq4Index(block_id, q_codeword)];
-                    raw_data_check.back().emplace_back(i_samp, q_samp);
-                }
-            }
-            // Deal with the remainder
-            size_t remainder = data_len % 64;
-            const uint8_t* block_data = sample_blocks_start + n_blocks * 64;
-            uint8_t block_id = block_data[0];
-            bytes_for_compressed_samples++;
-            for (size_t j = 0; j < remainder - 1; j++) {
-                uint8_t i_codeword = block_data[1 + j] >> 4;
-                uint8_t q_codeword = block_data[1 + j] & 0xF;
-                bytes_for_compressed_samples++;
-
-                float i_samp = ins_file.fbp.i_LUT_fbaq4[Fbaq4Index(block_id, i_codeword)];
-                float q_samp = ins_file.fbp.q_LUT_fbaq4[Fbaq4Index(block_id, q_codeword)];
-                raw_data_check.back().emplace_back(i_samp, q_samp);
-            }
-        }
-    }
-
-    if (raw_data_check.size() != echoes.size()) {
-        throw std::runtime_error("TERE");
-    }
-
-    std::vector<std::complex<float>> img_data;
-    img_data.clear();
-    img_data.resize(sar_meta.img.range_size * sar_meta.img.azimuth_size, {NAN, NAN});
-
-    sar_meta.total_raw_samples = 0;
     std::vector<uint16_t> swst_codes;
     swst_codes.reserve(echoes.size());
     for (size_t y = 0; y < echoes.size(); y++) {
         const auto& e = echoes[y];
-        size_t idx = y * range_samples;
-        idx += swst_multiplier * (e.swst_code - min_swst);
-        const size_t n_samples = raw_data_check.at(y).size();
-        memcpy(&img_data[idx], raw_data_check.at(y).data(), n_samples * 8);
-        sar_meta.total_raw_samples += n_samples;
         swst_codes.push_back(e.swst_code);
     }
 
-    CHECK_CUDA_ERR(cudaMemcpy(*d_parsed_packets, img_data.data(),
-                              sar_meta.img.range_size * sar_meta.img.azimuth_size * 8, cudaMemcpyHostToDevice));
-
-    //    std::vector<float> i_lut(4096);
-    //    memcpy(i_lut.data(), ins_file.fbp.i_LUT_fbaq4, 4096 * sizeof(float));
-    //    std::vector<float> q_lut(4096);
-    //    memcpy(q_lut.data(), ins_file.fbp.q_LUT_fbaq4, 4096 * sizeof(float));
-    //    ConvertAsarImBlocksToComplex(compressed_sample_blocks_buffer,
-    //    compressed_sample_blocks_with_length_single_range_item_bytes, echoes.size(), swst_codes.data(),
-    //                                 min_swst, *d_parsed_packets, sar_meta.img.range_size, i_lut.data(),
-    //                                 q_lut.data(), 4096);
+    std::vector<float> i_lut(4096);
+    memcpy(i_lut.data(), ins_file.fbp.i_LUT_fbaq4, 4096 * sizeof(float));
+    std::vector<float> q_lut(4096);
+    memcpy(q_lut.data(), ins_file.fbp.q_LUT_fbaq4, 4096 * sizeof(float));
+    ConvertAsarImBlocksToComplex(
+        compressed_sample_blocks_buffer, compressed_sample_blocks_with_length_single_range_item_bytes, echoes.size(),
+        swst_codes.data(), min_swst, *d_parsed_packets, sar_meta.img.range_size, i_lut.data(), q_lut.data(), 4096);
 
     // TODO init guess handling? At the moment just a naive guess from nadir point
     double init_guess_lat = (asar_meta.start_nadir_lat + asar_meta.stop_nadir_lat) / 2;

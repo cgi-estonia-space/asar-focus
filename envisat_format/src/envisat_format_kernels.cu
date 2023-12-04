@@ -121,15 +121,18 @@ __global__ void ConvertAsarImBlocksToComplexKernel(uint8_t* block_samples, int b
         if (x < 2) {
             return;
         }
+
         const auto block_samples_item_length_address = block_samples + y * block_samples_item_length_bytes;
-        // TODO manually or check if length correct.
-        const auto block_samples_item_length = reinterpret_cast<uint16_t*>(block_samples_item_length_address)[0];
+        uint16_t block_samples_item_length{0};
+        block_samples_item_length |= 0x00FF & block_samples_item_length_address[0];
+        block_samples_item_length |= 0xFF00 & (static_cast<uint16_t>(block_samples_item_length_address[1]) << 8);
+
+        const int block_set_sample_index = x - 2;
         // No data for this entry.
-        if (x >= block_samples_item_length) {
+        if (block_set_sample_index >= block_samples_item_length) {
             return;
         }
 
-        const int block_set_sample_index = x - 2;
         constexpr int BLOCK_SIZE{64};
         // This is the block ID
         if (block_set_sample_index % BLOCK_SIZE == 0) {
@@ -138,7 +141,7 @@ __global__ void ConvertAsarImBlocksToComplexKernel(uint8_t* block_samples, int b
 
         const uint8_t* blocks_start_address = block_samples_item_length_address + 2;
         const auto block_index = block_set_sample_index / BLOCK_SIZE;
-        const uint8_t block_id = blocks_start_address[block_index];
+        const uint8_t block_id = blocks_start_address[block_index * BLOCK_SIZE];
         const uint8_t codeword = blocks_start_address[block_set_sample_index];
         const uint8_t codeword_i = codeword >> 4;
         const uint8_t codeword_q = codeword & 0x0F;
