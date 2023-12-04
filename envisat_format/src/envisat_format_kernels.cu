@@ -86,9 +86,9 @@ __global__ void ConvertErsImSamplesToComplexKernel(uint8_t* samples, int samples
     }
 }
 
-void ConvertErsImSamplesToComplex(uint8_t* samples, size_t source_range_samples, size_t packets, uint16_t* swst_codes,
+void ConvertErsImSamplesToComplex(uint8_t* samples, size_t sample_count_per_range, size_t packets, uint16_t* swst_codes,
                                   uint16_t min_swst, cufftComplex* gpu_buffer, size_t target_range_padded_samples) {
-    const auto samples_range_bytes = source_range_samples * 2 * sizeof(uint8_t);
+    const auto samples_range_bytes = sample_count_per_range * 2 * sizeof(uint8_t);
     const auto samples_total_bytes = packets * samples_range_bytes;
     uint8_t* samples_gpu;
     CHECK_CUDA_ERR(cudaMalloc(&samples_gpu, samples_total_bytes));
@@ -105,7 +105,8 @@ void ConvertErsImSamplesToComplex(uint8_t* samples, size_t source_range_samples,
         samples_gpu, samples_range_bytes, packets, swst_codes_gpu, min_swst, gpu_buffer, target_range_padded_samples);
     CHECK_CUDA_ERR(cudaDeviceSynchronize());
     CHECK_CUDA_ERR(cudaGetLastError());
-    // TODO - cudaFree() temporarily allocated buffers please.
+    CHECK_CUDA_ERR(cudaFree(samples_gpu));
+    CHECK_CUDA_ERR(cudaFree(swst_codes_gpu));
 }
 
 __global__ void ConvertAsarImBlocksToComplexKernel(uint8_t* block_samples, int block_samples_item_length_bytes,

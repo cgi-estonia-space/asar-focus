@@ -9,7 +9,6 @@
  */
 #pragma once
 
-#include <complex>
 #include <vector>
 
 #include <cufft.h>

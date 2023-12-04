@@ -210,8 +210,11 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     // std::vector is chosen IF actual packets should exceed the num_dsr.
     std::vector<EchoMeta> echoes;
     echoes.reserve(mdsr.num_dsr);
-    std::vector<uint8_t> echoes_raw;
-    echoes_raw.reserve(mdsr.num_dsr * ers::highrate::MEASUREMENT_DATA_SIZE_BYTES);
+    const auto alloc_bytes_for_raw_samples = mdsr.num_dsr * ers::highrate::MEASUREMENT_DATA_SIZE_BYTES;
+    LOGD << "Reserving " << alloc_bytes_for_raw_samples / (1 << 20)
+         << "MiB for raw samples ("
+         << ers::highrate::MEASUREMENT_DATA_SIZE_BYTES << "x" << mdsr.num_dsr << ")";
+    std::unique_ptr<uint8_t[]> echoes_raw(new uint8_t[alloc_bytes_for_raw_samples]);
 #if DEBUG_PACKETS
     std::vector<ErsFepAndPacketMetadata> ers_dbg_meta;
     std::ofstream debug_stream("/tmp/" + asar_meta.product_name + ".debug.csv");
@@ -390,8 +393,8 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
                                 packets_to_fill, i - 1, i));
             }
             for (size_t pf{}; pf < packets_to_fill; pf++) {
-                std::memcpy(echoes_raw.data() + echoes.size() * ers::highrate::MEASUREMENT_DATA_SIZE_BYTES,
-                            echoes_raw.data() + (echoes.size() - 1) * ers::highrate::MEASUREMENT_DATA_SIZE_BYTES,
+                std::memcpy(echoes_raw.get() + echoes.size() * ers::highrate::MEASUREMENT_DATA_SIZE_BYTES,
+                            echoes_raw.get() + (echoes.size() - 1) * ers::highrate::MEASUREMENT_DATA_SIZE_BYTES,
                             ers::highrate::MEASUREMENT_DATA_SIZE_BYTES);
                 echoes.push_back(echoes.back());
             }
@@ -430,26 +433,8 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         last_image_format_counter = echo_meta.image_format_counter;
 #endif
 
-        // uint64_t i_avg_cumulative{0};
-        // uint64_t q_avg_cumulative{0};
-        //        for (size_t r_i{0}; r_i < ers::highrate::MEASUREMENT_DATA_SAMPLE_COUNT; r_i++) {
-        //            uint8_t i_sample = it[r_i * 2 + 0];
-        //            // i_avg_cumulative += i_sample;
-        //            uint8_t q_sample = it[r_i * 2 + 1];
-        //            // q_avg_cumulative += q_sample;
-        //            echo_meta.raw_data.emplace_back(static_cast<float>(i_sample), static_cast<float>(q_sample));
-        //
-        //        }
-        std::memcpy(echoes_raw.data() + echoes.size() * ers::highrate::MEASUREMENT_DATA_SIZE_BYTES, it,
+        std::memcpy(echoes_raw.get() + echoes.size() * ers::highrate::MEASUREMENT_DATA_SIZE_BYTES, it,
                     ers::highrate::MEASUREMENT_DATA_SIZE_BYTES);
-        //            double i_avg = i_avg_cumulative / 5616.0;
-        //            double q_avg = q_avg_cumulative / 5616.0;
-        //            if (i_avg > 16.0 || i_avg < 15.0) {
-        //                LOGD << "average for i at MSDR no. " << i << " is OOL " << i_avg;
-        //            }
-        //            if (q_avg > 16.0 || q_avg < 15.0) {
-        //                LOGD << "average for q at MSDR no. " << i << " is OOL " << q_avg;
-        //            }
         it += ers::highrate::MEASUREMENT_DATA_SIZE_BYTES;
         echoes.push_back(std::move(echo_meta));
 #if DEBUG_PACKETS
@@ -591,7 +576,7 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         swst_codes.push_back(echoes.at(y).swst_code);
         sar_meta.total_raw_samples += ers::highrate::MEASUREMENT_DATA_SAMPLE_COUNT;
     }
-    envformat::ConvertErsImSamplesToComplex(echoes_raw.data(), ers::highrate::MEASUREMENT_DATA_SAMPLE_COUNT, echoes.size(), swst_codes.data(), min_swst,
+    envformat::ConvertErsImSamplesToComplex(echoes_raw.get(), ers::highrate::MEASUREMENT_DATA_SAMPLE_COUNT, echoes.size(), swst_codes.data(), min_swst,
                                             *d_parsed_packets, sar_meta.img.range_size);
     // TODO init guess handling? At the moment just a naive guess from nadir point
     double init_guess_lat = (asar_meta.start_nadir_lat + asar_meta.stop_nadir_lat) / 2;
