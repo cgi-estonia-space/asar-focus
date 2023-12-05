@@ -1,5 +1,0 @@
-User-agent: *
-
-Disallow: /norobots/
-
-Sitemap: https://cgi-estonia-space.github.io/asar-focus//sitemap.xml
