@@ -52,6 +52,9 @@ jobs:
 
       - name: Test site
         run: |
+          ls -la docs
+          ls -la docs/_site
+          ls -la docs/_site${{ steps.pages.outputs.base_path }}
           bundle exec htmlproofer docs/_site${{ steps.pages.outputs.base_path }} \
             \-\-disable-external=true \
             \-\-ignore-urls "/^http:\/\/127.0.0.1/,/^http:\/\/0.0.0.0/,/^http:\/\/localhost/"
