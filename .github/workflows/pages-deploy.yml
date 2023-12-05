@@ -43,6 +43,7 @@ jobs:
         with:
           ruby-version: 3
           bundler-cache: true
+          working-directory: docs
 
       - name: Build site
         run: cd docs && bundle exec jekyll b -d "_site${{ steps.pages.outputs.base_path }}"
@@ -51,7 +52,7 @@ jobs:
 
       - name: Test site
         run: |
-          bundle exec htmlproofer docs/_site${{ steps.pages.output.base_path }} \
+          bundle exec htmlproofer docs/_site${{ steps.pages.outputs.base_path }} \
             \-\-disable-external=true \
             \-\-ignore-urls "/^http:\/\/127.0.0.1/,/^http:\/\/0.0.0.0/,/^http:\/\/localhost/"
 
