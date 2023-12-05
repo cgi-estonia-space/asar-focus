@@ -1,0 +1,23 @@
+
+
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>https://cgi-estonia-space.github.io/asar-focus//</id>
+  <title>asar-focus</title>
+  <subtitle>ERS ENVISAT GPU focussing processor for earth observation SAR data</subtitle>
+  <updated>2023-12-05T10:22:57+02:00</updated>
+  <author>
+    <name>CGI Estonia Space</name>
+    <uri>https://cgi-estonia-space.github.io/asar-focus//</uri>
+  </author>
+  <link rel="self" type="application/atom+xml" href="https://cgi-estonia-space.github.io/asar-focus//feed.xml"/>
+  <link rel="alternate" type="text/html" hreflang="en"
+    href="https://cgi-estonia-space.github.io/asar-focus//"/>
+  <generator uri="https://jekyllrb.com/" version="4.3.2">Jekyll</generator>
+  <rights> © 2023 CGI Estonia Space </rights>
+  <icon>/assets/img/favicons/favicon.ico</icon>
+  <logo>/assets/img/favicons/favicon-96x96.png</logo>
+
+
+</feed>
+
+
