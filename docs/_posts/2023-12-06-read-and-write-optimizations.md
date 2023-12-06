@@ -1,6 +1,6 @@
 ---
 title: Optimizations
-date: 2022-10-03 10:00:00 +0200
+date: 2023-12-06 10:00:00 +0200
 categories: [optimizations, profiling]
 tags: [nsys,metadata,samples,memory,io]
 ---
