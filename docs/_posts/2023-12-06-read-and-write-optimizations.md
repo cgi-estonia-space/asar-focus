@@ -93,119 +93,119 @@ This is not large data, but around 150 ms was saved because this happens during 
 <details>
   <summary>Execution log before/after</summary>
 
-**Before (~3.5 sec)**
+  **Before (~3.5 sec)**
 
-```bash
-[2023-12-05 16:24:49.309104] [0x00007f6ca3c42000] [info]    asar_focus/0.1.2
-[2023-12-05 16:24:49.385988] [0x00007f6ca3c42000] [debug]   Input DS read and fetch time = 76 ms
-[2023-12-05 16:24:49.406430] [0x00007f6ca3c42000] [debug]   Orbit file fetch time = 19 ms
-[2023-12-05 16:24:49.411846] [0x00007f6ca3c42000] [info]    Instrument file = /home/foo/ds_garden/asar_focus_envisat_im_store/ASAR_Auxiliary_Files/ASA_INS_AX/ASA_INS_AXVIEC20061220_105425_20030211_000000_20071231_000000
-[2023-12-05 16:24:49.469142] [0x00007f6ca3c42000] [debug]   Product name = ASA_IM__0PNPDK20040109_194924_000000182023_00157_09730_1479.N1
-[2023-12-05 16:24:49.469243] [0x00007f6ca3c42000] [debug]   Input SENSING_START=2004-Jan-09 19:49:24.000509
-[2023-12-05 16:24:49.469272] [0x00007f6ca3c42000] [debug]   Input SENSING_END=2004-Jan-09 19:49:42.000599
-[2023-12-05 16:24:49.469280] [0x00007f6ca3c42000] [debug]   ORBIT vectors start 2004-Jan-09 19:44:28
-[2023-12-05 16:24:49.469286] [0x00007f6ca3c42000] [debug]   ORBIT vectors end 2004-Jan-09 19:54:28
-[2023-12-05 16:24:50.250152] [0x00007f6ca3c42000] [debug]   Swath = IS2 idx = 1
-[2023-12-05 16:24:50.250173] [0x00007f6ca3c42000] [debug]   Chirp Kr = 588741148672, n_samp = 522
-[2023-12-05 16:24:50.250176] [0x00007f6ca3c42000] [debug]   tx pulse calc dur = 2.7176629348260696e-05
-[2023-12-05 16:24:50.250178] [0x00007f6ca3c42000] [debug]   Nominal chirp duration = 2.7176629373570904e-05
-[2023-12-05 16:24:50.250181] [0x00007f6ca3c42000] [debug]   Calculated chirp BW = 15999999.99442935 , meta bw = 16000000
-[2023-12-05 16:24:50.250183] [0x00007f6ca3c42000] [debug]   range samples = 5706, minimum range padded size = 6228
-[2023-12-05 16:24:50.250186] [0x00007f6ca3c42000] [debug]   n PRI before SWST = 9
-[2023-12-05 16:24:50.250230] [0x00007f6ca3c42000] [debug]   PRF 1652.42 PRI 0.000605175
-[2023-12-05 16:24:50.250233] [0x00007f6ca3c42000] [debug]   Carrier frequency: 5331004416 Range sampling rate = 19207680
-[2023-12-05 16:24:50.250235] [0x00007f6ca3c42000] [debug]   Slant range to first sample = 832215.7522699253 m two way slant time 5551945.888311342 ns
-[2023-12-05 16:24:50.250259] [0x00007f6ca3c42000] [debug]   platform velocity = 7545.17, initial Vr = 7078
-[2023-12-05 16:24:50.727977] [0x00007f6ca3c42000] [debug]   nadirs start 57.025928 19.417803 - stop  63.840936 14.52136
-[2023-12-05 16:24:50.727998] [0x00007f6ca3c42000] [debug]   guess = 60.433431999999996 22.417803
-[2023-12-05 16:24:50.728053] [0x00007f6ca3c42000] [debug]   center point = 58.8427 23.6033
-[2023-12-05 16:24:50.728056] [0x00007f6ca3c42000] [debug]   Diagnostic summary of the packets
-[2023-12-05 16:24:50.728059] [0x00007f6ca3c42000] [debug]   Calibration packets - 29
-[2023-12-05 16:24:50.728061] [0x00007f6ca3c42000] [debug]   Seq ctrl [oos total] 0 0
-[2023-12-05 16:24:50.728063] [0x00007f6ca3c42000] [debug]   Mode packet [oos total] 0 0
-[2023-12-05 16:24:50.728064] [0x00007f6ca3c42000] [debug]   Cycle packet [oos total] 0 0
-[2023-12-05 16:24:50.778760] [0x00007f6ca3c42000] [debug]   LVL0 file packet parse time = 1372 ms
-[2023-12-05 16:24:50.778912] [0x00007f6ca3c42000] [debug]   Range FFT padding sz = 6250(2 ^ 1 * 3 ^ 0 * 5 ^ 5 * 7 ^ 0)
-[2023-12-05 16:24:50.778917] [0x00007f6ca3c42000] [debug]   azimuth FFT padding sz = 30000 (2 ^ 4 * 3 ^ 1 * 5 ^ 4 * 7 ^ 0)
-[2023-12-05 16:24:50.778940] [0x00007f6ca3c42000] [debug]   FFT paddings: rg  = 5706->6250 az = 29743->30000
-[2023-12-05 16:24:51.107974] [0x00007f6ca3c42000] [debug]   GPU image formation time = 329 ms
-[2023-12-05 16:24:51.124038] [0x00007f6ca3c42000] [debug]   DC bias = 0.000388305 0.000623866
-[2023-12-05 16:24:51.179383] [0x00007f6ca3c42000] [debug]   quad misconf = 2.14832
-[2023-12-05 16:24:51.191305] [0x00007f6ca3c42000] [debug]   I/Q correction time = 83 ms
-[2023-12-05 16:24:51.191386] [0x00007f6ca3c42000] [debug]   Vr estimation time = 0 ms
-[2023-12-05 16:24:51.218092] [0x00007f6ca3c42000] [debug]   fractional DC estimation time = 26 ms
-[2023-12-05 16:24:51.218126] [0x00007f6ca3c42000] [debug]   Image GPU byte size = 1.5GB
-[2023-12-05 16:24:51.218129] [0x00007f6ca3c42000] [debug]   Estimated GPU memory usage ~3GB
-[2023-12-05 16:24:51.335384] [0x00007f6ca3c42000] [debug]   Range compression time = 116 ms
-[2023-12-05 16:24:51.589792] [0x00007f6ca3c42000] [debug]   Azimuth compression time = 254 ms
-[2023-12-05 16:24:52.085189] [0x00007f6ca3c42000] [debug]   Image GPU->CPU time = 493 ms
-[2023-12-05 16:24:52.448888] [0x00007f6ca3c42000] [debug]   MDS construction time = 363 ms
-[2023-12-05 16:24:52.872295] [0x00007f6ca3c42000] [info]    Focussed product saved at /home/foo/ds_garden/asar_focus_envisat_ims/ASA_IMS_1PNPDK20040109_194924_000000182023_00157_09730_1479.N1
-[2023-12-05 16:24:52.872452] [0x00007f6ca3c42000] [debug]   LVL1 file write time = 423 ms
-```
+  ```bash
+  [2023-12-05 16:24:49.309104] [0x00007f6ca3c42000] [info]    asar_focus/0.1.2
+  [2023-12-05 16:24:49.385988] [0x00007f6ca3c42000] [debug]   Input DS read and fetch time = 76 ms
+  [2023-12-05 16:24:49.406430] [0x00007f6ca3c42000] [debug]   Orbit file fetch time = 19 ms
+  [2023-12-05 16:24:49.411846] [0x00007f6ca3c42000] [info]    Instrument file = /home/foo/ds_garden/asar_focus_envisat_im_store/ASAR_Auxiliary_Files/ASA_INS_AX/ASA_INS_AXVIEC20061220_105425_20030211_000000_20071231_000000
+  [2023-12-05 16:24:49.469142] [0x00007f6ca3c42000] [debug]   Product name = ASA_IM__0PNPDK20040109_194924_000000182023_00157_09730_1479.N1
+  [2023-12-05 16:24:49.469243] [0x00007f6ca3c42000] [debug]   Input SENSING_START=2004-Jan-09 19:49:24.000509
+  [2023-12-05 16:24:49.469272] [0x00007f6ca3c42000] [debug]   Input SENSING_END=2004-Jan-09 19:49:42.000599
+  [2023-12-05 16:24:49.469280] [0x00007f6ca3c42000] [debug]   ORBIT vectors start 2004-Jan-09 19:44:28
+  [2023-12-05 16:24:49.469286] [0x00007f6ca3c42000] [debug]   ORBIT vectors end 2004-Jan-09 19:54:28
+  [2023-12-05 16:24:50.250152] [0x00007f6ca3c42000] [debug]   Swath = IS2 idx = 1
+  [2023-12-05 16:24:50.250173] [0x00007f6ca3c42000] [debug]   Chirp Kr = 588741148672, n_samp = 522
+  [2023-12-05 16:24:50.250176] [0x00007f6ca3c42000] [debug]   tx pulse calc dur = 2.7176629348260696e-05
+  [2023-12-05 16:24:50.250178] [0x00007f6ca3c42000] [debug]   Nominal chirp duration = 2.7176629373570904e-05
+  [2023-12-05 16:24:50.250181] [0x00007f6ca3c42000] [debug]   Calculated chirp BW = 15999999.99442935 , meta bw = 16000000
+  [2023-12-05 16:24:50.250183] [0x00007f6ca3c42000] [debug]   range samples = 5706, minimum range padded size = 6228
+  [2023-12-05 16:24:50.250186] [0x00007f6ca3c42000] [debug]   n PRI before SWST = 9
+  [2023-12-05 16:24:50.250230] [0x00007f6ca3c42000] [debug]   PRF 1652.42 PRI 0.000605175
+  [2023-12-05 16:24:50.250233] [0x00007f6ca3c42000] [debug]   Carrier frequency: 5331004416 Range sampling rate = 19207680
+  [2023-12-05 16:24:50.250235] [0x00007f6ca3c42000] [debug]   Slant range to first sample = 832215.7522699253 m two way slant time 5551945.888311342 ns
+  [2023-12-05 16:24:50.250259] [0x00007f6ca3c42000] [debug]   platform velocity = 7545.17, initial Vr = 7078
+  [2023-12-05 16:24:50.727977] [0x00007f6ca3c42000] [debug]   nadirs start 57.025928 19.417803 - stop  63.840936 14.52136
+  [2023-12-05 16:24:50.727998] [0x00007f6ca3c42000] [debug]   guess = 60.433431999999996 22.417803
+  [2023-12-05 16:24:50.728053] [0x00007f6ca3c42000] [debug]   center point = 58.8427 23.6033
+  [2023-12-05 16:24:50.728056] [0x00007f6ca3c42000] [debug]   Diagnostic summary of the packets
+  [2023-12-05 16:24:50.728059] [0x00007f6ca3c42000] [debug]   Calibration packets - 29
+  [2023-12-05 16:24:50.728061] [0x00007f6ca3c42000] [debug]   Seq ctrl [oos total] 0 0
+  [2023-12-05 16:24:50.728063] [0x00007f6ca3c42000] [debug]   Mode packet [oos total] 0 0
+  [2023-12-05 16:24:50.728064] [0x00007f6ca3c42000] [debug]   Cycle packet [oos total] 0 0
+  [2023-12-05 16:24:50.778760] [0x00007f6ca3c42000] [debug]   LVL0 file packet parse time = 1372 ms
+  [2023-12-05 16:24:50.778912] [0x00007f6ca3c42000] [debug]   Range FFT padding sz = 6250(2 ^ 1 * 3 ^ 0 * 5 ^ 5 * 7 ^ 0)
+  [2023-12-05 16:24:50.778917] [0x00007f6ca3c42000] [debug]   azimuth FFT padding sz = 30000 (2 ^ 4 * 3 ^ 1 * 5 ^ 4 * 7 ^ 0)
+  [2023-12-05 16:24:50.778940] [0x00007f6ca3c42000] [debug]   FFT paddings: rg  = 5706->6250 az = 29743->30000
+  [2023-12-05 16:24:51.107974] [0x00007f6ca3c42000] [debug]   GPU image formation time = 329 ms
+  [2023-12-05 16:24:51.124038] [0x00007f6ca3c42000] [debug]   DC bias = 0.000388305 0.000623866
+  [2023-12-05 16:24:51.179383] [0x00007f6ca3c42000] [debug]   quad misconf = 2.14832
+  [2023-12-05 16:24:51.191305] [0x00007f6ca3c42000] [debug]   I/Q correction time = 83 ms
+  [2023-12-05 16:24:51.191386] [0x00007f6ca3c42000] [debug]   Vr estimation time = 0 ms
+  [2023-12-05 16:24:51.218092] [0x00007f6ca3c42000] [debug]   fractional DC estimation time = 26 ms
+  [2023-12-05 16:24:51.218126] [0x00007f6ca3c42000] [debug]   Image GPU byte size = 1.5GB
+  [2023-12-05 16:24:51.218129] [0x00007f6ca3c42000] [debug]   Estimated GPU memory usage ~3GB
+  [2023-12-05 16:24:51.335384] [0x00007f6ca3c42000] [debug]   Range compression time = 116 ms
+  [2023-12-05 16:24:51.589792] [0x00007f6ca3c42000] [debug]   Azimuth compression time = 254 ms
+  [2023-12-05 16:24:52.085189] [0x00007f6ca3c42000] [debug]   Image GPU->CPU time = 493 ms
+  [2023-12-05 16:24:52.448888] [0x00007f6ca3c42000] [debug]   MDS construction time = 363 ms
+  [2023-12-05 16:24:52.872295] [0x00007f6ca3c42000] [info]    Focussed product saved at /home/foo/ds_garden/asar_focus_envisat_ims/ASA_IMS_1PNPDK20040109_194924_000000182023_00157_09730_1479.N1
+  [2023-12-05 16:24:52.872452] [0x00007f6ca3c42000] [debug]   LVL1 file write time = 423 ms
+  ```
 
-**After (~2.8 sec)**
+  **After (~2.8 sec)**
 
-```bash
-[2023-12-05 16:39:47.772646] [0x00007f2915e25000] [info]    asar_focus/0.1.2
-[2023-12-05 16:39:47.849456] [0x00007f2915e25000] [debug]   Input DS read and fetch time = 76 ms
-[2023-12-05 16:39:47.867858] [0x00007f2915e25000] [debug]   Orbit file fetch time = 17 ms
-[2023-12-05 16:39:47.876246] [0x00007f2915e25000] [info]    Instrument file = /home/foo/ds_garden/asar_focus_envisat_im_store/ASAR_Auxiliary_Files/ASA_INS_AX/ASA_INS_AXVIEC20061220_105425_20030211_000000_20071231_000000
-[2023-12-05 16:39:47.938435] [0x00007f2915e25000] [debug]   Product name = ASA_IM__0PNPDK20040109_194924_000000182023_00157_09730_1479.N1
-[2023-12-05 16:39:47.938544] [0x00007f2915e25000] [debug]   Input SENSING_START=2004-Jan-09 19:49:24.000509
-[2023-12-05 16:39:47.938582] [0x00007f2915e25000] [debug]   Input SENSING_END=2004-Jan-09 19:49:42.000599
-[2023-12-05 16:39:47.938593] [0x00007f2915e25000] [debug]   ORBIT vectors start 2004-Jan-09 19:44:28
-[2023-12-05 16:39:47.938602] [0x00007f2915e25000] [debug]   ORBIT vectors end 2004-Jan-09 19:54:28
-[2023-12-05 16:39:48.729693] [0x00007f2915e25000] [debug]   Swath = IS2 idx = 1
-[2023-12-05 16:39:48.729720] [0x00007f2915e25000] [debug]   Chirp Kr = 588741148672, n_samp = 522
-[2023-12-05 16:39:48.729724] [0x00007f2915e25000] [debug]   tx pulse calc dur = 2.7176629348260696e-05
-[2023-12-05 16:39:48.729726] [0x00007f2915e25000] [debug]   Nominal chirp duration = 2.7176629373570904e-05
-[2023-12-05 16:39:48.729729] [0x00007f2915e25000] [debug]   Calculated chirp BW = 15999999.99442935 , meta bw = 16000000
-[2023-12-05 16:39:48.729731] [0x00007f2915e25000] [debug]   range samples = 5706, minimum range padded size = 6228
-[2023-12-05 16:39:48.729762] [0x00007f2915e25000] [debug]   n PRI before SWST = 9
-[2023-12-05 16:39:48.729777] [0x00007f2915e25000] [debug]   PRF 1652.42 PRI 0.000605175
-[2023-12-05 16:39:48.729781] [0x00007f2915e25000] [debug]   Carrier frequency: 5331004416 Range sampling rate = 19207680
-[2023-12-05 16:39:48.729803] [0x00007f2915e25000] [debug]   Slant range to first sample = 832215.7522699253 m two way slant time 5551945.888311342 ns
-[2023-12-05 16:39:48.729806] [0x00007f2915e25000] [debug]   platform velocity = 7545.17, initial Vr = 7078
-[2023-12-05 16:39:49.221330] [0x00007f2915e25000] [debug]   nadirs start 57.025928 19.417803 - stop  63.840936 14.52136
-[2023-12-05 16:39:49.221358] [0x00007f2915e25000] [debug]   guess = 60.433431999999996 22.417803
-[2023-12-05 16:39:49.221420] [0x00007f2915e25000] [debug]   center point = 58.8427 23.6033
-[2023-12-05 16:39:49.221423] [0x00007f2915e25000] [debug]   Diagnostic summary of the packets
-[2023-12-05 16:39:49.221426] [0x00007f2915e25000] [debug]   Calibration packets - 29
-[2023-12-05 16:39:49.221428] [0x00007f2915e25000] [debug]   Seq ctrl [oos total] 0 0
-[2023-12-05 16:39:49.221430] [0x00007f2915e25000] [debug]   Mode packet [oos total] 0 0
-[2023-12-05 16:39:49.221432] [0x00007f2915e25000] [debug]   Cycle packet [oos total] 0 0
-[2023-12-05 16:39:49.269535] [0x00007f2915e25000] [debug]   LVL0 file packet parse time = 1401 ms
-[2023-12-05 16:39:49.269698] [0x00007f2915e25000] [debug]   Range FFT padding sz = 6250(2 ^ 1 * 3 ^ 0 * 5 ^ 5 * 7 ^ 0)
-[2023-12-05 16:39:49.269702] [0x00007f2915e25000] [debug]   azimuth FFT padding sz = 30000 (2 ^ 4 * 3 ^ 1 * 5 ^ 4 * 7 ^ 0)
-[2023-12-05 16:39:49.269724] [0x00007f2915e25000] [debug]   FFT paddings: rg  = 5706->6250 az = 29743->30000
-[2023-12-05 16:39:49.600809] [0x00007f2915e25000] [debug]   GPU image formation time = 331 ms
-[2023-12-05 16:39:49.615898] [0x00007f2915e25000] [debug]   DC bias = 0.000388305 0.000623866
-[2023-12-05 16:39:49.669358] [0x00007f2915e25000] [debug]   quad misconf = 2.14832
-[2023-12-05 16:39:49.682269] [0x00007f2915e25000] [debug]   I/Q correction time = 81 ms
-[2023-12-05 16:39:49.682374] [0x00007f2915e25000] [debug]   Vr estimation time = 0 ms
-[2023-12-05 16:39:49.709786] [0x00007f2915e25000] [debug]   fractional DC estimation time = 27 ms
-[2023-12-05 16:39:49.709798] [0x00007f2915e25000] [debug]   Image GPU byte size = 1.5GB
-[2023-12-05 16:39:49.709801] [0x00007f2915e25000] [debug]   Estimated GPU memory usage ~3GB
-[2023-12-05 16:39:49.825895] [0x00007f2915e25000] [debug]   Range compression time = 115 ms
-[2023-12-05 16:39:50.080374] [0x00007f2915e25000] [debug]   Azimuth compression time = 254 ms
-[2023-12-05 16:39:50.089725] [0x00007f2915e25000] [debug]   Image results correction time = 9 ms
-[2023-12-05 16:39:50.170283] [0x00007f2915e25000] [debug]   MDS Host buffer transfer time = 80 ms
-[2023-12-05 16:39:50.519320] [0x00007f2915e25000] [debug]   LVL1 file write time = 349 ms
-```
+  ```bash
+  [2023-12-05 16:39:47.772646] [0x00007f2915e25000] [info]    asar_focus/0.1.2
+  [2023-12-05 16:39:47.849456] [0x00007f2915e25000] [debug]   Input DS read and fetch time = 76 ms
+  [2023-12-05 16:39:47.867858] [0x00007f2915e25000] [debug]   Orbit file fetch time = 17 ms
+  [2023-12-05 16:39:47.876246] [0x00007f2915e25000] [info]    Instrument file = /home/foo/ds_garden/asar_focus_envisat_im_store/ASAR_Auxiliary_Files/ASA_INS_AX/ASA_INS_AXVIEC20061220_105425_20030211_000000_20071231_000000
+  [2023-12-05 16:39:47.938435] [0x00007f2915e25000] [debug]   Product name = ASA_IM__0PNPDK20040109_194924_000000182023_00157_09730_1479.N1
+  [2023-12-05 16:39:47.938544] [0x00007f2915e25000] [debug]   Input SENSING_START=2004-Jan-09 19:49:24.000509
+  [2023-12-05 16:39:47.938582] [0x00007f2915e25000] [debug]   Input SENSING_END=2004-Jan-09 19:49:42.000599
+  [2023-12-05 16:39:47.938593] [0x00007f2915e25000] [debug]   ORBIT vectors start 2004-Jan-09 19:44:28
+  [2023-12-05 16:39:47.938602] [0x00007f2915e25000] [debug]   ORBIT vectors end 2004-Jan-09 19:54:28
+  [2023-12-05 16:39:48.729693] [0x00007f2915e25000] [debug]   Swath = IS2 idx = 1
+  [2023-12-05 16:39:48.729720] [0x00007f2915e25000] [debug]   Chirp Kr = 588741148672, n_samp = 522
+  [2023-12-05 16:39:48.729724] [0x00007f2915e25000] [debug]   tx pulse calc dur = 2.7176629348260696e-05
+  [2023-12-05 16:39:48.729726] [0x00007f2915e25000] [debug]   Nominal chirp duration = 2.7176629373570904e-05
+  [2023-12-05 16:39:48.729729] [0x00007f2915e25000] [debug]   Calculated chirp BW = 15999999.99442935 , meta bw = 16000000
+  [2023-12-05 16:39:48.729731] [0x00007f2915e25000] [debug]   range samples = 5706, minimum range padded size = 6228
+  [2023-12-05 16:39:48.729762] [0x00007f2915e25000] [debug]   n PRI before SWST = 9
+  [2023-12-05 16:39:48.729777] [0x00007f2915e25000] [debug]   PRF 1652.42 PRI 0.000605175
+  [2023-12-05 16:39:48.729781] [0x00007f2915e25000] [debug]   Carrier frequency: 5331004416 Range sampling rate = 19207680
+  [2023-12-05 16:39:48.729803] [0x00007f2915e25000] [debug]   Slant range to first sample = 832215.7522699253 m two way slant time 5551945.888311342 ns
+  [2023-12-05 16:39:48.729806] [0x00007f2915e25000] [debug]   platform velocity = 7545.17, initial Vr = 7078
+  [2023-12-05 16:39:49.221330] [0x00007f2915e25000] [debug]   nadirs start 57.025928 19.417803 - stop  63.840936 14.52136
+  [2023-12-05 16:39:49.221358] [0x00007f2915e25000] [debug]   guess = 60.433431999999996 22.417803
+  [2023-12-05 16:39:49.221420] [0x00007f2915e25000] [debug]   center point = 58.8427 23.6033
+  [2023-12-05 16:39:49.221423] [0x00007f2915e25000] [debug]   Diagnostic summary of the packets
+  [2023-12-05 16:39:49.221426] [0x00007f2915e25000] [debug]   Calibration packets - 29
+  [2023-12-05 16:39:49.221428] [0x00007f2915e25000] [debug]   Seq ctrl [oos total] 0 0
+  [2023-12-05 16:39:49.221430] [0x00007f2915e25000] [debug]   Mode packet [oos total] 0 0
+  [2023-12-05 16:39:49.221432] [0x00007f2915e25000] [debug]   Cycle packet [oos total] 0 0
+  [2023-12-05 16:39:49.269535] [0x00007f2915e25000] [debug]   LVL0 file packet parse time = 1401 ms
+  [2023-12-05 16:39:49.269698] [0x00007f2915e25000] [debug]   Range FFT padding sz = 6250(2 ^ 1 * 3 ^ 0 * 5 ^ 5 * 7 ^ 0)
+  [2023-12-05 16:39:49.269702] [0x00007f2915e25000] [debug]   azimuth FFT padding sz = 30000 (2 ^ 4 * 3 ^ 1 * 5 ^ 4 * 7 ^ 0)
+  [2023-12-05 16:39:49.269724] [0x00007f2915e25000] [debug]   FFT paddings: rg  = 5706->6250 az = 29743->30000
+  [2023-12-05 16:39:49.600809] [0x00007f2915e25000] [debug]   GPU image formation time = 331 ms
+  [2023-12-05 16:39:49.615898] [0x00007f2915e25000] [debug]   DC bias = 0.000388305 0.000623866
+  [2023-12-05 16:39:49.669358] [0x00007f2915e25000] [debug]   quad misconf = 2.14832
+  [2023-12-05 16:39:49.682269] [0x00007f2915e25000] [debug]   I/Q correction time = 81 ms
+  [2023-12-05 16:39:49.682374] [0x00007f2915e25000] [debug]   Vr estimation time = 0 ms
+  [2023-12-05 16:39:49.709786] [0x00007f2915e25000] [debug]   fractional DC estimation time = 27 ms
+  [2023-12-05 16:39:49.709798] [0x00007f2915e25000] [debug]   Image GPU byte size = 1.5GB
+  [2023-12-05 16:39:49.709801] [0x00007f2915e25000] [debug]   Estimated GPU memory usage ~3GB
+  [2023-12-05 16:39:49.825895] [0x00007f2915e25000] [debug]   Range compression time = 115 ms
+  [2023-12-05 16:39:50.080374] [0x00007f2915e25000] [debug]   Azimuth compression time = 254 ms
+  [2023-12-05 16:39:50.089725] [0x00007f2915e25000] [debug]   Image results correction time = 9 ms
+  [2023-12-05 16:39:50.170283] [0x00007f2915e25000] [debug]   MDS Host buffer transfer time = 80 ms
+  [2023-12-05 16:39:50.519320] [0x00007f2915e25000] [debug]   LVL1 file write time = 349 ms
+  ```
 
 </details>
 
 <details>
   <summary>Profiling charts before/after</summary>
 
-**Before**
-![nsys profile_before_optimizations](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/asar-focus-before-optimizations-bbaa0d3.png)
-[Get the NSYS profiling report](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/report_asar_focus_before_optimizations_bbaa0d3_w_memory.nsys-rep)
+  **Before**
+  ![nsys profile_before_optimizations](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/asar-focus-before-optimizations-bbaa0d3.png)
+  [Get the NSYS profiling report](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/report_asar_focus_before_optimizations_bbaa0d3_w_memory.nsys-rep)
 
-**After**
-![nsys_profile_after_write_optimizations](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/asar-focus-write-optimizations-599391f.png)
-[Get the NSYS profile report](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/report_asar_focus_results_write_condition_599391f_w_memory.nsys-rep)
+  **After**
+  ![nsys_profile_after_write_optimizations](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/asar-focus-write-optimizations-599391f.png)
+  [Get the NSYS profile report](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/report_asar_focus_results_write_condition_599391f_w_memory.nsys-rep)
 
 </details>
 
@@ -326,76 +326,76 @@ Before the whole parsing took up to 1 second. Now it is less than 100 millisecon
 <details>
   <summary>Execution log before/after</summary>
 
-**Before ~2.8 sec (same as above's writing optimization's "After")**
-```bash
-See above...
-```
+  **Before ~2.8 sec (same as above's writing optimization's "After")**
+  ```bash
+  See above...
+  ```
 
-**After (~1.3 sec)**
-```bash
-[2023-12-05 16:43:55.016291] [0x00007fefa87f8000] [info]    asar_focus/0.1.2
-[2023-12-05 16:43:55.091998] [0x00007fefa87f8000] [debug]   Input DS read and fetch time = 75 ms
-[2023-12-05 16:43:55.110696] [0x00007fefa87f8000] [debug]   Orbit file fetch time = 17 ms
-[2023-12-05 16:43:55.116191] [0x00007fefa87f8000] [info]    Instrument file = /home/foo/ds_garden/asar_focus_envisat_im_store/ASAR_Auxiliary_Files/ASA_INS_AX/ASA_INS_AXVIEC20061220_105425_20030211_000000_20071231_000000
-[2023-12-05 16:43:55.177393] [0x00007fefa87f8000] [debug]   Product name = ASA_IM__0PNPDK20040109_194924_000000182023_00157_09730_1479.N1
-[2023-12-05 16:43:55.177425] [0x00007fefa87f8000] [debug]   Input SENSING_START=2004-Jan-09 19:49:24.000509
-[2023-12-05 16:43:55.177434] [0x00007fefa87f8000] [debug]   Input SENSING_END=2004-Jan-09 19:49:42.000599
-[2023-12-05 16:43:55.177441] [0x00007fefa87f8000] [debug]   ORBIT vectors start 2004-Jan-09 19:44:28
-[2023-12-05 16:43:55.177446] [0x00007fefa87f8000] [debug]   ORBIT vectors end 2004-Jan-09 19:54:28
-[2023-12-05 16:43:55.179813] [0x00007fefa87f8000] [debug]   Forecasted maximum sample blocks bytes/length per range 5772
-[2023-12-05 16:43:55.179828] [0x00007fefa87f8000] [debug]   Reserving 163MiB for raw sample blocks buffer including prepending 2 byte length marker (5774x29744)
-[2023-12-05 16:43:55.232713] [0x00007fefa87f8000] [debug]   Swath = IS2 idx = 1
-[2023-12-05 16:43:55.232738] [0x00007fefa87f8000] [debug]   Chirp Kr = 588741148672, n_samp = 522
-[2023-12-05 16:43:55.232742] [0x00007fefa87f8000] [debug]   tx pulse calc dur = 2.7176629348260696e-05
-[2023-12-05 16:43:55.232744] [0x00007fefa87f8000] [debug]   Nominal chirp duration = 2.7176629373570904e-05
-[2023-12-05 16:43:55.232747] [0x00007fefa87f8000] [debug]   Calculated chirp BW = 15999999.99442935 , meta bw = 16000000
-[2023-12-05 16:43:55.232749] [0x00007fefa87f8000] [debug]   range samples = 5705, minimum range padded size = 6227
-[2023-12-05 16:43:55.232751] [0x00007fefa87f8000] [debug]   n PRI before SWST = 9
-[2023-12-05 16:43:55.232754] [0x00007fefa87f8000] [debug]   SWST changes 1 MIN|MAX SWST 2024|2048
-[2023-12-05 16:43:55.232772] [0x00007fefa87f8000] [debug]   PRF 1652.42 PRI 0.000605175
-[2023-12-05 16:43:55.232776] [0x00007fefa87f8000] [debug]   Carrier frequency: 5331004416 Range sampling rate = 19207680
-[2023-12-05 16:43:55.232778] [0x00007fefa87f8000] [debug]   Slant range to first sample = 832215.7522699253 m two way slant time 5551945.888311342 ns
-[2023-12-05 16:43:55.232782] [0x00007fefa87f8000] [debug]   platform velocity = 7545.17, initial Vr = 7078
-[2023-12-05 16:43:55.432756] [0x00007fefa87f8000] [debug]   nadirs start 57.025928 19.417803 - stop  63.840936 14.52136
-[2023-12-05 16:43:55.432766] [0x00007fefa87f8000] [debug]   guess = 60.433431999999996 22.417803
-[2023-12-05 16:43:55.432790] [0x00007fefa87f8000] [debug]   center point = 58.8427 23.603
-[2023-12-05 16:43:55.432793] [0x00007fefa87f8000] [debug]   Diagnostic summary of the packets
-[2023-12-05 16:43:55.432795] [0x00007fefa87f8000] [debug]   Calibration packets - 29
-[2023-12-05 16:43:55.432797] [0x00007fefa87f8000] [debug]   Seq ctrl [oos total] 0 0
-[2023-12-05 16:43:55.432799] [0x00007fefa87f8000] [debug]   Mode packet [oos total] 0 0
-[2023-12-05 16:43:55.432801] [0x00007fefa87f8000] [debug]   Cycle packet [oos total] 0 0
-[2023-12-05 16:43:55.432803] [0x00007fefa87f8000] [debug]   MIN|MAX datablock lengths in bytes 5772|5772
-[2023-12-05 16:43:55.432872] [0x00007fefa87f8000] [debug]   LVL0 file packet parse time = 322 ms
-[2023-12-05 16:43:55.432979] [0x00007fefa87f8000] [debug]   Range FFT padding sz = 6250(2 ^ 1 * 3 ^ 0 * 5 ^ 5 * 7 ^ 0)
-[2023-12-05 16:43:55.432982] [0x00007fefa87f8000] [debug]   azimuth FFT padding sz = 30000 (2 ^ 4 * 3 ^ 1 * 5 ^ 4 * 7 ^ 0)
-[2023-12-05 16:43:55.432985] [0x00007fefa87f8000] [debug]   FFT paddings: rg  = 5705->6250 az = 29743->30000
-[2023-12-05 16:43:55.452475] [0x00007fefa87f8000] [debug]   GPU image formation time = 19 ms
-[2023-12-05 16:43:55.470326] [0x00007fefa87f8000] [debug]   DC bias = 0.000386579 0.000622201
-[2023-12-05 16:43:55.526863] [0x00007fefa87f8000] [debug]   quad misconf = 2.14816
-[2023-12-05 16:43:55.539898] [0x00007fefa87f8000] [debug]   I/Q correction time = 87 ms
-[2023-12-05 16:43:55.539983] [0x00007fefa87f8000] [debug]   Vr estimation time = 0 ms
-[2023-12-05 16:43:55.564514] [0x00007fefa87f8000] [debug]   fractional DC estimation time = 24 ms
-[2023-12-05 16:43:55.564526] [0x00007fefa87f8000] [debug]   Image GPU byte size = 1.5GB
-[2023-12-05 16:43:55.564529] [0x00007fefa87f8000] [debug]   Estimated GPU memory usage ~3GB
-[2023-12-05 16:43:55.680710] [0x00007fefa87f8000] [debug]   Range compression time = 114 ms
-[2023-12-05 16:43:55.935424] [0x00007fefa87f8000] [debug]   Azimuth compression time = 254 ms
-[2023-12-05 16:43:55.944704] [0x00007fefa87f8000] [debug]   Image results correction time = 9 ms
-[2023-12-05 16:43:56.021283] [0x00007fefa87f8000] [debug]   MDS Host buffer transfer time = 76 ms
-[2023-12-05 16:43:56.350812] [0x00007fefa87f8000] [debug]   LVL1 file write time = 329 ms
-```
+  **After (~1.3 sec)**
+  ```bash
+  [2023-12-05 16:43:55.016291] [0x00007fefa87f8000] [info]    asar_focus/0.1.2
+  [2023-12-05 16:43:55.091998] [0x00007fefa87f8000] [debug]   Input DS read and fetch time = 75 ms
+  [2023-12-05 16:43:55.110696] [0x00007fefa87f8000] [debug]   Orbit file fetch time = 17 ms
+  [2023-12-05 16:43:55.116191] [0x00007fefa87f8000] [info]    Instrument file = /home/foo/ds_garden/asar_focus_envisat_im_store/ASAR_Auxiliary_Files/ASA_INS_AX/ASA_INS_AXVIEC20061220_105425_20030211_000000_20071231_000000
+  [2023-12-05 16:43:55.177393] [0x00007fefa87f8000] [debug]   Product name = ASA_IM__0PNPDK20040109_194924_000000182023_00157_09730_1479.N1
+  [2023-12-05 16:43:55.177425] [0x00007fefa87f8000] [debug]   Input SENSING_START=2004-Jan-09 19:49:24.000509
+  [2023-12-05 16:43:55.177434] [0x00007fefa87f8000] [debug]   Input SENSING_END=2004-Jan-09 19:49:42.000599
+  [2023-12-05 16:43:55.177441] [0x00007fefa87f8000] [debug]   ORBIT vectors start 2004-Jan-09 19:44:28
+  [2023-12-05 16:43:55.177446] [0x00007fefa87f8000] [debug]   ORBIT vectors end 2004-Jan-09 19:54:28
+  [2023-12-05 16:43:55.179813] [0x00007fefa87f8000] [debug]   Forecasted maximum sample blocks bytes/length per range 5772
+  [2023-12-05 16:43:55.179828] [0x00007fefa87f8000] [debug]   Reserving 163MiB for raw sample blocks buffer including prepending 2 byte length marker (5774x29744)
+  [2023-12-05 16:43:55.232713] [0x00007fefa87f8000] [debug]   Swath = IS2 idx = 1
+  [2023-12-05 16:43:55.232738] [0x00007fefa87f8000] [debug]   Chirp Kr = 588741148672, n_samp = 522
+  [2023-12-05 16:43:55.232742] [0x00007fefa87f8000] [debug]   tx pulse calc dur = 2.7176629348260696e-05
+  [2023-12-05 16:43:55.232744] [0x00007fefa87f8000] [debug]   Nominal chirp duration = 2.7176629373570904e-05
+  [2023-12-05 16:43:55.232747] [0x00007fefa87f8000] [debug]   Calculated chirp BW = 15999999.99442935 , meta bw = 16000000
+  [2023-12-05 16:43:55.232749] [0x00007fefa87f8000] [debug]   range samples = 5705, minimum range padded size = 6227
+  [2023-12-05 16:43:55.232751] [0x00007fefa87f8000] [debug]   n PRI before SWST = 9
+  [2023-12-05 16:43:55.232754] [0x00007fefa87f8000] [debug]   SWST changes 1 MIN|MAX SWST 2024|2048
+  [2023-12-05 16:43:55.232772] [0x00007fefa87f8000] [debug]   PRF 1652.42 PRI 0.000605175
+  [2023-12-05 16:43:55.232776] [0x00007fefa87f8000] [debug]   Carrier frequency: 5331004416 Range sampling rate = 19207680
+  [2023-12-05 16:43:55.232778] [0x00007fefa87f8000] [debug]   Slant range to first sample = 832215.7522699253 m two way slant time 5551945.888311342 ns
+  [2023-12-05 16:43:55.232782] [0x00007fefa87f8000] [debug]   platform velocity = 7545.17, initial Vr = 7078
+  [2023-12-05 16:43:55.432756] [0x00007fefa87f8000] [debug]   nadirs start 57.025928 19.417803 - stop  63.840936 14.52136
+  [2023-12-05 16:43:55.432766] [0x00007fefa87f8000] [debug]   guess = 60.433431999999996 22.417803
+  [2023-12-05 16:43:55.432790] [0x00007fefa87f8000] [debug]   center point = 58.8427 23.603
+  [2023-12-05 16:43:55.432793] [0x00007fefa87f8000] [debug]   Diagnostic summary of the packets
+  [2023-12-05 16:43:55.432795] [0x00007fefa87f8000] [debug]   Calibration packets - 29
+  [2023-12-05 16:43:55.432797] [0x00007fefa87f8000] [debug]   Seq ctrl [oos total] 0 0
+  [2023-12-05 16:43:55.432799] [0x00007fefa87f8000] [debug]   Mode packet [oos total] 0 0
+  [2023-12-05 16:43:55.432801] [0x00007fefa87f8000] [debug]   Cycle packet [oos total] 0 0
+  [2023-12-05 16:43:55.432803] [0x00007fefa87f8000] [debug]   MIN|MAX datablock lengths in bytes 5772|5772
+  [2023-12-05 16:43:55.432872] [0x00007fefa87f8000] [debug]   LVL0 file packet parse time = 322 ms
+  [2023-12-05 16:43:55.432979] [0x00007fefa87f8000] [debug]   Range FFT padding sz = 6250(2 ^ 1 * 3 ^ 0 * 5 ^ 5 * 7 ^ 0)
+  [2023-12-05 16:43:55.432982] [0x00007fefa87f8000] [debug]   azimuth FFT padding sz = 30000 (2 ^ 4 * 3 ^ 1 * 5 ^ 4 * 7 ^ 0)
+  [2023-12-05 16:43:55.432985] [0x00007fefa87f8000] [debug]   FFT paddings: rg  = 5705->6250 az = 29743->30000
+  [2023-12-05 16:43:55.452475] [0x00007fefa87f8000] [debug]   GPU image formation time = 19 ms
+  [2023-12-05 16:43:55.470326] [0x00007fefa87f8000] [debug]   DC bias = 0.000386579 0.000622201
+  [2023-12-05 16:43:55.526863] [0x00007fefa87f8000] [debug]   quad misconf = 2.14816
+  [2023-12-05 16:43:55.539898] [0x00007fefa87f8000] [debug]   I/Q correction time = 87 ms
+  [2023-12-05 16:43:55.539983] [0x00007fefa87f8000] [debug]   Vr estimation time = 0 ms
+  [2023-12-05 16:43:55.564514] [0x00007fefa87f8000] [debug]   fractional DC estimation time = 24 ms
+  [2023-12-05 16:43:55.564526] [0x00007fefa87f8000] [debug]   Image GPU byte size = 1.5GB
+  [2023-12-05 16:43:55.564529] [0x00007fefa87f8000] [debug]   Estimated GPU memory usage ~3GB
+  [2023-12-05 16:43:55.680710] [0x00007fefa87f8000] [debug]   Range compression time = 114 ms
+  [2023-12-05 16:43:55.935424] [0x00007fefa87f8000] [debug]   Azimuth compression time = 254 ms
+  [2023-12-05 16:43:55.944704] [0x00007fefa87f8000] [debug]   Image results correction time = 9 ms
+  [2023-12-05 16:43:56.021283] [0x00007fefa87f8000] [debug]   MDS Host buffer transfer time = 76 ms
+  [2023-12-05 16:43:56.350812] [0x00007fefa87f8000] [debug]   LVL1 file write time = 329 ms
+  ```
 
 </details>
 
 <details>
   <summary>Profiling charts before/after</summary>
 
-**Before (same as above's writing optimization's "After")**
-![nsys_profile_after_write_optimizations](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/asar-focus-write-optimizations-599391f.png)
-[Get the NSYS profile report](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/report_asar_focus_results_write_condition_599391f_w_memory.nsys-rep)
+  **Before (same as above's writing optimization's "After")**
+  ![nsys_profile_after_write_optimizations](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/asar-focus-write-optimizations-599391f.png)
+  [Get the NSYS profile report](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/report_asar_focus_results_write_condition_599391f_w_memory.nsys-rep)
 
-**After**
-![nsys_profile_after_parse_optimizations](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/asar-focus-parse-prepare-optimizations-1bd6dc16.png)
-[Get the NSYS profile report](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/report_asar_focus_parse_prepare_optimizations_1bd6dc16_w_memory.nsys-rep)
+  **After**
+  ![nsys_profile_after_parse_optimizations](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/asar-focus-parse-prepare-optimizations-1bd6dc16.png)
+  [Get the NSYS profile report](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/report_asar_focus_parse_prepare_optimizations_1bd6dc16_w_memory.nsys-rep)
 
 </details>
 
