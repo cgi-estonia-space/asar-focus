@@ -17,12 +17,13 @@ namespace alus::asar::envformat {
 // dest_buffer must be on device and have enough capacity to accommodate original image (complex float) without padding.
 void ConditionResults(DevicePaddedImage& img, char* dest_space, size_t record_header_size, float calibration_constant);
 
-void ConvertErsImSamplesToComplex(uint8_t* samples, size_t sample_count_per_range, size_t packets, uint16_t* swst_codes,
-                                  uint16_t min_swst, cufftComplex* gpu_buffer, size_t target_range_padded_samples);
+void ConvertErsImSamplesToComplex(const uint8_t* samples, size_t sample_count_per_range, size_t packets,
+                                  const uint16_t* swst_codes, uint16_t min_swst, cufftComplex* gpu_buffer,
+                                  size_t target_range_padded_samples);
 
-void ConvertAsarImBlocksToComplex(uint8_t* block_samples, size_t block_samples_item_length_bytes, size_t records,
-                                  uint16_t* swst_codes, uint16_t min_swst, cufftComplex* gpu_buffer,
-                                  size_t target_range_padded_samples, float* i_lut_fbaq4, float* q_lut_fbaq4,
-                                  size_t lut_items);
+void ConvertAsarImBlocksToComplex(const uint8_t* block_samples, size_t block_samples_item_length_bytes, size_t records,
+                                  const uint16_t* swst_codes, uint16_t min_swst, cufftComplex* gpu_buffer,
+                                  size_t target_range_padded_samples, const float* i_lut_fbaq4,
+                                  const float* q_lut_fbaq4, size_t lut_items);
 
 }  // namespace alus::asar::envformat

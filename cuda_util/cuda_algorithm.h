@@ -12,18 +12,7 @@
 
 namespace alus::cuda::algorithm {
 
-template <typename T>
-__device__ __host__ inline const T clamp(const T& v, const T& lo, const T& hi) {
-    return v > hi ? hi : (v < lo ? lo : v);
-}
+template<class T>
+void Fill(T* d_array, size_t count, T value);
 
-template <typename T>
-__global__ void FillKernel(T* array, int item_count, T value) {
-    const int x = threadIdx.x + blockIdx.x * blockDim.x;
-
-    if (x < item_count) {
-        array[x] = value;
-    }
-}
-
-}  // namespace alus::cuda::algorithm
+}  // namespace alus::cuda::stdio

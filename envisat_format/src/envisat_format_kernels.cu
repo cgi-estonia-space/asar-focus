@@ -66,9 +66,9 @@ void ConditionResults(DevicePaddedImage& img, char* dest_space, size_t record_he
     CHECK_CUDA_ERR(cudaGetLastError());
 }
 
-__global__ void ConvertErsImSamplesToComplexKernel(uint8_t* samples, int samples_range_size_bytes, int packets,
-                                                   uint16_t* swst_codes, uint16_t min_swst, cufftComplex* target_buf,
-                                                   int target_range_width) {
+__global__ void ConvertErsImSamplesToComplexKernel(const uint8_t* samples, int samples_range_size_bytes, int packets,
+                                                   const uint16_t* swst_codes, uint16_t min_swst,
+                                                   cufftComplex* target_buf, int target_range_width) {
     const int x = threadIdx.x + blockIdx.x * blockDim.x;
     const int y = threadIdx.y + blockIdx.y * blockDim.y;
     const int x_size = samples_range_size_bytes;
@@ -86,8 +86,9 @@ __global__ void ConvertErsImSamplesToComplexKernel(uint8_t* samples, int samples
     }
 }
 
-void ConvertErsImSamplesToComplex(uint8_t* samples, size_t sample_count_per_range, size_t packets, uint16_t* swst_codes,
-                                  uint16_t min_swst, cufftComplex* gpu_buffer, size_t target_range_padded_samples) {
+void ConvertErsImSamplesToComplex(const uint8_t* samples, size_t sample_count_per_range, size_t packets,
+                                  const uint16_t* swst_codes, uint16_t min_swst, cufftComplex* gpu_buffer,
+                                  size_t target_range_padded_samples) {
     const auto samples_range_bytes = sample_count_per_range * 2 * sizeof(uint8_t);
     const auto samples_total_bytes = packets * samples_range_bytes;
     uint8_t* samples_gpu;
@@ -109,10 +110,10 @@ void ConvertErsImSamplesToComplex(uint8_t* samples, size_t sample_count_per_rang
     CHECK_CUDA_ERR(cudaFree(swst_codes_gpu));
 }
 
-__global__ void ConvertAsarImBlocksToComplexKernel(uint8_t* block_samples, int block_samples_item_length_bytes,
-                                                   int records, uint16_t* swst_codes, uint16_t min_swst,
+__global__ void ConvertAsarImBlocksToComplexKernel(const uint8_t* block_samples, int block_samples_item_length_bytes,
+                                                   int records, const uint16_t* swst_codes, uint16_t min_swst,
                                                    cufftComplex* gpu_buffer, int target_range_padded_samples,
-                                                   float* i_lut_fbaq4, float* q_lut_fbaq4, int lut_items) {
+                                                   const float* i_lut_fbaq4, const float* q_lut_fbaq4, int lut_items) {
     const int x = threadIdx.x + blockIdx.x * blockDim.x;
     const int y = threadIdx.y + blockIdx.y * blockDim.y;
     const int x_size = block_samples_item_length_bytes;
@@ -163,10 +164,10 @@ __global__ void ConvertAsarImBlocksToComplexKernel(uint8_t* block_samples, int b
     }
 }
 
-void ConvertAsarImBlocksToComplex(uint8_t* block_samples, size_t block_samples_item_length_bytes, size_t records,
-                                  uint16_t* swst_codes, uint16_t min_swst, cufftComplex* gpu_buffer,
-                                  size_t target_range_padded_samples, float* i_lut_fbaq4, float* q_lut_fbaq4,
-                                  size_t lut_items) {
+void ConvertAsarImBlocksToComplex(const uint8_t* block_samples, size_t block_samples_item_length_bytes, size_t records,
+                                  const uint16_t* swst_codes, uint16_t min_swst, cufftComplex* gpu_buffer,
+                                  size_t target_range_padded_samples, const float* i_lut_fbaq4,
+                                  const float* q_lut_fbaq4, size_t lut_items) {
     const auto samples_total_bytes = records * block_samples_item_length_bytes;
     uint8_t* samples_gpu;
     CHECK_CUDA_ERR(cudaMalloc(&samples_gpu, samples_total_bytes));

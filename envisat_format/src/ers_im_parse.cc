@@ -16,7 +16,7 @@
 #include "fmt/format.h"
 
 #include "alus_log.h"
-#include "cuda_stdio.h"
+#include "cuda_algorithm.h"
 #include "cuda_util.h"
 #include "envisat_format_kernels.h"
 #include "envisat_utils.h"
@@ -568,7 +568,7 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     constexpr auto CLEAR_VALUE = NAN;
     constexpr cufftComplex CLEAR_VALUE_COMPLEX{CLEAR_VALUE, CLEAR_VALUE};
     static_assert(sizeof(CLEAR_VALUE_COMPLEX) == sizeof(CLEAR_VALUE) * 2);
-    cuda::stdio::Memset(*d_parsed_packets, CLEAR_VALUE_COMPLEX, range_az_total_items);
+    cuda::algorithm::Fill(*d_parsed_packets, range_az_total_items, CLEAR_VALUE_COMPLEX);
 
     std::vector<uint16_t> swst_codes;
     swst_codes.reserve(echoes.size());

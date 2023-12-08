@@ -16,10 +16,9 @@
 #include "fmt/format.h"
 
 #include "alus_log.h"
-#include "cuda_stdio.h"
+#include "cuda_algorithm.h"
 #include "cuda_util.h"
 #include "envisat_format_kernels.h"
-#include "envisat_parse_util.h"
 #include "envisat_utils.h"
 #include "parse_util.h"
 
@@ -622,54 +621,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
     constexpr auto CLEAR_VALUE = NAN;
     constexpr cufftComplex CLEAR_VALUE_COMPLEX{CLEAR_VALUE, CLEAR_VALUE};
     static_assert(sizeof(CLEAR_VALUE_COMPLEX) == sizeof(CLEAR_VALUE) * 2);
-    cuda::stdio::Memset(*d_parsed_packets, CLEAR_VALUE_COMPLEX, range_az_total_items);
-
-//    std::vector<std::vector<std::complex<float>>> raw_data_check;
-//    {
-//        LOGD << "Measurements total parsed " << echoes.size();
-//        for (size_t ri{}; ri < echoes.size(); ri++) {
-//            auto sample_blocks_start =
-//                compressed_sample_blocks_buffer + ri * compressed_sample_blocks_with_length_single_range_item_bytes;
-//            uint16_t data_len{};
-//            data_len |= 0x00FF & sample_blocks_start[0];
-//            data_len |= 0xFF00 & (static_cast<uint16_t>(sample_blocks_start[1]) << 8);
-//            sample_blocks_start += 2;
-//
-//            raw_data_check.push_back({});
-//            size_t bytes_for_compressed_samples{};
-//            const auto n_blocks = data_len / 64;
-//            // echo_window_code specifies how many samples, without block ID bytes e.g. data_len - block count.
-//            raw_data_check.back().reserve(data_len - n_blocks);
-//            for (int bi = 0; bi < n_blocks; bi++) {
-//                const uint8_t* block_data = sample_blocks_start + bi * 64;
-//                uint8_t block_id = block_data[0];
-//                bytes_for_compressed_samples++;
-//                for (size_t j = 0; j < 63; j++) {
-//                    uint8_t i_codeword = block_data[1 + j] >> 4;
-//                    uint8_t q_codeword = block_data[1 + j] & 0xF;
-//                    bytes_for_compressed_samples++;
-//
-//                    float i_samp = ins_file.fbp.i_LUT_fbaq4[Fbaq4Index(block_id, i_codeword)];
-//                    float q_samp = ins_file.fbp.q_LUT_fbaq4[Fbaq4Index(block_id, q_codeword)];
-//                    raw_data_check.back().emplace_back(i_samp, q_samp);
-//                }
-//            }
-//            // Deal with the remainder
-//            size_t remainder = data_len % 64;
-//            const uint8_t* block_data = sample_blocks_start + n_blocks * 64;
-//            uint8_t block_id = block_data[0];
-//            bytes_for_compressed_samples++;
-//            for (size_t j = 0; j < remainder - 1; j++) {
-//                uint8_t i_codeword = block_data[1 + j] >> 4;
-//                uint8_t q_codeword = block_data[1 + j] & 0xF;
-//                bytes_for_compressed_samples++;
-//
-//                float i_samp = ins_file.fbp.i_LUT_fbaq4[Fbaq4Index(block_id, i_codeword)];
-//                float q_samp = ins_file.fbp.q_LUT_fbaq4[Fbaq4Index(block_id, q_codeword)];
-//                raw_data_check.back().emplace_back(i_samp, q_samp);
-//            }
-//        }
-//    }
+    cuda::algorithm::Fill(*d_parsed_packets, range_az_total_items, CLEAR_VALUE_COMPLEX);
 
     std::vector<uint16_t> swst_codes;
     swst_codes.reserve(echoes.size());

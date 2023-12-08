@@ -77,6 +77,7 @@ inline double CalcDopplerCentroid(const SARMetadata& metadata, int range_pixel) 
     return Polyval(p.data(), p.size(), range_pixel);
 }
 
+// Ka - Azimuth FM rate
 inline double CalcKa(const SARMetadata& metadata, int range_pixel) {
     constexpr double SOL = 299792458;
     const double Vr = CalcVr(metadata, range_pixel);

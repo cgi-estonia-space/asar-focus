@@ -8,18 +8,25 @@
  * work. If not, see http://creativecommons.org/licenses/by-sa/4.0/
  */
 
-#include "cuda_stdio.cuh"
-#include "cuda_stdio.h"
+#include "cuda_algorithm.h"
 
-namespace alus::cuda::stdio {
+#include <cufft.h>
 
-void Memset(void* d_array, void* value, size_t value_byte_size, size_t array_item_count) {
-    const auto x_size = array_item_count * value_byte_size;
+#include "cuda_algorithm.cuh"
+#include "cuda_util.h"
+
+namespace alus::cuda::algorithm {
+
+template <typename T>
+void Fill(T* d_array, size_t count, T value) {
+    const int x_size = count;
     dim3 block_sz(16);
     dim3 grid_sz((x_size + 15) / 16);
-    MemsetKernel<<<grid_sz, block_sz>>>(d_array, value, value_byte_size, array_item_count);
+    FillKernel<<<grid_sz, block_sz>>>(d_array, x_size, value);
     CHECK_CUDA_ERR(cudaDeviceSynchronize());
     CHECK_CUDA_ERR(cudaGetLastError());
 }
 
-}  // namespace alus::cuda::stdio
+template void Fill<cufftComplex>(cufftComplex*, size_t, cufftComplex);
+
+}  // namespace alus::cuda::algorithm
