@@ -33,7 +33,6 @@
 #include "main_flow.h"
 #include "math_utils.h"
 #include "mem_alloc.h"
-#include "plot.h"
 #include "sar/fractional_doppler_centroid.cuh"
 #include "sar/iq_correction.cuh"
 #include "sar/processing_velocity_estimation.h"
@@ -170,8 +169,8 @@ int main(int argc, char* argv[]) {
         img.InitPadded(rg_size, az_size, rg_padded, az_padded);
         img.ZeroMemory();
 
-        CHECK_CUDA_ERR(
-            cudaMemcpy2D(img.Data(), rg_padded * 8, d_parsed_packets, rg_size * 8, rg_size * 8, az_size, cudaMemcpyDeviceToDevice));
+        CHECK_CUDA_ERR(cudaMemcpy2D(img.Data(), rg_padded * 8, d_parsed_packets, rg_size * 8, rg_size * 8, az_size,
+                                    cudaMemcpyDeviceToDevice));
         CHECK_CUDA_ERR(cudaFree(d_parsed_packets));
 
         TimeStop(gpu_transfer_start, "GPU image formation");
@@ -185,64 +184,18 @@ int main(int argc, char* argv[]) {
         metadata.results.Vr_poly = EstimateProcessingVelocity(metadata);
         TimeStop(vr_start, "Vr estimation");
 
-        if (args.StorePlots()) {
-            PlotArgs plot_args = {};
-            plot_args.out_path = std::string(args.GetOutputPath()) + "/" + wif_name_base + "_Vr.html";
-            plot_args.x_axis_title = "range index";
-            plot_args.y_axis_title = "Vr(m/s)";
-            plot_args.data.resize(1);
-            auto& line = plot_args.data[0];
-            line.line_name = "Vr";
-            PolyvalRange(metadata.results.Vr_poly, 0, metadata.img.range_size, line.x, line.y);
-            Plot(plot_args);
-        }
-
         auto chirp = GenerateChirpData(metadata.chirp, rg_padded);
-
-        std::vector<float> chirp_freq;
-
-        if (args.StorePlots()) {
-            PlotArgs plot_args = {};
-            plot_args.out_path = std::string(args.GetOutputPath()) + "/" + wif_name_base + "_chirp.html";
-            plot_args.x_axis_title = "nth sample";
-            plot_args.y_axis_title = "Amplitude";
-            plot_args.data.resize(2);
-            auto& i = plot_args.data[0];
-            auto& q = plot_args.data[1];
-            std::vector<double> n_samp;
-            int cnt = 0;
-            for (auto iq : chirp) {
-                i.y.push_back(iq.real());
-                i.x.push_back(cnt);
-                q.y.push_back(iq.imag());
-                q.x.push_back(cnt);
-                cnt++;
-            }
-
-            i.line_name = "I";
-            q.line_name = "Q";
-            Plot(plot_args);
-        }
-
-        if (args.StoreIntensity()) {
-            std::string path = std::string(args.GetOutputPath()) + "/";
-            path += wif_name_base + "_raw.tif";
-            WriteIntensityPaddedImg(img, path.c_str());
-        }
 
         auto dc_start = TimeStart();
         metadata.results.doppler_centroid_poly = CalculateDopplerCentroid(img, metadata.pulse_repetition_frequency);
         TimeStop(dc_start, "fractional DC estimation");
+
         if (args.StorePlots()) {
-            PlotArgs plot_args = {};
-            plot_args.out_path = std::string(args.GetOutputPath()) + "/" + wif_name_base + "_dc.html";
-            plot_args.x_axis_title = "range index";
-            plot_args.y_axis_title = "Hz";
-            plot_args.data.resize(1);
-            auto& line = plot_args.data[0];
-            line.line_name = "Doppler centroid";
-            PolyvalRange(metadata.results.doppler_centroid_poly, 0, metadata.img.range_size, line.x, line.y);
-            Plot(plot_args);
+            alus::asar::mainflow::StorePlots(args.GetOutputPath().data(), wif_name_base, metadata, chirp);
+        }
+
+        if (args.StoreIntensity()) {
+            alus::asar::mainflow::StoreIntensity(args.GetOutputPath().data(), wif_name_base, "raw", img);
         }
 
         LOGD << "Image GPU byte size = " << (img.TotalByteSize() / 1e9) << "GB";
@@ -257,9 +210,7 @@ int main(int argc, char* argv[]) {
         metadata.img.range_size = img.XSize();
 
         if (args.StoreIntensity()) {
-            std::string path = std::string(args.GetOutputPath()) + "/";
-            path += wif_name_base + "_rc.tif";
-            WriteIntensityPaddedImg(img, path.c_str());
+            alus::asar::mainflow::StoreIntensity(args.GetOutputPath().data(), wif_name_base, "rc", img);
         }
 
         constexpr size_t record_header_bytes = 12 + 1 + 4;
@@ -296,9 +247,7 @@ int main(int argc, char* argv[]) {
         TimeStop(az_comp_start, "Azimuth compression");
 
         if (args.StoreIntensity()) {
-            std::string path = std::string(args.GetOutputPath()) + "/";
-            path += wif_name_base + "_slc.tif";
-            WriteIntensityPaddedImg(out, path.c_str());
+            alus::asar::mainflow::StoreIntensity(args.GetOutputPath().data(), wif_name_base, "slc", out);
         }
 
         auto result_correction_start = TimeStart();

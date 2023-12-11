@@ -18,6 +18,8 @@
 #include "date_time_util.h"
 #include "envisat_format_kernels.h"
 #include "ers_aux_file.h"
+#include "img_output.h"
+#include "plot.h"
 #include "sar/iq_correction.cuh"
 #include "status_assembly.h"
 
@@ -97,7 +99,8 @@ void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, ASARM
         FindINSFile(std::string(aux_path), asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
         FindCONFile(std::string(aux_path), asar_meta.sensing_start, conf_file, asar_meta.configuration_file);
     } else if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
-        alus::asar::envisat_format::FindINSFile(std::string(aux_path), asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
+        alus::asar::envisat_format::FindINSFile(std::string(aux_path), asar_meta.sensing_start, ins_file,
+                                                asar_meta.instrument_file);
         alus::asar::envisat_format::FindCONFile(std::string(aux_path), asar_meta.sensing_start, conf_file,
                                                 asar_meta.configuration_file);
     } else {
@@ -109,4 +112,60 @@ void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, ASARM
 void FormatResults(DevicePaddedImage& img, char* dest_space, size_t record_header_size, float calibration_constant) {
     envformat::ConditionResults(img, dest_space, record_header_size, calibration_constant);
 }
+
+void StorePlots(std::string output_path, std::string product_name, const SARMetadata& sar_metadata,
+                const std::vector<std::complex<float>>& chirp) {
+    {
+        PlotArgs plot_args = {};
+        plot_args.out_path = output_path + "/" + product_name + "_Vr.html";
+        plot_args.x_axis_title = "range index";
+        plot_args.y_axis_title = "Vr(m/s)";
+        plot_args.data.resize(1);
+        auto& line = plot_args.data[0];
+        line.line_name = "Vr";
+        PolyvalRange(sar_metadata.results.Vr_poly, 0, sar_metadata.img.range_size, line.x, line.y);
+        Plot(plot_args);
+    }
+    {
+        PlotArgs plot_args = {};
+        plot_args.out_path = output_path + "/" + product_name + "_chirp.html";
+        plot_args.x_axis_title = "nth sample";
+        plot_args.y_axis_title = "Amplitude";
+        plot_args.data.resize(2);
+        auto& i = plot_args.data[0];
+        auto& q = plot_args.data[1];
+        std::vector<double> n_samp;
+        int cnt = 0;
+        for (auto iq : chirp) {
+            i.y.push_back(iq.real());
+            i.x.push_back(cnt);
+            q.y.push_back(iq.imag());
+            q.x.push_back(cnt);
+            cnt++;
+        }
+
+        i.line_name = "I";
+        q.line_name = "Q";
+        Plot(plot_args);
+    }
+    {
+        PlotArgs plot_args = {};
+        plot_args.out_path = output_path + "/" + product_name + "_dc.html";
+        plot_args.x_axis_title = "range index";
+        plot_args.y_axis_title = "Hz";
+        plot_args.data.resize(1);
+        auto& line = plot_args.data[0];
+        line.line_name = "Doppler centroid";
+        PolyvalRange(sar_metadata.results.doppler_centroid_poly, 0, sar_metadata.img.range_size, line.x, line.y);
+        Plot(plot_args);
+    }
+}
+
+void StoreIntensity(std::string output_path, std::string product_name, std::string postfix,
+                    const DevicePaddedImage& dev_padded_img) {
+    std::string path = output_path + "/";
+    path += product_name + "_" + postfix + ".tif";
+    WriteIntensityPaddedImg(dev_padded_img, path.c_str());
+}
+
 }  // namespace alus::asar::mainflow
