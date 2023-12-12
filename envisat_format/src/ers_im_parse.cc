@@ -191,6 +191,18 @@ inline void CalculatePrf(uint16_t pri_code, double& pri, double& prf) {
 
 namespace alus::asar::envformat {
 
+std::vector<ForecastMeta> FetchErsL0ImForecastMeta(const std::vector<char>& file_data, const DSD_lvl0& mdsr,
+                                                   boost::posix_time::ptime packets_start_filter,
+                                                   boost::posix_time::ptime packets_stop_filter,
+                                                   size_t& packets_before_start, size_t& packets_after_stop) {
+    (void)file_data;
+    (void)mdsr;
+    (void)packets_start_filter;
+    (void)packets_stop_filter;
+
+    return {};
+}
+
 void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0& mdsr, SARMetadata& sar_meta,
                              ASARMetadata& asar_meta, cufftComplex** d_parsed_packets, InstrumentFile& ins_file,
                              boost::posix_time::ptime packets_start_filter,
@@ -211,8 +223,7 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     std::vector<EchoMeta> echoes;
     echoes.reserve(mdsr.num_dsr);
     const auto alloc_bytes_for_raw_samples = mdsr.num_dsr * ers::highrate::MEASUREMENT_DATA_SIZE_BYTES;
-    LOGD << "Reserving " << alloc_bytes_for_raw_samples / (1 << 20)
-         << "MiB for raw samples ("
+    LOGD << "Reserving " << alloc_bytes_for_raw_samples / (1 << 20) << "MiB for raw samples ("
          << ers::highrate::MEASUREMENT_DATA_SIZE_BYTES << "x" << mdsr.num_dsr << ")";
     std::unique_ptr<uint8_t[]> echoes_raw(new uint8_t[alloc_bytes_for_raw_samples]);
 #if DEBUG_PACKETS
@@ -576,8 +587,9 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         swst_codes.push_back(echoes.at(y).swst_code);
         sar_meta.total_raw_samples += ers::highrate::MEASUREMENT_DATA_SAMPLE_COUNT;
     }
-    envformat::ConvertErsImSamplesToComplex(echoes_raw.get(), ers::highrate::MEASUREMENT_DATA_SAMPLE_COUNT, echoes.size(), swst_codes.data(), min_swst,
-                                            *d_parsed_packets, sar_meta.img.range_size);
+    envformat::ConvertErsImSamplesToComplex(echoes_raw.get(), ers::highrate::MEASUREMENT_DATA_SAMPLE_COUNT,
+                                            echoes.size(), swst_codes.data(), min_swst, *d_parsed_packets,
+                                            sar_meta.img.range_size);
     // TODO init guess handling? At the moment just a naive guess from nadir point
     double init_guess_lat = (asar_meta.start_nadir_lat + asar_meta.stop_nadir_lat) / 2;
     double init_guess_lon = asar_meta.start_nadir_lon;

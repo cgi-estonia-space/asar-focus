@@ -28,11 +28,6 @@
 #include "sar/orbit_state_vector.h"
 #include "sar/sar_metadata.h"
 
-/**
- * Envisat LVL0 IM file parser, ex ASA_IM__0PNPDE20040111_085939_000000182023_00179_09752_2307.N1
- * Extracts RAW echo data and relevant metadata needed for SAR focussing
- */
-
 struct ASARMetadata {
     std::string lvl0_file_name;
     std::string product_name;
@@ -126,11 +121,38 @@ struct ASARMetadata {
 
 namespace alus::asar::envformat {
 
+struct ForecastMeta {
+    size_t packet_start_offset_bytes;
+    mjd isp_sensing_time;
+};
+
+struct CommonPacketMetadata {
+    mjd sensing_time;
+    uint16_t swst_code;
+    uint16_t pri_code;
+    uint64_t onboard_time;
+    uint16_t sample_count;                    // Count of measurement I/Q samples, not equal to bytes.
+    uint16_t measurement_array_length_bytes;  // Including any block information etc...
+};
+
+struct RawSampleMeasurements {
+    std::unique_ptr<uint8_t[]> raw_samples;
+    size_t single_entry_length; // Length in bytes of the maximum sample measurement record, including block id etc.
+    size_t entries_total;
+    size_t total_samples;
+};
+
+DSD_lvl0 ParseSphAndGetMdsr(ASARMetadata& asar_meta, const SARMetadata& sar_meta, const std::vector<char>& file_data);
+std::vector<ForecastMeta> FetchMeta(const std::vector<char>& file_data, boost::posix_time::ptime packets_start_filter,
+                                    boost::posix_time::ptime packets_stop_filter,
+                                    specification::ProductTypes product_type, size_t& packets_before_start,
+                                    size_t& packets_after_stop);
+
 void ParseLevel0Header(const std::vector<char>& file_data, ASARMetadata& asar_meta);
-void ParseLevel0Packets(const std::vector<char>& file_data, SARMetadata& sar_meta, ASARMetadata& asar_meta,
-                        cufftComplex** d_parsed_packets, alus::asar::specification::ProductTypes product_type,
-                        InstrumentFile& ins_file,
-                        boost::posix_time::ptime packets_start_filter = boost::posix_time::not_a_date_time,
-                        boost::posix_time::ptime packets_stop_filter = boost::posix_time::not_a_date_time);
+
+RawSampleMeasurements ParseLevel0Packets(const std::vector<char>& file_data, size_t mdsr_offset_bytes,
+                                         const std::vector<ForecastMeta>& entries_to_be_parsed,
+                                         alus::asar::specification::ProductTypes product_type, InstrumentFile& ins_file,
+                                         std::vector<CommonPacketMetadata>& common_metadata);
 
 }  // namespace alus::asar::envformat

@@ -114,13 +114,36 @@ int main(int argc, char* argv[]) {
         alus::asar::mainflow::FetchAuxFiles(ins_file, conf_file, asar_meta, product_type, args.GetAuxPath());
         const auto target_product_type =
             alus::asar::specification::TryDetermineTargetProductFrom(product_type, args.GetFocussedProductType());
-        (void)target_product_type;
+        cufftComplex* d_parsed_packets;
+        // Get packets' sensing start/end ... from which can be decided offset in binary and windowing offset?
+        const auto fetch_meta_start = TimeStart();
+        // Default request is 1000 before and after, which should be enough.
+        // It would not influence performance on GPU anyway.
+        size_t packets_before_sensing_start{1000};
+        size_t packets_after_sensing_stop{packets_before_sensing_start};
+        // Will skip all non echo ones if in the beginning.
+        const auto packets_fetch_meta =
+            alus::asar::envformat::FetchMeta(data, asar_meta.sensing_start, asar_meta.sensing_stop, product_type,
+                                             packets_before_sensing_start, packets_after_sensing_stop);
+        // Make sure that there are enough packets! (lets say minimum is 100)
+        TimeStop(fetch_meta_start, "Metadata forecast fetch.");
+        const auto& mdsr = alus::asar::envformat::ParseSphAndGetMdsr(asar_meta, metadata, data);
+        std::vector<alus::asar::envformat::CommonPacketMetadata> packets_metadata(packets_fetch_meta.size());
+        LOGD << "Fetching measurements from " << MjdToPtime(packets_fetch_meta.front().isp_sensing_time)
+            << " until " << MjdToPtime(packets_fetch_meta.back().isp_sensing_time);
+        LOGD << "That makes " << packets_before_sensing_start << " packets before and " << packets_after_sensing_stop
+            << " packets after the assigned sensing start and stop";
+        // Next level would be to allocate RAM buffer array async ahead - even if too much, but on average basis based
+        // on sensing period and mode.
+        const auto compressed_measurements = alus::asar::envformat::ParseLevel0Packets(
+            data, mdsr.ds_offset, packets_fetch_meta, product_type, ins_file, packets_metadata);
+
+        LOGD << "Total fetched meta for forecast - " << packets_fetch_meta.size();
+        LOGD << "Total parsed L0 packet - " << metadata.img.azimuth_size;
+
         while (!cuda_init.IsFinished())
             ;
         cuda_init.CheckErrors();
-        cufftComplex* d_parsed_packets;
-        alus::asar::envformat::ParseLevel0Packets(data, metadata, asar_meta, &d_parsed_packets, product_type, ins_file,
-                                                  asar_meta.sensing_start, asar_meta.sensing_stop);
 
         {
             const auto& orbit_l1_metadata = orbit_source.GetL1ProductMetadata();
@@ -187,6 +210,7 @@ int main(int argc, char* argv[]) {
         auto chirp = GenerateChirpData(metadata.chirp, rg_padded);
 
         auto dc_start = TimeStart();
+        // Element from the back() indicates polynomial starting value.
         metadata.results.doppler_centroid_poly = CalculateDopplerCentroid(img, metadata.pulse_repetition_frequency);
         TimeStop(dc_start, "fractional DC estimation");
 

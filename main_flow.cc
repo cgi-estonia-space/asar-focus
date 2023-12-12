@@ -14,6 +14,8 @@
 
 #include <boost/date_time/posix_time/posix_time.hpp>
 
+#include "fmt/format.h"
+
 #include "alus_log.h"
 #include "date_time_util.h"
 #include "envisat_format_kernels.h"
@@ -166,6 +168,170 @@ void StoreIntensity(std::string output_path, std::string product_name, std::stri
     std::string path = output_path + "/";
     path += product_name + "_" + postfix + ".tif";
     WriteIntensityPaddedImg(dev_padded_img, path.c_str());
+}
+
+void AssembleMetadatFrom(const std::vector<envformat::CommonPacketMetadata>& parsed_meta, ASARMetadata& asar_meta,
+                         SARMetadata& sar_meta, InstrumentFile& ins_file,
+                         alus::asar::specification::ProductTypes product_type) {
+    uint16_t min_swst = UINT16_MAX;
+    uint16_t max_swst = 0;
+    uint16_t swst_changes = 0;
+    uint16_t prev_swst = parsed_meta.front().swst_code;
+    const int swst_multiplier{1};
+
+    asar_meta.first_swst_code = parsed_meta.front().swst_code;
+    asar_meta.last_swst_code = parsed_meta.back().swst_code;
+    if (product_type) {
+        asar_meta.tx_bw_code = echoes.front().chirp_pulse_bw_code;
+        asar_meta.up_code = echoes.front().upconverter_raw;
+        asar_meta.down_code = echoes.front().downconverter_raw;
+        asar_meta.tx_pulse_len_code = echoes.front().tx_pulse_code;
+        asar_meta.beam_set_num_code = echoes.front().antenna_beam_set_no;
+        asar_meta.beam_adj_code = echoes.front().beam_adj_delta;
+        asar_meta.resamp_code = echoes.front().resampling_factor;
+    }
+    asar_meta.pri_code = parsed_meta.front().pri_code;
+    asar_meta.first_mjd = parsed_meta.front().sensing_time;
+    asar_meta.first_sbt = parsed_meta.front().onboard_time;
+    asar_meta.last_mjd = parsed_meta.back().sensing_time;
+    asar_meta.last_sbt = parsed_meta.back().onboard_time;
+
+    std::vector<float> v;
+    for (auto& e : parsed_meta) {
+        if (prev_swst != e.swst_code) {
+            prev_swst = e.swst_code;
+            swst_changes++;
+        }
+        min_swst = std::min(min_swst, e.swst_code);
+        max_swst = std::max(max_swst, e.swst_code);
+    }
+
+    int swath_idx = SwathIdx(asar_meta.swath);
+    LOGD << "Swath = " << asar_meta.swath << " idx = " << swath_idx;
+
+    asar_meta.swst_changes = swst_changes;
+
+    asar_meta.first_line_time = MjdToPtime(parsed_meta.front().sensing_time);
+    asar_meta.sensing_start = asar_meta.first_line_time;
+    asar_meta.last_line_time = MjdToPtime(parsed_meta.back().sensing_time);
+    asar_meta.sensing_stop = asar_meta.last_line_time;
+
+    double pulse_bw = 16e6 / 255 * echoes.front().chirp_pulse_bw_code;
+
+    sar_meta.chirp.pulse_bandwidth = pulse_bw;
+
+    sar_meta.chirp.Kr = ins_file.flp.im_chirp[swath_idx].phase[2] * 2;  // TODO Envisat format multiply by 2?
+    sar_meta.chirp.pulse_duration = ins_file.flp.im_chirp[swath_idx].duration;
+    sar_meta.chirp.n_samples = std::round(sar_meta.chirp.pulse_duration / (1 / sar_meta.chirp.range_sampling_rate));
+
+    sar_meta.chirp.pulse_bandwidth = sar_meta.chirp.Kr * sar_meta.chirp.pulse_duration;
+    LOGD << fmt::format("Chirp Kr = {}, n_samp = {}", sar_meta.chirp.Kr, sar_meta.chirp.n_samples);
+    LOGD << fmt::format("tx pulse calc dur = {}",
+                        asar_meta.tx_pulse_len_code * (1 / sar_meta.chirp.range_sampling_rate));
+    LOGD << fmt::format("Nominal chirp duration = {}", sar_meta.chirp.pulse_duration);
+    LOGD << fmt::format("Calculated chirp BW = {} , meta bw = {}", sar_meta.chirp.pulse_bandwidth, pulse_bw);
+
+    const size_t range_samples = max_samples + swst_multiplier * (max_swst - min_swst);
+    LOGD << fmt::format("range samples = {}, minimum range padded size = {}", range_samples,
+                        range_samples + sar_meta.chirp.n_samples);
+
+    constexpr double c = 299792458;
+
+    constexpr uint32_t im_idx = 0;
+    const uint32_t n_pulses_swst = ins_file.fbp.mode_timelines[im_idx].r_values[swath_idx];
+
+    LOGD << "n PRI before SWST = " << n_pulses_swst;
+    LOGD << "SWST changes " << swst_changes << " MIN|MAX SWST " << min_swst << "|" << max_swst;
+
+    asar_meta.swst_rank = n_pulses_swst;
+
+    // TODO Range gate bias must be included in this calculation
+    sar_meta.pulse_repetition_frequency = sar_meta.chirp.range_sampling_rate / parsed_meta.front().pri_code;
+    asar_meta.two_way_slant_range_time =
+        (min_swst + n_pulses_swst * parsed_meta.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate);
+
+    LOGD << "PRF " << sar_meta.pulse_repetition_frequency << " PRI " << 1 / sar_meta.pulse_repetition_frequency;
+    sar_meta.slant_range_first_sample = asar_meta.two_way_slant_range_time * c / 2;
+    sar_meta.wavelength = c / sar_meta.carrier_frequency;
+    sar_meta.range_spacing = c / (2 * sar_meta.chirp.range_sampling_rate);
+
+    LOGD << fmt::format("Carrier frequency: {} Range sampling rate = {}", sar_meta.carrier_frequency,
+                        sar_meta.chirp.range_sampling_rate);
+    LOGD << fmt::format("Slant range to first sample = {} m two way slant time {} ns",
+                        sar_meta.slant_range_first_sample, asar_meta.two_way_slant_range_time * 1e9);
+
+    sar_meta.platform_velocity = CalcVelocity(sar_meta.osv[sar_meta.osv.size() / 2]);
+    // Ground speed ~12% less than platform velocity. 4.2.1 from "Digital processing of SAR Data"
+    // TODO should it be calculated more precisely?
+    const double Vg = sar_meta.platform_velocity * 0.88;
+    sar_meta.results.Vr_poly = {0, 0, sqrt(Vg * sar_meta.platform_velocity)};
+    LOGD << "platform velocity = " << sar_meta.platform_velocity << ", initial Vr = " << CalcVr(sar_meta, 0);
+    sar_meta.azimuth_spacing = Vg * (1 / sar_meta.pulse_repetition_frequency);
+
+    sar_meta.img.range_size = range_samples;
+    sar_meta.img.azimuth_size = echoes.size();
+
+    const auto range_az_total_items = sar_meta.img.range_size * sar_meta.img.azimuth_size;
+    const auto range_az_total_bytes = range_az_total_items * sizeof(cufftComplex);
+    CHECK_CUDA_ERR(cudaMalloc(d_parsed_packets, range_az_total_bytes));
+    constexpr auto CLEAR_VALUE = NAN;
+    constexpr cufftComplex CLEAR_VALUE_COMPLEX{CLEAR_VALUE, CLEAR_VALUE};
+    static_assert(sizeof(CLEAR_VALUE_COMPLEX) == sizeof(CLEAR_VALUE) * 2);
+    cuda::algorithm::Fill(*d_parsed_packets, range_az_total_items, CLEAR_VALUE_COMPLEX);
+
+    std::vector<uint16_t> swst_codes;
+    swst_codes.reserve(echoes.size());
+    for (size_t y = 0; y < echoes.size(); y++) {
+        const auto& e = echoes[y];
+        swst_codes.push_back(e.swst_code);
+    }
+
+    std::vector<float> i_lut(4096);
+    memcpy(i_lut.data(), ins_file.fbp.i_LUT_fbaq4, 4096 * sizeof(float));
+    std::vector<float> q_lut(4096);
+    memcpy(q_lut.data(), ins_file.fbp.q_LUT_fbaq4, 4096 * sizeof(float));
+    ConvertAsarImBlocksToComplex(
+        compressed_sample_blocks_buffer, compressed_sample_blocks_with_length_single_range_item_bytes, echoes.size(),
+        swst_codes.data(), min_swst, *d_parsed_packets, sar_meta.img.range_size, i_lut.data(), q_lut.data(), 4096);
+
+    // TODO init guess handling? At the moment just a naive guess from nadir point
+    double init_guess_lat = (asar_meta.start_nadir_lat + asar_meta.stop_nadir_lat) / 2;
+    double init_guess_lon = asar_meta.start_nadir_lon;
+    if (asar_meta.ascending) {
+        init_guess_lon += 1.0 + 2.0 * swath_idx;
+        if (init_guess_lon >= 180.0) {
+            init_guess_lon -= 360;
+        }
+    } else {
+        init_guess_lon -= 1.0 + 2.0 * swath_idx;
+        if (init_guess_lon <= 180.0) {
+            init_guess_lon += 360.0;
+        }
+    }
+
+    LOGD << fmt::format("nadirs start {} {} - stop  {} {}", asar_meta.start_nadir_lat, asar_meta.start_nadir_lon,
+                        asar_meta.stop_nadir_lat, asar_meta.stop_nadir_lon);
+
+    LOGD << fmt::format("guess = {} {}", init_guess_lat, init_guess_lon);
+
+    auto init_xyz = Geo2xyzWgs84(init_guess_lat, init_guess_lon, 0);
+
+    double center_s = (1 / sar_meta.pulse_repetition_frequency) * sar_meta.img.azimuth_size / 2;
+    auto center_time = asar_meta.sensing_start + boost::posix_time::microseconds(static_cast<uint32_t>(center_s * 1e6));
+
+    // TODO investigate fast time effect on geolocation
+    double slant_range_center = sar_meta.slant_range_first_sample +
+                                ((sar_meta.img.range_size - sar_meta.chirp.n_samples) / 2) * sar_meta.range_spacing;
+
+    auto osv = InterpolateOrbit(sar_meta.osv, center_time);
+
+    sar_meta.center_point = RangeDopplerGeoLocate({osv.x_vel, osv.y_vel, osv.z_vel}, {osv.x_pos, osv.y_pos, osv.z_pos},
+                                                  init_xyz, slant_range_center);
+    sar_meta.center_time = center_time;
+    sar_meta.first_line_time = asar_meta.sensing_start;
+    sar_meta.azimuth_bandwidth_fraction = 0.8f;
+    auto llh = xyz2geoWGS84(sar_meta.center_point);
+    LOGD << "center point = " << llh.latitude << " " << llh.longitude;
 }
 
 }  // namespace alus::asar::mainflow
