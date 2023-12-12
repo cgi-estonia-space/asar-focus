@@ -28,6 +28,15 @@ TEST(EnvisatTypesMjd, EqualsOperator) {
     EXPECT_THAT(a == a, IsTrue());
 }
 
+TEST(EnvisatTypesMjd, NotEqualsOperator) {
+    mjd a{10, 10, 10};
+    mjd b{10, 10, 11};
+    EXPECT_THAT(a != b, IsTrue());
+    b.micros = 10;
+    EXPECT_THAT(a != b, IsFalse());
+    EXPECT_THAT(a != a, IsFalse());
+}
+
 TEST(EnvisatTypesMjd, EqualsAreNotLessOrGreater) {
     mjd a{10, 10, 10};
     mjd b{10, 10, 10};

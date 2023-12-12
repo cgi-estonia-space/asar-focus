@@ -43,6 +43,11 @@ void FormatResults(DevicePaddedImage& img, char* dest_space, size_t record_heade
 void StorePlots(std::string output_path, std::string product_name, const SARMetadata& sar_metadata,
                 const std::vector<std::complex<float>>& chirp);
 
-void StoreIntensity(std::string output_path, std::string product_name, std::string postfix, const DevicePaddedImage& dev_padded_img);
+void StoreIntensity(std::string output_path, std::string product_name, std::string postfix,
+                    const DevicePaddedImage& dev_padded_img);
+
+void AssembleMetadataFrom(const std::vector<envformat::CommonPacketMetadata>& parsed_meta, ASARMetadata& asar_meta,
+                          SARMetadata& sar_meta, InstrumentFile& ins_file,
+                          alus::asar::specification::ProductTypes product_type);
 
 }  // namespace alus::asar::mainflow

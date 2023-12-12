@@ -81,7 +81,7 @@ ProductTypes TryDetermineTargetProductFrom(ProductTypes in_product, std::string_
     }
 
     throw std::runtime_error("Focussing '" + std::string(user_defined_target_type) +
-                             "' product from given input is not supported.");
+                             "' product from given input is not supported or valid.");
 }
 
 }  // namespace alus::asar::specification
