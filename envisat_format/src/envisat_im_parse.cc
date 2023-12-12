@@ -283,7 +283,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
     LOGD << "Reserving " << alloc_bytes_for_sample_blocks_with_length / (1 << 20)
          << "MiB for raw sample blocks buffer including prepending 2 byte length marker ("
          << compressed_sample_blocks_with_length_single_range_item_bytes << "x" << mdsr.num_dsr << ")";
-    uint8_t* compressed_sample_blocks_buffer = new uint8_t[alloc_bytes_for_sample_blocks_with_length];
+    std::unique_ptr<uint8_t[]> compressed_sample_blocks_buffer(new uint8_t[alloc_bytes_for_sample_blocks_with_length]);
 
     size_t max_samples{};
     size_t compressed_sample_measurements_stored_in_buf{};
@@ -447,7 +447,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
             uint16_t sample_blocks_length = static_cast<uint16_t>(data_len);
             const auto sample_blocks_offset_bytes =
                 (echoes.size() * compressed_sample_blocks_with_length_single_range_item_bytes);
-            const auto sample_blocks_buffer_start = compressed_sample_blocks_buffer + sample_blocks_offset_bytes;
+            const auto sample_blocks_buffer_start = compressed_sample_blocks_buffer.get() + sample_blocks_offset_bytes;
             memcpy(sample_blocks_buffer_start, &sample_blocks_length, sizeof(sample_blocks_length));
             memcpy(sample_blocks_buffer_start + 2, it, data_len);
             compressed_sample_measurements_stored_in_buf++;
@@ -467,9 +467,9 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
                 const auto prf = (sar_meta.chirp.range_sampling_rate / copy_echo.pri_code);
                 const auto micros_to_add = static_cast<ul>((1 / prf) * 10e5);
                 copy_echo.isp_sensing_time = MjdAddMicros(copy_echo.isp_sensing_time, micros_to_add);
-                memcpy(compressed_sample_blocks_buffer +
+                memcpy(compressed_sample_blocks_buffer.get() +
                            echoes.size() * compressed_sample_blocks_with_length_single_range_item_bytes,
-                       compressed_sample_blocks_buffer +
+                       compressed_sample_blocks_buffer.get() +
                            (echoes.size() - 1) * compressed_sample_blocks_with_length_single_range_item_bytes,
                        compressed_sample_blocks_with_length_single_range_item_bytes);
                 compressed_sample_measurements_stored_in_buf++;
@@ -634,9 +634,10 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
     memcpy(i_lut.data(), ins_file.fbp.i_LUT_fbaq4, 4096 * sizeof(float));
     std::vector<float> q_lut(4096);
     memcpy(q_lut.data(), ins_file.fbp.q_LUT_fbaq4, 4096 * sizeof(float));
-    ConvertAsarImBlocksToComplex(
-        compressed_sample_blocks_buffer, compressed_sample_blocks_with_length_single_range_item_bytes, echoes.size(),
-        swst_codes.data(), min_swst, *d_parsed_packets, sar_meta.img.range_size, i_lut.data(), q_lut.data(), 4096);
+    ConvertAsarImBlocksToComplex(compressed_sample_blocks_buffer.get(),
+                                 compressed_sample_blocks_with_length_single_range_item_bytes, echoes.size(),
+                                 swst_codes.data(), min_swst, *d_parsed_packets, sar_meta.img.range_size, i_lut.data(),
+                                 q_lut.data(), 4096);
 
     // TODO init guess handling? At the moment just a naive guess from nadir point
     double init_guess_lat = (asar_meta.start_nadir_lat + asar_meta.stop_nadir_lat) / 2;
