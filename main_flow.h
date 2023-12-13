@@ -47,7 +47,14 @@ void StoreIntensity(std::string output_path, std::string product_name, std::stri
                     const DevicePaddedImage& dev_padded_img);
 
 void AssembleMetadataFrom(const std::vector<envformat::CommonPacketMetadata>& parsed_meta, ASARMetadata& asar_meta,
-                          SARMetadata& sar_meta, InstrumentFile& ins_file,
+                          SARMetadata& sar_meta, InstrumentFile& ins_file, size_t max_samples_at_range,
                           alus::asar::specification::ProductTypes product_type);
+
+// d_converted_measurements could be CudaWorkspace array now since we can estimate FFT beforehand when parsing metadata
+// separately now.
+void ConvertRawSampleSetsToComplex(const envformat::RawSampleMeasurements& raw_measurements,
+                                   const std::vector<envformat::CommonPacketMetadata>& parsed_meta,
+                                   const SARMetadata& sar_meta, const InstrumentFile& ins_file,
+                                   specification::ProductTypes product_type, cufftComplex** d_converted_measurements);
 
 }  // namespace alus::asar::mainflow

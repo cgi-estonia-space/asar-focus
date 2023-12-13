@@ -17,8 +17,10 @@
 #include "fmt/format.h"
 
 #include "alus_log.h"
+#include "cuda_algorithm.h"
 #include "date_time_util.h"
 #include "envisat_format_kernels.h"
+#include "envisat_utils.h"
 #include "ers_aux_file.h"
 #include "img_output.h"
 #include "plot.h"
@@ -72,8 +74,8 @@ void CheckAndLimitSensingStartEnd(boost::posix_time::ptime& product_sensing_star
 }
 
 specification::ProductTypes TryDetermineProductType(std::string_view product_name) {
-    alus::asar::specification::ProductTypes product_type = alus::asar::specification::GetProductTypeFrom(product_name);
-    if (product_type == alus::asar::specification::ProductTypes::UNIDENTIFIED) {
+    specification::ProductTypes product_type = specification::GetProductTypeFrom(product_name);
+    if (product_type == specification::ProductTypes::UNIDENTIFIED) {
         LOGE << "This product is not supported - " << product_name;
         exit(alus::asar::status::EXIT_CODE::UNSUPPORTED_DATASET);
     }
@@ -171,24 +173,25 @@ void StoreIntensity(std::string output_path, std::string product_name, std::stri
 }
 
 void AssembleMetadatFrom(const std::vector<envformat::CommonPacketMetadata>& parsed_meta, ASARMetadata& asar_meta,
-                         SARMetadata& sar_meta, InstrumentFile& ins_file,
+                         SARMetadata& sar_meta, InstrumentFile& ins_file, size_t max_samples_at_range,
                          alus::asar::specification::ProductTypes product_type) {
     uint16_t min_swst = UINT16_MAX;
     uint16_t max_swst = 0;
     uint16_t swst_changes = 0;
     uint16_t prev_swst = parsed_meta.front().swst_code;
-    const int swst_multiplier{1};
+    const auto instrument = specification::GetInstrumentFrom(product_type);
+    const int swst_multiplier{instrument == specification::Instrument::ASAR ? 1 : 4};
 
     asar_meta.first_swst_code = parsed_meta.front().swst_code;
     asar_meta.last_swst_code = parsed_meta.back().swst_code;
-    if (product_type) {
-        asar_meta.tx_bw_code = echoes.front().chirp_pulse_bw_code;
-        asar_meta.up_code = echoes.front().upconverter_raw;
-        asar_meta.down_code = echoes.front().downconverter_raw;
-        asar_meta.tx_pulse_len_code = echoes.front().tx_pulse_code;
-        asar_meta.beam_set_num_code = echoes.front().antenna_beam_set_no;
-        asar_meta.beam_adj_code = echoes.front().beam_adj_delta;
-        asar_meta.resamp_code = echoes.front().resampling_factor;
+    if (instrument == specification::Instrument::ASAR) {
+        asar_meta.tx_bw_code = parsed_meta.front().asar.chirp_pulse_bw_code;
+        asar_meta.up_code = parsed_meta.front().asar.upconverter_raw;
+        asar_meta.down_code = parsed_meta.front().asar.downconverter_raw;
+        asar_meta.tx_pulse_len_code = parsed_meta.front().asar.tx_pulse_code;
+        asar_meta.beam_set_num_code = parsed_meta.front().asar.antenna_beam_set_no;
+        asar_meta.beam_adj_code = parsed_meta.front().asar.beam_adj_delta;
+        asar_meta.resamp_code = parsed_meta.front().asar.resampling_factor;
     }
     asar_meta.pri_code = parsed_meta.front().pri_code;
     asar_meta.first_mjd = parsed_meta.front().sensing_time;
@@ -196,7 +199,6 @@ void AssembleMetadatFrom(const std::vector<envformat::CommonPacketMetadata>& par
     asar_meta.last_mjd = parsed_meta.back().sensing_time;
     asar_meta.last_sbt = parsed_meta.back().onboard_time;
 
-    std::vector<float> v;
     for (auto& e : parsed_meta) {
         if (prev_swst != e.swst_code) {
             prev_swst = e.swst_code;
@@ -206,7 +208,7 @@ void AssembleMetadatFrom(const std::vector<envformat::CommonPacketMetadata>& par
         max_swst = std::max(max_swst, e.swst_code);
     }
 
-    int swath_idx = SwathIdx(asar_meta.swath);
+    int swath_idx = envformat::SwathIdx(asar_meta.swath);
     LOGD << "Swath = " << asar_meta.swath << " idx = " << swath_idx;
 
     asar_meta.swst_changes = swst_changes;
@@ -216,7 +218,7 @@ void AssembleMetadatFrom(const std::vector<envformat::CommonPacketMetadata>& par
     asar_meta.last_line_time = MjdToPtime(parsed_meta.back().sensing_time);
     asar_meta.sensing_stop = asar_meta.last_line_time;
 
-    double pulse_bw = 16e6 / 255 * echoes.front().chirp_pulse_bw_code;
+    double pulse_bw = 16e6 / 255 * parsed_meta.front().asar.chirp_pulse_bw_code;
 
     sar_meta.chirp.pulse_bandwidth = pulse_bw;
 
@@ -231,7 +233,7 @@ void AssembleMetadatFrom(const std::vector<envformat::CommonPacketMetadata>& par
     LOGD << fmt::format("Nominal chirp duration = {}", sar_meta.chirp.pulse_duration);
     LOGD << fmt::format("Calculated chirp BW = {} , meta bw = {}", sar_meta.chirp.pulse_bandwidth, pulse_bw);
 
-    const size_t range_samples = max_samples + swst_multiplier * (max_swst - min_swst);
+    const size_t range_samples = max_samples_at_range + swst_multiplier * (max_swst - min_swst);
     LOGD << fmt::format("range samples = {}, minimum range padded size = {}", range_samples,
                         range_samples + sar_meta.chirp.n_samples);
 
@@ -269,30 +271,7 @@ void AssembleMetadatFrom(const std::vector<envformat::CommonPacketMetadata>& par
     sar_meta.azimuth_spacing = Vg * (1 / sar_meta.pulse_repetition_frequency);
 
     sar_meta.img.range_size = range_samples;
-    sar_meta.img.azimuth_size = echoes.size();
-
-    const auto range_az_total_items = sar_meta.img.range_size * sar_meta.img.azimuth_size;
-    const auto range_az_total_bytes = range_az_total_items * sizeof(cufftComplex);
-    CHECK_CUDA_ERR(cudaMalloc(d_parsed_packets, range_az_total_bytes));
-    constexpr auto CLEAR_VALUE = NAN;
-    constexpr cufftComplex CLEAR_VALUE_COMPLEX{CLEAR_VALUE, CLEAR_VALUE};
-    static_assert(sizeof(CLEAR_VALUE_COMPLEX) == sizeof(CLEAR_VALUE) * 2);
-    cuda::algorithm::Fill(*d_parsed_packets, range_az_total_items, CLEAR_VALUE_COMPLEX);
-
-    std::vector<uint16_t> swst_codes;
-    swst_codes.reserve(echoes.size());
-    for (size_t y = 0; y < echoes.size(); y++) {
-        const auto& e = echoes[y];
-        swst_codes.push_back(e.swst_code);
-    }
-
-    std::vector<float> i_lut(4096);
-    memcpy(i_lut.data(), ins_file.fbp.i_LUT_fbaq4, 4096 * sizeof(float));
-    std::vector<float> q_lut(4096);
-    memcpy(q_lut.data(), ins_file.fbp.q_LUT_fbaq4, 4096 * sizeof(float));
-    ConvertAsarImBlocksToComplex(
-        compressed_sample_blocks_buffer, compressed_sample_blocks_with_length_single_range_item_bytes, echoes.size(),
-        swst_codes.data(), min_swst, *d_parsed_packets, sar_meta.img.range_size, i_lut.data(), q_lut.data(), 4096);
+    sar_meta.img.azimuth_size = parsed_meta.size();
 
     // TODO init guess handling? At the moment just a naive guess from nadir point
     double init_guess_lat = (asar_meta.start_nadir_lat + asar_meta.stop_nadir_lat) / 2;
@@ -332,6 +311,39 @@ void AssembleMetadatFrom(const std::vector<envformat::CommonPacketMetadata>& par
     sar_meta.azimuth_bandwidth_fraction = 0.8f;
     auto llh = xyz2geoWGS84(sar_meta.center_point);
     LOGD << "center point = " << llh.latitude << " " << llh.longitude;
+}
+
+void ConvertRawSampleSetsToComplex(const envformat::RawSampleMeasurements& raw_measurements,
+                                   const std::vector<envformat::CommonPacketMetadata>& parsed_meta,
+                                   const SARMetadata& sar_meta, const InstrumentFile& ins_file,
+                                   specification::ProductTypes product_type, cufftComplex** d_converted_measurements) {
+    const auto range_az_total_items = sar_meta.img.range_size * sar_meta.img.azimuth_size;
+    const auto range_az_total_bytes = range_az_total_items * sizeof(cufftComplex);
+    CHECK_CUDA_ERR(cudaMalloc(d_converted_measurements, range_az_total_bytes));
+    constexpr auto CLEAR_VALUE = NAN;
+    constexpr cufftComplex CLEAR_VALUE_COMPLEX{CLEAR_VALUE, CLEAR_VALUE};
+    static_assert(sizeof(CLEAR_VALUE_COMPLEX) == sizeof(CLEAR_VALUE) * 2);
+    cuda::algorithm::Fill(*d_converted_measurements, range_az_total_items, CLEAR_VALUE_COMPLEX);
+
+    std::vector<uint16_t> swst_codes;
+    uint16_t min_swst{UINT16_MAX};
+    swst_codes.reserve(parsed_meta.size());
+    for (const auto& pm : parsed_meta) {
+        swst_codes.push_back(pm.swst_code);
+        min_swst = std::min(min_swst, pm.swst_code);
+    }
+
+    (void)product_type;
+
+    std::vector<float> i_lut(4096);
+    memcpy(i_lut.data(), ins_file.fbp.i_LUT_fbaq4, 4096 * sizeof(float));
+    std::vector<float> q_lut(4096);
+    memcpy(q_lut.data(), ins_file.fbp.q_LUT_fbaq4, 4096 * sizeof(float));
+    // Single entry length does not include 2 bytes of block data byte length.
+    envformat::ConvertAsarImBlocksToComplex(raw_measurements.raw_samples.get(),
+                                            raw_measurements.single_entry_length + 2, raw_measurements.entries_total,
+                                            swst_codes.data(), min_swst, *d_converted_measurements,
+                                            sar_meta.img.range_size, i_lut.data(), q_lut.data(), 4096);
 }
 
 }  // namespace alus::asar::mainflow

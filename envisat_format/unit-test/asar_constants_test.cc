@@ -41,4 +41,19 @@ TEST(AsarSpecification, TryDetermineTargetProductFromReturnsCorrectly) {
                 Eq(alus::asar::specification::ProductTypes::ASA_IMS));
 }
 
+TEST(AsarSpecification, GetInstrumentFromReturnsCorrectly) {
+    EXPECT_THAT(alus::asar::specification::GetInstrumentFrom(alus::asar::specification::ProductTypes::SAR_IM0),
+                Eq(alus::asar::specification::Instrument::SAR));
+    EXPECT_THAT(alus::asar::specification::GetInstrumentFrom(alus::asar::specification::ProductTypes::SAR_IMS),
+                Eq(alus::asar::specification::Instrument::SAR));
+    EXPECT_THAT(alus::asar::specification::GetInstrumentFrom(alus::asar::specification::ProductTypes::ASA_IM0),
+                Eq(alus::asar::specification::Instrument::ASAR));
+    EXPECT_THAT(alus::asar::specification::GetInstrumentFrom(alus::asar::specification::ProductTypes::ASA_IMS),
+                Eq(alus::asar::specification::Instrument::ASAR));
+    EXPECT_THROW(alus::asar::specification::GetInstrumentFrom(alus::asar::specification::ProductTypes::SAR_IMP),
+                 std::runtime_error);
+    EXPECT_THROW(alus::asar::specification::GetInstrumentFrom(alus::asar::specification::ProductTypes::UNIDENTIFIED),
+                 std::runtime_error);
+}
+
 }  // namespace

@@ -34,9 +34,15 @@ namespace alus::asar::specification {
         UNIDENTIFIED
     };
 
+    enum Instrument {
+        SAR,
+        ASAR
+    };
+
     constexpr std::string_view PRODUCT_NAME_SAR_IM0{"SAR_IM__0"};
     constexpr std::string_view PRODUCT_NAME_ASA_IM0{"ASA_IM__0"};
 
     ProductTypes GetProductTypeFrom(std::string_view product_name);
     ProductTypes TryDetermineTargetProductFrom(ProductTypes in_product, std::string_view user_defined_target_type);
+    Instrument GetInstrumentFrom(ProductTypes product);
 }

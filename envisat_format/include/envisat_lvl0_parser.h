@@ -121,6 +121,8 @@ struct ASARMetadata {
 
 namespace alus::asar::envformat {
 
+int SwathIdx(const std::string& swath);
+
 struct ForecastMeta {
     size_t packet_start_offset_bytes;
     mjd isp_sensing_time;
@@ -133,13 +135,24 @@ struct CommonPacketMetadata {
     uint64_t onboard_time;
     uint16_t sample_count;                    // Count of measurement I/Q samples, not equal to bytes.
     uint16_t measurement_array_length_bytes;  // Including any block information etc...
+
+    struct {
+        uint8_t chirp_pulse_bw_code;
+        uint8_t upconverter_raw;
+        uint8_t downconverter_raw;
+        uint16_t tx_pulse_code;
+        uint8_t antenna_beam_set_no;
+        uint8_t beam_adj_delta;
+        uint16_t resampling_factor;
+    } asar;
 };
 
 struct RawSampleMeasurements {
     std::unique_ptr<uint8_t[]> raw_samples;
     size_t single_entry_length; // Length in bytes of the maximum sample measurement record, including block id etc.
-    size_t entries_total;
-    size_t total_samples;
+    size_t entries_total; // How many lines in azimuth direction
+    size_t max_samples; // Maximum samples that the entries will consist. Can fluctuate.
+    size_t total_samples; // Total IQ samples collected over all of the range and azimuth directions.
 };
 
 DSD_lvl0 ParseSphAndGetMdsr(ASARMetadata& asar_meta, const SARMetadata& sar_meta, const std::vector<char>& file_data);
