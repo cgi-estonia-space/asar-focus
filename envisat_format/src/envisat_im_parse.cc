@@ -44,16 +44,6 @@ template <class T>
     return src + sizeof(T);
 }
 
-int SwathIdx(const std::string& swath) {
-    if (swath.size() == 3 && swath[0] == 'I' && swath[1] == 'S') {
-        char idx = swath[2];
-        if (idx >= '1' && idx <= '7') {
-            return idx - '1';
-        }
-    }
-    throw std::runtime_error("MDSR contains swath '" + swath + "' which is not supported or invalid.");
-}
-
 struct EchoMeta {
     mjd isp_sensing_time;
     uint8_t mode_id;
@@ -211,7 +201,7 @@ void InitializeCounters(const uint8_t* packets_start, uint16_t& sequence_control
         CopyBSwapPOD(sequence_control,
                      packets_start + sizeof(EchoMeta::isp_sensing_time) + sizeof(FEPAnnotations) + sizeof(uint16_t));
     sequence_control = sequence_control & 0x3FFF;
-    if (sequence_control != 0) {
+    if (sequence_control == 0) {
         sequence_control = SEQUENCE_CONTROL_MAX;
     } else {
         sequence_control--;
@@ -268,13 +258,9 @@ inline const uint8_t* FetchPacketFrom(const uint8_t* start, alus::asar::envforma
 
     const auto next_one = it + (fep.isp_length - datafield_length + 28);
 
-    it += 3;  // mode id etc...
-    it += 5;  // OBT
-    it++;     // Spare
-    it += 3;  // Mode count
-    it++;     // Antenna beam, comp ratio
-    is_echo = *it & 0x80;
-    is_cal = *it & 0x20;
+    uint8_t echo_cal_flags = it[12];
+    is_echo = echo_cal_flags & 0x80;
+    is_cal = echo_cal_flags & 0x20;
 
     return next_one;
 }
@@ -287,6 +273,14 @@ inline void TransferMetadata(const EchoMeta& echo_meta, uint16_t measurement_byt
     common_meta.swst_code = echo_meta.swst_code;
     common_meta.sample_count = echo_meta.raw_samples;
     common_meta.measurement_array_length_bytes = measurement_bytes_length;
+
+    common_meta.asar.chirp_pulse_bw_code = echo_meta.chirp_pulse_bw_code;
+    common_meta.asar.upconverter_raw = echo_meta.upconverter_raw;
+    common_meta.asar.downconverter_raw = echo_meta.downconverter_raw;
+    common_meta.asar.tx_pulse_code = echo_meta.tx_pulse_code;
+    common_meta.asar.antenna_beam_set_no = echo_meta.antenna_beam_set_no;
+    common_meta.asar.beam_adj_delta = echo_meta.beam_adj_delta;
+    common_meta.asar.resampling_factor = echo_meta.resampling_factor;
 }
 
 }  // namespace
@@ -305,15 +299,17 @@ std::vector<ForecastMeta> FetchEnvisatL0ImForecastMeta(const std::vector<char>& 
     const auto start_mjd = PtimeToMjd(packets_start_filter);
     const auto stop_mjd = PtimeToMjd(packets_stop_filter);
 
-    forecast_meta.push_back({});
     bool echo{false};
     bool cal{false};
     size_t i{};
     for (; i < mdsr.num_dsr; i++) {
-        auto& current_forecast_meta = forecast_meta.back();
-        current_forecast_meta.packet_start_offset_bytes = packets_start - next_packet;
-        next_packet = FetchPacketFrom(next_packet, current_forecast_meta, echo, cal);
-        if (forecast_meta.size() == 1 && !echo) {
+        ForecastMeta current_meta;
+        current_meta.packet_start_offset_bytes = next_packet - packets_start;
+        next_packet = FetchPacketFrom(next_packet, current_meta, echo, cal);
+
+        //LOGD << i << " " << MjdToPtime(current_meta.isp_sensing_time);
+
+        if (forecast_meta.size() == 0 && !echo) {
             continue;
         }
 
@@ -321,20 +317,32 @@ std::vector<ForecastMeta> FetchEnvisatL0ImForecastMeta(const std::vector<char>& 
             continue;
         }
 
-        if (current_forecast_meta.isp_sensing_time < start_mjd) {
+        if (current_meta.isp_sensing_time < start_mjd) {
             packets_before_requested_start++;
         }
 
-        if (current_forecast_meta.isp_sensing_time > stop_mjd) {
+        if (current_meta.isp_sensing_time > stop_mjd) {
             packets_after_requested_stop++;
         }
 
-        if (packets_after_requested_stop >= packets_after_stop) {
+        // In case the packets_after_stop is equal to 0. Delete one at the back.
+        if (packets_after_requested_stop > packets_after_stop) {
+            packets_after_requested_stop--;
             break;
         }
 
-        forecast_meta.push_back({});
+        forecast_meta.push_back(current_meta);
     }
+
+    //std::ofstream debug_stream("/tmp/fetch_meta.debug.csv");
+//    for (size_t j{}; j < 10; j++) {
+//        LOGD << j << " " << MjdToPtime(forecast_meta.at(j).isp_sensing_time);
+//    }
+//
+//    LOGD << "FROM the back";
+//    for (size_t j{forecast_meta.size() - 10}; j < forecast_meta.size(); j++) {
+//        LOGD << j << " " << MjdToPtime(forecast_meta.at(j).isp_sensing_time);
+//    }
 
     if (packets_before_requested_start > packets_before_start) {
         forecast_meta.erase(forecast_meta.begin(),
@@ -377,7 +385,9 @@ RawSampleMeasurements ParseEnvisatLevel0ImPackets(const std::vector<char>& file_
     const uint8_t* it = packets_start + entries_to_be_parsed.front().packet_start_offset_bytes;
     const auto num_dsr = entries_to_be_parsed.size();
 
-    const auto carrier_frequency = ins_file.flp.radar_frequency;
+    LOGD << MjdToPtime(entries_to_be_parsed.front().isp_sensing_time);
+    LOGD << entries_to_be_parsed.front().packet_start_offset_bytes;
+
     const auto range_sampling_rate = ins_file.flp.radar_sampling_rate;
 #if DEBUG_PACKETS
     std::vector<EnvisatFepAndPacketHeader> envisat_dbg_meta;
@@ -413,10 +423,9 @@ RawSampleMeasurements ParseEnvisatLevel0ImPackets(const std::vector<char>& file_
     size_t compressed_sample_measurement_sets_stored_in_buffer{};
     size_t packet_index{};
     for (const auto& entry : entries_to_be_parsed) {
+        it = packets_start + entry.packet_start_offset_bytes;
         EchoMeta echo_meta = {};
-#if HANDLE_DIAGNOSTICS
-        const auto* it_start = it;
-#endif
+
         // Source: ENVISAT-1 ASAR INTERPRETATION OF SOURCE PACKET DATA
         // PO-TN-MMS-SR-0248
         it = CopyBSwapPOD(echo_meta.isp_sensing_time, it);
@@ -622,8 +631,6 @@ RawSampleMeasurements ParseEnvisatLevel0ImPackets(const std::vector<char>& file_
             envisat_dbg_meta.push_back(d);
         }
 #endif
-
-        it = packets_start + entry.packet_start_offset_bytes;
     }
 
 #if DEBUG_PACKETS
@@ -637,6 +644,8 @@ RawSampleMeasurements ParseEnvisatLevel0ImPackets(const std::vector<char>& file_
         throw std::runtime_error(fmt::format("Post-parse max samples {} do not equal with forecast {}", max_samples,
                                              forecasted_max_samples));
     }
+
+    raw_measurements.max_samples = max_samples;
 
     if (entries_to_be_parsed.size() != compressed_sample_measurement_sets_stored_in_buffer) {
         throw std::runtime_error(
@@ -938,7 +947,6 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
     asar_meta.last_mjd = echoes.back().isp_sensing_time;
     asar_meta.last_sbt = echoes.back().onboard_time;
 
-    std::vector<float> v;
     for (auto& e : echoes) {
         if (prev_swst != e.swst_code) {
             prev_swst = e.swst_code;

@@ -199,6 +199,8 @@ std::vector<ForecastMeta> FetchErsL0ImForecastMeta(const std::vector<char>& file
     (void)mdsr;
     (void)packets_start_filter;
     (void)packets_stop_filter;
+    (void)packets_before_start;
+    (void)packets_after_stop;
 
     return {};
 }

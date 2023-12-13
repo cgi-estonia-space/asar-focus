@@ -114,29 +114,40 @@ int main(int argc, char* argv[]) {
         alus::asar::mainflow::FetchAuxFiles(ins_file, conf_file, asar_meta, product_type, args.GetAuxPath());
         const auto target_product_type =
             alus::asar::specification::TryDetermineTargetProductFrom(product_type, args.GetFocussedProductType());
-        cufftComplex* d_parsed_packets;
+        (void)target_product_type;
         // Get packets' sensing start/end ... from which can be decided offset in binary and windowing offset?
         const auto fetch_meta_start = TimeStart();
         // Default request is 1000 before and after, which should be enough.
         // It would not influence performance on GPU anyway.
-        size_t packets_before_sensing_start{1000};
+        size_t packets_before_sensing_start{0};
         size_t packets_after_sensing_stop{packets_before_sensing_start};
         // Will skip all non echo ones if in the beginning.
         const auto packets_fetch_meta =
             alus::asar::envformat::FetchMeta(data, asar_meta.sensing_start, asar_meta.sensing_stop, product_type,
                                              packets_before_sensing_start, packets_after_sensing_stop);
         // Make sure that there are enough packets! (lets say minimum is 100)
-        TimeStop(fetch_meta_start, "Metadata forecast fetch.");
+        if (packets_fetch_meta.size() < 100) {
+            throw std::runtime_error("Only " + std::to_string(packets_fetch_meta.size()) +
+                                     " packets fetched, please check the dataset or sensing parameters.");
+        }
+        TimeStop(fetch_meta_start, "Metadata forecast fetch ");
+
+        const auto packet_fetch_start = TimeStart();
         const auto& mdsr = alus::asar::envformat::ParseSphAndGetMdsr(asar_meta, metadata, data);
         std::vector<alus::asar::envformat::CommonPacketMetadata> packets_metadata(packets_fetch_meta.size());
-        LOGD << "Fetching measurements from " << MjdToPtime(packets_fetch_meta.front().isp_sensing_time)
-            << " until " << MjdToPtime(packets_fetch_meta.back().isp_sensing_time);
+        LOGD << "Fetching measurements from " << MjdToPtime(packets_fetch_meta.front().isp_sensing_time) << " until "
+             << MjdToPtime(packets_fetch_meta.back().isp_sensing_time);
         LOGD << "That makes " << packets_before_sensing_start << " packets before and " << packets_after_sensing_stop
-            << " packets after the assigned sensing start and stop";
+             << " packets after the assigned sensing start and stop";
         // Next level would be to allocate RAM buffer array async ahead - even if too much, but on average basis based
         // on sensing period and mode.
         const auto compressed_measurements = alus::asar::envformat::ParseLevel0Packets(
             data, mdsr.ds_offset, packets_fetch_meta, product_type, ins_file, packets_metadata);
+        cufftComplex* d_parsed_packets;
+        alus::asar::mainflow::ConvertRawSampleSetsToComplex(compressed_measurements, packets_metadata, metadata,
+                                                            ins_file, product_type, &d_parsed_packets);
+
+        TimeStop(packet_fetch_start, "Packets and metadata parsing plus converting to complex samples");
 
         LOGD << "Total fetched meta for forecast - " << packets_fetch_meta.size();
         LOGD << "Total parsed L0 packet - " << metadata.img.azimuth_size;

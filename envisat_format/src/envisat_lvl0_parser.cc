@@ -38,6 +38,16 @@ double NadirLLParse(const std::string& str) {
 
 namespace alus::asar::envformat {
 
+int SwathIdx(const std::string& swath) {
+    if (swath.size() == 3 && swath[0] == 'I' && swath[1] == 'S') {
+        char idx = swath[2];
+        if (idx >= '1' && idx <= '7') {
+            return idx - '1';
+        }
+    }
+    throw std::runtime_error("MDSR contains swath '" + swath + "' which is not supported or invalid.");
+}
+
 DSD_lvl0 ParseSphAndGetMdsr(ASARMetadata& asar_meta, const SARMetadata& sar_meta, const std::vector<char>& file_data) {
     LOGD << "Product name = " << asar_meta.product_name;
     LOGD << "Input SENSING_START=" << asar_meta.sensing_start;
