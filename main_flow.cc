@@ -27,6 +27,20 @@
 #include "sar/iq_correction.cuh"
 #include "status_assembly.h"
 
+namespace {
+
+void FillFbaqMeta(ASARMetadata& asar_meta) {
+    asar_meta.compression_metadata.echo_method = "FBAQ";
+    asar_meta.compression_metadata.echo_ratio = "4/8";
+    asar_meta.compression_metadata.init_cal_method = "NONE";  // TBD
+    asar_meta.compression_metadata.init_cal_ratio = "";       // TBD
+    asar_meta.compression_metadata.noise_method = "NONE";     // TBD
+    asar_meta.compression_metadata.noise_ratio = "";          // TBD
+    asar_meta.compression_metadata.per_cal_method = "NONE";   // TBD
+    asar_meta.compression_metadata.per_cal_ratio = "";        // TBD
+}
+}  // namespace
+
 namespace alus::asar::mainflow {
 
 void CheckAndLimitSensingStartEnd(boost::posix_time::ptime& product_sensing_start,
@@ -172,15 +186,18 @@ void StoreIntensity(std::string output_path, std::string product_name, std::stri
     WriteIntensityPaddedImg(dev_padded_img, path.c_str());
 }
 
-void AssembleMetadatFrom(const std::vector<envformat::CommonPacketMetadata>& parsed_meta, ASARMetadata& asar_meta,
-                         SARMetadata& sar_meta, InstrumentFile& ins_file, size_t max_samples_at_range,
-                         alus::asar::specification::ProductTypes product_type) {
+void AssembleMetadataFrom(const std::vector<envformat::CommonPacketMetadata>& parsed_meta, ASARMetadata& asar_meta,
+                          SARMetadata& sar_meta, InstrumentFile& ins_file, size_t max_raw_samples_at_range,
+                          size_t total_raw_samples, alus::asar::specification::ProductTypes product_type) {
     uint16_t min_swst = UINT16_MAX;
     uint16_t max_swst = 0;
     uint16_t swst_changes = 0;
     uint16_t prev_swst = parsed_meta.front().swst_code;
     const auto instrument = specification::GetInstrumentFrom(product_type);
     const int swst_multiplier{instrument == specification::Instrument::ASAR ? 1 : 4};
+
+    sar_meta.carrier_frequency = ins_file.flp.radar_frequency;
+    sar_meta.chirp.range_sampling_rate = ins_file.flp.radar_sampling_rate;
 
     asar_meta.first_swst_code = parsed_meta.front().swst_code;
     asar_meta.last_swst_code = parsed_meta.back().swst_code;
@@ -198,6 +215,8 @@ void AssembleMetadatFrom(const std::vector<envformat::CommonPacketMetadata>& par
     asar_meta.first_sbt = parsed_meta.front().onboard_time;
     asar_meta.last_mjd = parsed_meta.back().sensing_time;
     asar_meta.last_sbt = parsed_meta.back().onboard_time;
+
+    FillFbaqMeta(asar_meta);
 
     for (auto& e : parsed_meta) {
         if (prev_swst != e.swst_code) {
@@ -233,7 +252,8 @@ void AssembleMetadatFrom(const std::vector<envformat::CommonPacketMetadata>& par
     LOGD << fmt::format("Nominal chirp duration = {}", sar_meta.chirp.pulse_duration);
     LOGD << fmt::format("Calculated chirp BW = {} , meta bw = {}", sar_meta.chirp.pulse_bandwidth, pulse_bw);
 
-    const size_t range_samples = max_samples_at_range + swst_multiplier * (max_swst - min_swst);
+    sar_meta.total_raw_samples = total_raw_samples;
+    const size_t range_samples = max_raw_samples_at_range + swst_multiplier * (max_swst - min_swst);
     LOGD << fmt::format("range samples = {}, minimum range padded size = {}", range_samples,
                         range_samples + sar_meta.chirp.n_samples);
 

@@ -143,6 +143,10 @@ int main(int argc, char* argv[]) {
         // on sensing period and mode.
         const auto compressed_measurements = alus::asar::envformat::ParseLevel0Packets(
             data, mdsr.ds_offset, packets_fetch_meta, product_type, ins_file, packets_metadata);
+
+        alus::asar::mainflow::AssembleMetadataFrom(packets_metadata, asar_meta, metadata, ins_file,
+                                                   compressed_measurements.max_samples,
+                                                   compressed_measurements.total_samples, product_type);
         cufftComplex* d_parsed_packets;
         alus::asar::mainflow::ConvertRawSampleSetsToComplex(compressed_measurements, packets_metadata, metadata,
                                                             ins_file, product_type, &d_parsed_packets);
