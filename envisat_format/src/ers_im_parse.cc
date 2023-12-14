@@ -248,9 +248,9 @@ std::vector<ForecastMeta> FetchErsL0ImForecastMeta(const std::vector<char>& file
                     "fetched yet in order to fill packets");
             }
 
-            dr_no_oos++;
-            dr_no_total_missing += (dr_no_gap - 1);
             const auto packets_to_fill = dr_no_gap - 1;
+            dr_no_oos++;
+            dr_no_total_missing += packets_to_fill;
             // 900 taken from
             // https://github.com/gmtsar/gmtsar/blob/master/preproc/ERS_preproc/ers_line_fixer/ers_line_fixer.c#L434
             // For ISCE2 this is 30000 which seems to be wayyyy too biig.
@@ -314,8 +314,8 @@ std::vector<ForecastMeta> FetchErsL0ImForecastMeta(const std::vector<char>& file
     packets_before_start = packets_before_requested_start;
     packets_after_stop = packets_after_requested_stop;
 
-    LOGD << "Data record number discontinuities/total missing - " << dr_no_oos << "/" << dr_no_total_missing
-         << " these were inserted as to be parsed/duplicated";
+    LOGD << "Data record number discontinuities/total missing - " << dr_no_oos << "/"
+         << dr_no_total_missing << " these were inserted as to be parsed/duplicated during prefetch";
 
     return forecast_meta;
 }
@@ -332,7 +332,7 @@ RawSampleMeasurements ParseErsLevel0ImPackets(const std::vector<char>& file_data
     LOGD << "Reserving " << alloc_bytes_for_raw_samples / (1 << 20) << "MiB for raw samples ("
          << ers::highrate::MEASUREMENT_DATA_SIZE_BYTES << "x" << num_dsr << ")";
 
-    RawSampleMeasurements raw_measurements;
+    RawSampleMeasurements raw_measurements{};
     raw_measurements.max_samples = ers::highrate::MEASUREMENT_DATA_SAMPLE_COUNT;
     raw_measurements.total_samples = ers::highrate::MEASUREMENT_DATA_SAMPLE_COUNT * num_dsr;
     raw_measurements.single_entry_length = ers::highrate::MEASUREMENT_DATA_SIZE_BYTES;
@@ -467,10 +467,10 @@ RawSampleMeasurements ParseErsLevel0ImPackets(const std::vector<char>& file_data
         it += 194 + 10;
 
         const auto dr_no_gap = parseutil::CounterGap<uint32_t, DR_NO_MAX>(last_dr_no, echo_meta.data_record_number);
-        // When gap is 0, this is not handled - could be massive rollover or duplicate.
-        if (dr_no_gap > 1) {
+        // When gap is 0, it has been corrected by the previously fetched metadata.
+        if (dr_no_gap == 0) {
             diagnostics.dr_no_oos++;
-            diagnostics.dr_no_total_missing += (dr_no_gap - 1);
+            diagnostics.dr_no_total_missing++;
         }
         last_dr_no = echo_meta.data_record_number;
 #if HANDLE_DIAGNOSTICS
@@ -521,6 +521,13 @@ RawSampleMeasurements ParseErsLevel0ImPackets(const std::vector<char>& file_data
 #if DEBUG_PACKETS
     DebugErsPackets(ers_dbg_meta, ers_dbg_meta.size(), debug_stream);
 #endif
+
+    if (diagnostics.dr_no_oos > 0) {
+        raw_measurements.no_of_product_errors_compensated = diagnostics.dr_no_oos;
+    }
+
+    LOGD << "Data record number discontinuities/total missing - " << diagnostics.dr_no_oos << "/"
+         << diagnostics.dr_no_total_missing << " - were detected during parsing.";
 
 #if HANDLE_DIAGNOSTICS
     LOGD << "Packet counter field diagnostics - " << diagnostics.packet_counter_oos << " "

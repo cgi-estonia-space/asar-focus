@@ -147,6 +147,12 @@ int main(int argc, char* argv[]) {
         alus::asar::mainflow::AssembleMetadataFrom(packets_metadata, asar_meta, sar_meta, ins_file,
                                                    compressed_measurements.max_samples,
                                                    compressed_measurements.total_samples, product_type);
+        // This is open issue - what exactly constitutes to product error.
+        // Currently only when ERS has missing packets base on data record no.
+        if (compressed_measurements.no_of_product_errors_compensated > 0) {
+            asar_meta.product_err = true;
+        }
+
         while (!cuda_init.IsFinished())
             ;
         cuda_init.CheckErrors();
