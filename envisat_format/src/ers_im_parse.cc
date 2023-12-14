@@ -242,6 +242,12 @@ std::vector<ForecastMeta> FetchErsL0ImForecastMeta(const std::vector<char>& file
         const auto dr_no_gap = parseutil::CounterGap<uint32_t, DR_NO_MAX>(last_dr_no, dr_no);
         // When gap is 0, this is not handled - could be massive rollover or duplicate or the first packet.
         if (dr_no_gap > 1) {
+            if (forecast_meta.size() < 1) {
+                throw std::runtime_error(
+                    "Implementation error detected - data record no. discontinuity detected, but no packets have been "
+                    "fetched yet in order to fill packets");
+            }
+
             dr_no_oos++;
             dr_no_total_missing += (dr_no_gap - 1);
             const auto packets_to_fill = dr_no_gap - 1;
@@ -291,6 +297,18 @@ std::vector<ForecastMeta> FetchErsL0ImForecastMeta(const std::vector<char>& file
         forecast_meta.erase(forecast_meta.begin(),
                             forecast_meta.begin() + (packets_before_requested_start - packets_before_start));
         packets_before_requested_start -= (packets_before_requested_start - packets_before_start);
+        if (packets_before_start == 0) {
+            auto it = forecast_meta.begin();
+            while (it != forecast_meta.end()) {
+                const auto sensing_time = it->isp_sensing_time;
+                if (sensing_time < start_mjd) {
+                    forecast_meta.erase(it);
+                    it = forecast_meta.begin();
+                } else {
+                    break;
+                }
+            }
+        }
     }
 
     packets_before_start = packets_before_requested_start;
@@ -303,8 +321,7 @@ std::vector<ForecastMeta> FetchErsL0ImForecastMeta(const std::vector<char>& file
 }
 
 RawSampleMeasurements ParseErsLevel0ImPackets(const std::vector<char>& file_data, size_t mdsr_offset_bytes,
-                                              const std::vector<ForecastMeta>& entries_to_be_parsed,
-                                              InstrumentFile&,
+                                              const std::vector<ForecastMeta>& entries_to_be_parsed, InstrumentFile&,
                                               std::vector<CommonPacketMetadata>& common_metadata) {
     const uint8_t* const packets_start = reinterpret_cast<const uint8_t*>(file_data.data()) + mdsr_offset_bytes;
     const uint8_t* it = packets_start + entries_to_be_parsed.front().packet_start_offset_bytes;
