@@ -29,7 +29,7 @@
 
 namespace {
 
-void FillFbaqMeta(ASARMetadata& asar_meta) {
+void FillFbaqMetaAsar(ASARMetadata& asar_meta) {
     asar_meta.compression_metadata.echo_method = "FBAQ";
     asar_meta.compression_metadata.echo_ratio = "4/8";
     asar_meta.compression_metadata.init_cal_method = "NONE";  // TBD
@@ -38,6 +38,18 @@ void FillFbaqMeta(ASARMetadata& asar_meta) {
     asar_meta.compression_metadata.noise_ratio = "";          // TBD
     asar_meta.compression_metadata.per_cal_method = "NONE";   // TBD
     asar_meta.compression_metadata.per_cal_ratio = "";        // TBD
+}
+
+void FillFbaqMetaSar(ASARMetadata& asar_meta) {
+    // Nothing for ERS
+    asar_meta.compression_metadata.echo_method = "NONE";
+    asar_meta.compression_metadata.echo_ratio = "";
+    asar_meta.compression_metadata.init_cal_method = "NONE";
+    asar_meta.compression_metadata.init_cal_ratio = "";
+    asar_meta.compression_metadata.noise_method = "NONE";
+    asar_meta.compression_metadata.noise_ratio = "";
+    asar_meta.compression_metadata.per_cal_method = "NONE";
+    asar_meta.compression_metadata.per_cal_ratio = "";
 }
 }  // namespace
 
@@ -186,7 +198,7 @@ void StoreIntensity(std::string output_path, std::string product_name, std::stri
     WriteIntensityPaddedImg(dev_padded_img, path.c_str());
 }
 
-void AssembleMetadataFrom(const std::vector<envformat::CommonPacketMetadata>& parsed_meta, ASARMetadata& asar_meta,
+void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_meta, ASARMetadata& asar_meta,
                           SARMetadata& sar_meta, InstrumentFile& ins_file, size_t max_raw_samples_at_range,
                           size_t total_raw_samples, alus::asar::specification::ProductTypes product_type) {
     uint16_t min_swst = UINT16_MAX;
@@ -209,22 +221,50 @@ void AssembleMetadataFrom(const std::vector<envformat::CommonPacketMetadata>& pa
         asar_meta.beam_set_num_code = parsed_meta.front().asar.antenna_beam_set_no;
         asar_meta.beam_adj_code = parsed_meta.front().asar.beam_adj_delta;
         asar_meta.resamp_code = parsed_meta.front().asar.resampling_factor;
+        FillFbaqMetaAsar(asar_meta);
     }
+
+    if (instrument == specification::Instrument::SAR) {
+        asar_meta.tx_bw_code = 0;
+        asar_meta.up_code = 0;
+        asar_meta.down_code = 0;
+        asar_meta.tx_pulse_len_code = 0;
+        asar_meta.beam_set_num_code = 0;
+        asar_meta.beam_adj_code = 0;
+        asar_meta.resamp_code = 0;
+        FillFbaqMetaSar(asar_meta);
+    }
+
     asar_meta.pri_code = parsed_meta.front().pri_code;
     asar_meta.first_mjd = parsed_meta.front().sensing_time;
     asar_meta.first_sbt = parsed_meta.front().onboard_time;
     asar_meta.last_mjd = parsed_meta.back().sensing_time;
     asar_meta.last_sbt = parsed_meta.back().onboard_time;
 
-    FillFbaqMeta(asar_meta);
-
-    for (auto& e : parsed_meta) {
-        if (prev_swst != e.swst_code) {
-            prev_swst = e.swst_code;
-            swst_changes++;
+    if (instrument == specification::Instrument::ASAR) {
+        for (const auto& e : parsed_meta) {
+            if (prev_swst != e.swst_code) {
+                prev_swst = e.swst_code;
+                swst_changes++;
+            }
+            min_swst = std::min(min_swst, e.swst_code);
+            max_swst = std::max(max_swst, e.swst_code);
         }
-        min_swst = std::min(min_swst, e.swst_code);
-        max_swst = std::max(max_swst, e.swst_code);
+    }
+
+    if (instrument == specification::Instrument::SAR) {
+        for (auto& e : parsed_meta) {
+            if (prev_swst != e.swst_code) {
+                if ((e.swst_code < 500) || (e.swst_code > 1500) || ((prev_swst - e.swst_code) % 22 != 0)) {
+                    e.swst_code = prev_swst;
+                    continue;
+                }
+                prev_swst = e.swst_code;
+                swst_changes++;
+            }
+            min_swst = std::min(min_swst, e.swst_code);
+            max_swst = std::max(max_swst, e.swst_code);
+        }
     }
 
     int swath_idx = envformat::SwathIdx(asar_meta.swath);
@@ -237,9 +277,17 @@ void AssembleMetadataFrom(const std::vector<envformat::CommonPacketMetadata>& pa
     asar_meta.last_line_time = MjdToPtime(parsed_meta.back().sensing_time);
     asar_meta.sensing_stop = asar_meta.last_line_time;
 
-    double pulse_bw = 16e6 / 255 * parsed_meta.front().asar.chirp_pulse_bw_code;
+    // TODO - Pulse bandwidth thing is crazy since it is recalculated couple of rows below.
+    double pulse_bw{};
+    if (instrument == specification::Instrument::ASAR) {
+        pulse_bw = 16e6 / 255 * parsed_meta.front().asar.chirp_pulse_bw_code;
+        sar_meta.chirp.pulse_bandwidth = pulse_bw;
+    }
 
-    sar_meta.chirp.pulse_bandwidth = pulse_bw;
+    if (instrument == specification::Instrument::SAR) {
+        pulse_bw = 0;
+        sar_meta.chirp.pulse_bandwidth = 0;  // TODO - Has worked thus far, but is it correct?
+    }
 
     sar_meta.chirp.Kr = ins_file.flp.im_chirp[swath_idx].phase[2] * 2;  // TODO Envisat format multiply by 2?
     sar_meta.chirp.pulse_duration = ins_file.flp.im_chirp[swath_idx].duration;
@@ -267,10 +315,29 @@ void AssembleMetadataFrom(const std::vector<envformat::CommonPacketMetadata>& pa
 
     asar_meta.swst_rank = n_pulses_swst;
 
-    // TODO Range gate bias must be included in this calculation
-    sar_meta.pulse_repetition_frequency = sar_meta.chirp.range_sampling_rate / parsed_meta.front().pri_code;
-    asar_meta.two_way_slant_range_time =
-        (min_swst + n_pulses_swst * parsed_meta.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate);
+    if (instrument == specification::Instrument::ASAR) {
+        // TODO Range gate bias must be included in this calculation
+        sar_meta.pulse_repetition_frequency = sar_meta.chirp.range_sampling_rate / parsed_meta.front().pri_code;
+        asar_meta.two_way_slant_range_time =
+            (min_swst + n_pulses_swst * parsed_meta.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate);
+    }
+
+    if (instrument == specification::Instrument::SAR) {
+        const auto delay_time = ins_file.flp.range_gate_bias;
+        // ISCE2 uses 210.943006e-9, but
+        // ERS-1-Satellite-to-Ground-Segment-Interface-Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05
+        // note 5 in 4.4:28 specifies 210.94 ns, which draws more similar results to PF-ERS results.
+        const auto pri = (parsed_meta.front().pri_code + 2.0) * 210.94e-9;
+        sar_meta.pulse_repetition_frequency = 1 / pri;
+
+        if (sar_meta.pulse_repetition_frequency < 1640 || sar_meta.pulse_repetition_frequency > 1720) {
+            LOGW << "PRF value '" << sar_meta.pulse_repetition_frequency << "'"
+                 << "is out of the specification (ERS-1-Satellite-to-Ground-Segment-Interface-"
+                 << "Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05) range [1640, 1720] Hz" << std::endl;
+        }
+        asar_meta.two_way_slant_range_time =
+            n_pulses_swst * pri + min_swst * swst_multiplier / sar_meta.chirp.range_sampling_rate - delay_time;
+    }
 
     LOGD << "PRF " << sar_meta.pulse_repetition_frequency << " PRI " << 1 / sar_meta.pulse_repetition_frequency;
     sar_meta.slant_range_first_sample = asar_meta.two_way_slant_range_time * c / 2;
@@ -348,22 +415,44 @@ void ConvertRawSampleSetsToComplex(const envformat::RawSampleMeasurements& raw_m
     std::vector<uint16_t> swst_codes;
     uint16_t min_swst{UINT16_MAX};
     swst_codes.reserve(parsed_meta.size());
-    for (const auto& pm : parsed_meta) {
-        swst_codes.push_back(pm.swst_code);
-        min_swst = std::min(min_swst, pm.swst_code);
+    if (product_type == specification::ProductTypes::ASA_IM0) {
+        for (const auto& pm : parsed_meta) {
+            swst_codes.push_back(pm.swst_code);
+            min_swst = std::min(min_swst, pm.swst_code);
+        }
+    } else if (product_type == specification::ProductTypes::SAR_IM0) {
+        uint16_t prev_swst = parsed_meta.front().swst_code;
+        for (const auto& pm : parsed_meta) {
+            const auto swst_code = pm.swst_code;
+            swst_codes.push_back(swst_code);
+            if ((swst_code < 500) || (swst_code > 1500) || ((prev_swst - swst_code) % 22 != 0)) {
+                throw std::runtime_error("Detected invalid SWST code " + std::to_string(swst_code) +
+                                         " which should have been corrected before " + std::string(__FUNCTION__));
+            }
+            min_swst = std::min(min_swst, swst_code);
+            prev_swst = swst_code;
+        }
+    } else {
+        throw std::runtime_error("Unsupported product type for " + std::string(__FUNCTION__));
     }
 
-    (void)product_type;
-
-    std::vector<float> i_lut(4096);
-    memcpy(i_lut.data(), ins_file.fbp.i_LUT_fbaq4, 4096 * sizeof(float));
-    std::vector<float> q_lut(4096);
-    memcpy(q_lut.data(), ins_file.fbp.q_LUT_fbaq4, 4096 * sizeof(float));
-    // Single entry length does not include 2 bytes of block data byte length.
-    envformat::ConvertAsarImBlocksToComplex(raw_measurements.raw_samples.get(),
-                                            raw_measurements.single_entry_length + 2, raw_measurements.entries_total,
-                                            swst_codes.data(), min_swst, *d_converted_measurements,
-                                            sar_meta.img.range_size, i_lut.data(), q_lut.data(), 4096);
+    if (product_type == specification::ProductTypes::ASA_IM0) {
+        std::vector<float> i_lut(4096);
+        memcpy(i_lut.data(), ins_file.fbp.i_LUT_fbaq4, 4096 * sizeof(float));
+        std::vector<float> q_lut(4096);
+        memcpy(q_lut.data(), ins_file.fbp.q_LUT_fbaq4, 4096 * sizeof(float));
+        // Single entry length does not include 2 bytes of block data byte length.
+        envformat::ConvertAsarImBlocksToComplex(
+            raw_measurements.raw_samples.get(), raw_measurements.single_entry_length + 2,
+            raw_measurements.entries_total, swst_codes.data(), min_swst, *d_converted_measurements,
+            sar_meta.img.range_size, i_lut.data(), q_lut.data(), 4096);
+    } else if (product_type == specification::ProductTypes::SAR_IM0) {
+        envformat::ConvertErsImSamplesToComplex(raw_measurements.raw_samples.get(), raw_measurements.max_samples,
+                                                raw_measurements.entries_total, swst_codes.data(), min_swst,
+                                                *d_converted_measurements, sar_meta.img.range_size);
+    } else {
+        throw std::runtime_error("Unsupported product type for " + std::string(__FUNCTION__));
+    }
 }
 
 }  // namespace alus::asar::mainflow

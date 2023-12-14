@@ -87,8 +87,8 @@ int main(int argc, char* argv[]) {
 
         size_t file_sz = std::filesystem::file_size(in_path.data());
 
-        std::vector<char> data(file_sz);
-        auto act_sz = fread(data.data(), 1, file_sz, fp);
+        std::vector<char> l0_ds(file_sz);
+        auto act_sz = fread(l0_ds.data(), 1, file_sz, fp);
         if (act_sz != file_sz) {
             LOGE << "Failed to read " << file_sz << " bytes, expected " << act_sz << " bytes from input dataset";
             return 1;
@@ -98,17 +98,17 @@ int main(int argc, char* argv[]) {
 
         GDALAllRegister();
 
-        SARMetadata metadata = {};
+        SARMetadata sar_meta = {};
         ASARMetadata asar_meta = {};
         file_time_start = TimeStart();
         auto orbit_source = alus::dorisorbit::Parsable::TryCreateFrom(args.GetOrbitPath());
         TimeStop(file_time_start, "Orbit file fetch");
         file_time_start = TimeStart();
-        alus::asar::envformat::ParseLevel0Header(data, asar_meta);
+        alus::asar::envformat::ParseLevel0Header(l0_ds, asar_meta);
         const auto product_type = alus::asar::mainflow::TryDetermineProductType(asar_meta.product_name);
         alus::asar::mainflow::CheckAndLimitSensingStartEnd(asar_meta.sensing_start, asar_meta.sensing_stop,
                                                            args.GetProcessSensingStart(), args.GetProcessSensingEnd());
-        alus::asar::mainflow::TryFetchOrbit(orbit_source, asar_meta, metadata);
+        alus::asar::mainflow::TryFetchOrbit(orbit_source, asar_meta, sar_meta);
         InstrumentFile ins_file{};
         ConfigurationFile conf_file{};
         alus::asar::mainflow::FetchAuxFiles(ins_file, conf_file, asar_meta, product_type, args.GetAuxPath());
@@ -121,11 +121,11 @@ int main(int argc, char* argv[]) {
         // It would not influence performance on GPU anyway.
         size_t packets_before_sensing_start{0};
         size_t packets_after_sensing_stop{packets_before_sensing_start};
-        // Will skip all non echo ones if in the beginning.
+        // This will make sure that sequence starts with an echo packet in case of envisat.
         const auto packets_fetch_meta =
-            alus::asar::envformat::FetchMeta(data, asar_meta.sensing_start, asar_meta.sensing_stop, product_type,
+            alus::asar::envformat::FetchMeta(l0_ds, asar_meta.sensing_start, asar_meta.sensing_stop, product_type,
                                              packets_before_sensing_start, packets_after_sensing_stop);
-        // Make sure that there are enough packets! (lets say minimum is 100)
+        // Arbitrary minimum is chosen as 100.
         if (packets_fetch_meta.size() < 100) {
             throw std::runtime_error("Only " + std::to_string(packets_fetch_meta.size()) +
                                      " packets fetched, please check the dataset or sensing parameters.");
@@ -133,32 +133,32 @@ int main(int argc, char* argv[]) {
         TimeStop(fetch_meta_start, "Metadata forecast fetch ");
 
         const auto packet_fetch_start = TimeStart();
-        const auto& mdsr = alus::asar::envformat::ParseSphAndGetMdsr(asar_meta, metadata, data);
+        const auto& mdsr = alus::asar::envformat::ParseSphAndGetMdsr(asar_meta, sar_meta, l0_ds);
         std::vector<alus::asar::envformat::CommonPacketMetadata> packets_metadata(packets_fetch_meta.size());
-        LOGD << "Fetching measurements from " << MjdToPtime(packets_fetch_meta.front().isp_sensing_time) << " until "
+        LOGD << "Parsing measurements from " << MjdToPtime(packets_fetch_meta.front().isp_sensing_time) << " until "
              << MjdToPtime(packets_fetch_meta.back().isp_sensing_time);
         LOGD << "That makes " << packets_before_sensing_start << " packets before and " << packets_after_sensing_stop
              << " packets after the assigned sensing start and stop";
         // Next level would be to allocate RAM buffer array async ahead - even if too much, but on average basis based
         // on sensing period and mode.
         const auto compressed_measurements = alus::asar::envformat::ParseLevel0Packets(
-            data, mdsr.ds_offset, packets_fetch_meta, product_type, ins_file, packets_metadata);
+            l0_ds, mdsr.ds_offset, packets_fetch_meta, product_type, ins_file, packets_metadata);
 
-        alus::asar::mainflow::AssembleMetadataFrom(packets_metadata, asar_meta, metadata, ins_file,
+        alus::asar::mainflow::AssembleMetadataFrom(packets_metadata, asar_meta, sar_meta, ins_file,
                                                    compressed_measurements.max_samples,
                                                    compressed_measurements.total_samples, product_type);
-        cufftComplex* d_parsed_packets;
-        alus::asar::mainflow::ConvertRawSampleSetsToComplex(compressed_measurements, packets_metadata, metadata,
-                                                            ins_file, product_type, &d_parsed_packets);
-
-        TimeStop(packet_fetch_start, "Packets and metadata parsing plus converting to complex samples");
-
-        LOGD << "Total fetched meta for forecast - " << packets_fetch_meta.size();
-        LOGD << "Total parsed L0 packet - " << metadata.img.azimuth_size;
-
         while (!cuda_init.IsFinished())
             ;
         cuda_init.CheckErrors();
+        cufftComplex* d_parsed_packets;
+        alus::asar::mainflow::ConvertRawSampleSetsToComplex(compressed_measurements, packets_metadata, sar_meta,
+                                                            ins_file, product_type, &d_parsed_packets);
+
+        TimeStop(packet_fetch_start, "Packets and sar_meta parsing plus converting to complex samples");
+
+        LOGD << "Total fetched meta for forecast - " << packets_fetch_meta.size();
+        LOGD << "Total parsed L0 packet - " << sar_meta.img.azimuth_size;
+
 
         {
             const auto& orbit_l1_metadata = orbit_source.GetL1ProductMetadata();
@@ -183,11 +183,11 @@ int main(int argc, char* argv[]) {
         std::string wif_name_base = asar_meta.product_name;
         wif_name_base.resize(wif_name_base.size() - 3);
 
-        const int az_size = metadata.img.azimuth_size;
-        const int rg_size = metadata.img.range_size;
+        const int az_size = sar_meta.img.azimuth_size;
+        const int rg_size = sar_meta.img.range_size;
         const auto fft_sizes = GetOptimalFFTSizes();
 
-        const auto rg_plan_sz = fft_sizes.upper_bound(rg_size + metadata.chirp.n_samples);
+        const auto rg_plan_sz = fft_sizes.upper_bound(rg_size + sar_meta.chirp.n_samples);
         LOGD << "Range FFT padding sz = " << rg_plan_sz->first << "(2 ^ " << rg_plan_sz->second[0] << " * 3 ^ "
              << rg_plan_sz->second[1] << " * 5 ^ " << rg_plan_sz->second[2] << " * 7 ^ " << rg_plan_sz->second[3]
              << ")";
@@ -214,23 +214,23 @@ int main(int argc, char* argv[]) {
         TimeStop(gpu_transfer_start, "GPU image formation");
 
         auto correction_start = TimeStart();
-        RawDataCorrection(img, {metadata.total_raw_samples}, metadata.results);
+        RawDataCorrection(img, {sar_meta.total_raw_samples}, sar_meta.results);
         img.ZeroNaNs();
         TimeStop(correction_start, "I/Q correction");
 
         auto vr_start = TimeStart();
-        metadata.results.Vr_poly = EstimateProcessingVelocity(metadata);
+        sar_meta.results.Vr_poly = EstimateProcessingVelocity(sar_meta);
         TimeStop(vr_start, "Vr estimation");
 
-        auto chirp = GenerateChirpData(metadata.chirp, rg_padded);
+        auto chirp = GenerateChirpData(sar_meta.chirp, rg_padded);
 
         auto dc_start = TimeStart();
         // Element from the back() indicates polynomial starting value.
-        metadata.results.doppler_centroid_poly = CalculateDopplerCentroid(img, metadata.pulse_repetition_frequency);
+        sar_meta.results.doppler_centroid_poly = CalculateDopplerCentroid(img, sar_meta.pulse_repetition_frequency);
         TimeStop(dc_start, "fractional DC estimation");
 
         if (args.StorePlots()) {
-            alus::asar::mainflow::StorePlots(args.GetOutputPath().data(), wif_name_base, metadata, chirp);
+            alus::asar::mainflow::StorePlots(args.GetOutputPath().data(), wif_name_base, sar_meta, chirp);
         }
 
         if (args.StoreIntensity()) {
@@ -243,10 +243,10 @@ int main(int argc, char* argv[]) {
         CudaWorkspace d_workspace(img.TotalByteSize());
 
         auto rc_start = TimeStart();
-        RangeCompression(img, chirp, metadata.chirp.n_samples, d_workspace);
+        RangeCompression(img, chirp, sar_meta.chirp.n_samples, d_workspace);
         TimeStop(rc_start, "Range compression");
 
-        metadata.img.range_size = img.XSize();
+        sar_meta.img.range_size = img.XSize();
 
         if (args.StoreIntensity()) {
             alus::asar::mainflow::StoreIntensity(args.GetOutputPath().data(), wif_name_base, "rc", img);
@@ -271,12 +271,12 @@ int main(int argc, char* argv[]) {
 
         auto az_comp_start = TimeStart();
         DevicePaddedImage out;
-        RangeDopplerAlgorithm(metadata, img, out, d_workspace);
+        RangeDopplerAlgorithm(sar_meta, img, out, d_workspace);
 
         out.ZeroFillPaddings();
 
         EnvisatIMS ims{};
-        ConstructIMS(ims, metadata, asar_meta, mds, GetSoftwareVersion());
+        ConstructIMS(ims, sar_meta, asar_meta, mds, GetSoftwareVersion());
         if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
             throw std::runtime_error("Could not create L1 file at " + lvl1_out_full_path);
         }
