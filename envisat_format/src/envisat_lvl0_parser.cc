@@ -142,31 +142,10 @@ RawSampleMeasurements ParseLevel0Packets(const std::vector<char>& file_data, siz
         return ParseEnvisatLevel0ImPackets(file_data, mdsr_offset_bytes, entries_to_be_parsed, ins_file,
                                            common_metadata);
     } else if (product_type == specification::SAR_IM0) {
-        return {};
-        // return ParseErsLevel0ImPackets(file_data, mdsr, sar_meta, asar_meta, d_parsed_packets, ins_file,
-        // packets_start_filter,
-        //                         packets_stop_filter);
+        return ParseErsLevel0ImPackets(file_data, mdsr_offset_bytes, entries_to_be_parsed, ins_file, common_metadata);
     } else {
         throw std::invalid_argument("Unsupported product type supplied for level 0 packet parsing.");
     }
 }
-
-// void ParseLevel0Packets(const std::vector<char>& file_data, SARMetadata& sar_meta, ASARMetadata& asar_meta,
-//                         cufftComplex** d_parsed_packets, alus::asar::specification::ProductTypes product_type,
-//                         InstrumentFile& ins_file, boost::posix_time::ptime packets_start_filter,
-//                         boost::posix_time::ptime packets_stop_filter) {
-//     if (product_type == specification::ASA_IM0) {
-//         const auto& mdsr = ParseSphAndGetMdsr(asar_meta, sar_meta, file_data);
-//         ParseEnvisatLevel0ImPackets(file_data, mdsr, sar_meta, asar_meta, d_parsed_packets, ins_file,
-//                                     packets_start_filter, packets_stop_filter);
-//     } else if (product_type == specification::SAR_IM0) {
-//         const auto& mdsr = ParseSphAndGetMdsr(asar_meta, sar_meta, file_data);
-//         ParseErsLevel0ImPackets(file_data, mdsr, sar_meta, asar_meta, d_parsed_packets, ins_file,
-//         packets_start_filter,
-//                                 packets_stop_filter);
-//     } else {
-//         throw std::invalid_argument("Unsupported product type supplied for level 0 packet parsing.");
-//     }
-// }
 
 }  // namespace alus::asar::envformat

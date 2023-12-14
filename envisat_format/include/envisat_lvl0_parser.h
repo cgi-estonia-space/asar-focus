@@ -156,6 +156,13 @@ struct RawSampleMeasurements {
 };
 
 DSD_lvl0 ParseSphAndGetMdsr(ASARMetadata& asar_meta, const SARMetadata& sar_meta, const std::vector<char>& file_data);
+
+/* Current silent contract is that every packet of the returned list of ForecastMeta shall be parsed by the
+ * ParseLevel0Packets. That also means that any duplicates and/or missing packets shall be compensated already
+ * during FetchMeta. Parsing packets would just respect the offsets. But it can throw if there are discrepancies,
+ * which would indicate programming error. Current FetchMeta is simple byte offsets starting from MDSR (not L0 ds)
+ * and sensing time. Later more fields could be added and parsed to implement more comprehensive parsing scheme.
+ */
 std::vector<ForecastMeta> FetchMeta(const std::vector<char>& file_data, boost::posix_time::ptime packets_start_filter,
                                     boost::posix_time::ptime packets_stop_filter,
                                     specification::ProductTypes product_type, size_t& packets_before_start,

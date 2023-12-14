@@ -26,7 +26,7 @@
 #define HANDLE_DIAGNOSTICS 1
 
 namespace {
-void FillFbaqMeta(ASARMetadata& asar_meta) {
+void FillFbaqMetaAsar(ASARMetadata& asar_meta) {
     asar_meta.compression_metadata.echo_method = "FBAQ";
     asar_meta.compression_metadata.echo_ratio = "4/8";
     asar_meta.compression_metadata.init_cal_method = "NONE";  // TBD
@@ -589,7 +589,6 @@ RawSampleMeasurements ParseEnvisatLevel0ImPackets(const std::vector<char>& file_
             compressed_sample_measurement_sets_stored_in_buffer++;
 
             TransferMetadata(echo_meta, sample_blocks_length, common_metadata.at(packet_index));
-            common_metadata.at(packet_index).measurement_array_length_bytes = sample_blocks_length;
         } else if (echo_meta.cal_flag) {
             if (packet_index > 0) {
                 auto copy_echo = common_metadata.at(packet_index - 1);
@@ -674,7 +673,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
                                  ASARMetadata& asar_meta, cufftComplex** d_parsed_packets, InstrumentFile& ins_file,
                                  boost::posix_time::ptime packets_start_filter,
                                  boost::posix_time::ptime packets_stop_filter) {
-    FillFbaqMeta(asar_meta);
+    FillFbaqMetaAsar(asar_meta);
     sar_meta.carrier_frequency = ins_file.flp.radar_frequency;
     sar_meta.chirp.range_sampling_rate = ins_file.flp.radar_sampling_rate;
     std::vector<EchoMeta> echoes;  // Via MDSR - the count of data records -> reserve()?
