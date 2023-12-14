@@ -412,7 +412,7 @@ RawSampleMeasurements ParseEnvisatLevel0ImPackets(const std::vector<char>& file_
     LOGD << "Reserving " << alloc_bytes_for_sample_blocks_with_length / (1 << 20)
          << "MiB for raw sample blocks buffer including prepending 2 byte length marker ("
          << compressed_sample_blocks_with_length_single_range_item_bytes << "x" << num_dsr << ")";
-    RawSampleMeasurements raw_measurements;
+    RawSampleMeasurements raw_measurements{};
     raw_measurements.single_entry_length = max_forecasted_sample_blocks_bytes;
     raw_measurements.entries_total = num_dsr;
     raw_measurements.raw_samples = std::unique_ptr<uint8_t[]>(new uint8_t[alloc_bytes_for_sample_blocks_with_length]);

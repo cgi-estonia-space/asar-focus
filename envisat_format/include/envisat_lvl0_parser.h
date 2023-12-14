@@ -153,6 +153,7 @@ struct RawSampleMeasurements {
     size_t entries_total; // How many lines in azimuth direction
     size_t max_samples; // Maximum samples that the entries will consist. Can fluctuate.
     size_t total_samples; // Total IQ samples collected over all of the range and azimuth directions.
+    size_t no_of_product_errors_compensated;
 };
 
 DSD_lvl0 ParseSphAndGetMdsr(ASARMetadata& asar_meta, const SARMetadata& sar_meta, const std::vector<char>& file_data);
