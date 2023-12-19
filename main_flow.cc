@@ -123,16 +123,18 @@ void TryFetchOrbit(alus::dorisorbit::Parsable& orbit_source, ASARMetadata& asar_
     }
 }
 
-void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, ASARMetadata& asar_meta,
-                   specification::ProductTypes product_type, std::string_view aux_path) {
+void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, envformat::aux::ExternalCalibration& xca,
+                   ASARMetadata& asar_meta, specification::ProductTypes product_type, std::string_view aux_path) {
     if (product_type == alus::asar::specification::ProductTypes::ASA_IM0) {
         FindINSFile(std::string(aux_path), asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
         FindCONFile(std::string(aux_path), asar_meta.sensing_start, conf_file, asar_meta.configuration_file);
+        envformat::aux::GetXca(aux_path, asar_meta.sensing_start, xca, asar_meta.external_calibration_file);
     } else if (product_type == alus::asar::specification::ProductTypes::SAR_IM0) {
         alus::asar::envisat_format::FindINSFile(std::string(aux_path), asar_meta.sensing_start, ins_file,
                                                 asar_meta.instrument_file);
         alus::asar::envisat_format::FindCONFile(std::string(aux_path), asar_meta.sensing_start, conf_file,
                                                 asar_meta.configuration_file);
+        envformat::aux::GetXca(aux_path, asar_meta.sensing_start, xca, asar_meta.external_calibration_file);
     } else {
         LOGE << "Implementation error for this type of product while trying to fetch auxiliary files";
         exit(alus::asar::status::EXIT_CODE::ASSERT_FAILURE);

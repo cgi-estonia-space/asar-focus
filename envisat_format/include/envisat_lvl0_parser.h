@@ -33,6 +33,8 @@ struct ASARMetadata {
     std::string product_name;
     std::string instrument_file;
     std::string configuration_file;
+    std::string external_calibration_file;
+    std::string external_characterization_file;
     std::string orbit_dataset_name;
     std::string acquistion_station;
     std::string processing_station;

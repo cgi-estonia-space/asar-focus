@@ -111,7 +111,8 @@ int main(int argc, char* argv[]) {
         alus::asar::mainflow::TryFetchOrbit(orbit_source, asar_meta, sar_meta);
         InstrumentFile ins_file{};
         ConfigurationFile conf_file{};
-        alus::asar::mainflow::FetchAuxFiles(ins_file, conf_file, asar_meta, product_type, args.GetAuxPath());
+        alus::asar::envformat::aux::ExternalCalibration xca;
+        alus::asar::mainflow::FetchAuxFiles(ins_file, conf_file, xca, asar_meta, product_type, args.GetAuxPath());
         const auto target_product_type =
             alus::asar::specification::TryDetermineTargetProductFrom(product_type, args.GetFocussedProductType());
         (void)target_product_type;
@@ -301,7 +302,9 @@ int main(int argc, char* argv[]) {
                 "Implementation error occurred - CUDA workspace buffer shall be made larger or equal to what is "
                 "required for MDS buffer.");
         }
-        constexpr float tambov{120000 / 100};
+        float tambov{120000 / 100};
+//        const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
+//        const auto tambov = xca.scaling_factor_im_slc_vv[swath_idx];
         auto device_mds_buf = d_workspace.GetAs<char>();
         alus::asar::mainflow::FormatResults(out, device_mds_buf, record_header_bytes, tambov);
         TimeStop(result_correction_start, "Image results correction");

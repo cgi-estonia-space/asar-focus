@@ -16,13 +16,13 @@
 namespace {
 std::string DetermineFilePath(std::string aux_root, boost::posix_time::ptime start, alus::asar::aux::Type t) {
     if (!std::filesystem::exists(aux_root)) {
-        ERROR_EXIT("The auxiliary folder - " + aux_root + " - does not exist.");
+        throw std::runtime_error("The auxiliary folder - " + aux_root + " - does not exist.");
     }
 
     // ASA_CON_AXVIEC20030909_000000_20020815_000000_20021017_130000
     const auto file_path = alus::asar::aux::GetPathFrom(aux_root, start, t);
     if (file_path.empty()) {
-        ERROR_EXIT("Could not find aux file for ENVISAT in " + aux_root);
+        throw std::runtime_error("Could not find aux file in " + aux_root);
     }
 
     return file_path;
@@ -39,6 +39,8 @@ void FindCONFile(std::string aux_root, boost::posix_time::ptime start, Configura
     static_assert(CONF_FILE_SIZE == sizeof(conf_file) + MPH_SPH_SIZE);
 
     std::vector<uint8_t> conf_data(CONF_FILE_SIZE);
+
+    LOGD << "Processor configuration file = " << file_path;
     FILE* fp = fopen(file_path.c_str(), "r");
     auto total = fread(conf_data.data(), 1, CONF_FILE_SIZE, fp);
 
@@ -66,7 +68,7 @@ void FindINSFile(std::string aux_root, boost::posix_time::ptime start, Instrumen
 
     std::vector<uint8_t> ins_data(INS_FILE_SIZE);
 
-    LOGI << "Instrument file = " << file_path;
+    LOGD << "Instrument file = " << file_path;
     FILE* fp = fopen(file_path.c_str(), "r");
     auto total = fread(ins_data.data(), 1, INS_FILE_SIZE, fp);
 
@@ -81,3 +83,43 @@ void FindINSFile(std::string aux_root, boost::posix_time::ptime start, Instrumen
     ins_file.BSwap();
     filename = std::filesystem::path(file_path).filename();
 }
+
+namespace alus::asar::envformat::aux {
+
+void GetXca(std::string_view aux_root, boost::posix_time::ptime start, ExternalCalibration& xca,
+            std::string& filename) {
+    const auto file_path = DetermineFilePath(aux_root.data(), start, alus::asar::aux::Type::EXTERNAL_CALIBRATION);
+
+    constexpr size_t MPH_SIZE = 1247;
+    constexpr size_t SPH_SIZE = 378;
+    constexpr size_t GADS_SIZE = 26552;
+    constexpr size_t XCA_FILE_SIZE = MPH_SIZE + SPH_SIZE + GADS_SIZE;
+    static_assert(GADS_SIZE == sizeof(ExternalCalibration));
+    static_assert(XCA_FILE_SIZE == 28177);
+
+    std::vector<uint8_t> file_contents(XCA_FILE_SIZE);
+
+    LOGD << "External calibration file = " << file_path;
+    FILE* fp = fopen(file_path.c_str(), "r");
+    auto total = fread(file_contents.data(), 1, XCA_FILE_SIZE, fp);
+
+    if (total != XCA_FILE_SIZE) {
+        throw std::runtime_error("Did not manage to read " + std::to_string(XCA_FILE_SIZE) + " bytes from " +
+                                 file_path + ". Please check the file.");
+    }
+    fclose(fp);
+
+    file_contents.erase(file_contents.begin(), file_contents.begin() + MPH_SIZE + SPH_SIZE);
+
+    memcpy(&xca, file_contents.data(), file_contents.size());
+    xca.Bswap();
+
+    if (xca.dsr_length != GADS_SIZE) {
+        throw std::runtime_error("External calibration file - " + file_path + " - GADS DSR length " +
+                                 std::to_string(xca.dsr_length) + " bytes is not correct, should be " +
+                                 std::to_string(GADS_SIZE));
+    }
+
+    filename = std::filesystem::path(file_path).filename();
+}
+}  // namespace alus::asar::envformat::aux

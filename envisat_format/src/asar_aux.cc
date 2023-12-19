@@ -75,7 +75,8 @@ std::string GetPathFrom(std::string aux_root, boost::posix_time::ptime start, Ty
         }
 
         if (current_sat_id != satellite_id) {
-            ERROR_EXIT("There are mixed satellite auxiliary files in the supplied aux folder - " + aux_root);
+            throw std::runtime_error("There are mixed satellite " + std::string(id_string) +
+                                     " auxiliary files in the supplied aux folder - " + aux_root);
         }
 
         if (items.at(1) != id_string) {

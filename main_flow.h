@@ -34,8 +34,8 @@ specification::ProductTypes TryDetermineProductType(std::string_view product_nam
 
 void TryFetchOrbit(alus::dorisorbit::Parsable& orbit_source, ASARMetadata& asar_meta, SARMetadata& sar_meta);
 
-void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, ASARMetadata& asar_meta,
-                   specification::ProductTypes product_type, std::string_view aux_path);
+void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, envformat::aux::ExternalCalibration& xca,
+                   ASARMetadata& asar_meta, specification::ProductTypes product_type, std::string_view aux_path);
 
 // Calibrate, clamp and Big endian results with empty header into dest_space, which shall be a device memory.
 void FormatResults(DevicePaddedImage& img, char* dest_space, size_t record_header_size, float calibration_constant);
