@@ -59,6 +59,8 @@ jobs:
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "CUDAARCHS=\"50;52\" CMAKE_BUILD_TYPE=Release /tmp/asar-focus/build-automation/create_exe_in_container.sh /tmp/asar-focus cgialus/alus-ootpa-devel-extra"
           # To RAM disk
           ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "cp -r /home/$INSTANCE_USERNAME/e2e /dev/shm/"
+          # Do not use previous run results here. When skipping/failing would possibly use valid results for validation.
+          ssh -o "StrictHostKeyChecking no" $INSTANCE_USERNAME@$instance_ip "rm -rf /dev/shm/e2e/last_run/*"
       - uses: actions/checkout@v4
       - name: End-to-end tests
         id: e2e-run

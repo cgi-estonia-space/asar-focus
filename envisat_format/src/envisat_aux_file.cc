@@ -114,7 +114,8 @@ void GetXca(std::string_view aux_root, boost::posix_time::ptime start, ExternalC
     memcpy(&xca, file_contents.data(), file_contents.size());
     xca.Bswap();
 
-    if (xca.dsr_length != GADS_SIZE) {
+    // It has been observed to be zero for ERS XCA files.
+    if (xca.dsr_length != GADS_SIZE && xca.dsr_length != 0) {
         throw std::runtime_error("External calibration file - " + file_path + " - GADS DSR length " +
                                  std::to_string(xca.dsr_length) + " bytes is not correct, should be " +
                                  std::to_string(GADS_SIZE));
