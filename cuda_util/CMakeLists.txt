@@ -4,6 +4,7 @@ list(APPEND CUDA_UTIL_INCLUDE_DIRS
 list(APPEND CUDA_UTIL_SOURCES
         ${CMAKE_CURRENT_LIST_DIR}/cuda_device.cu
         ${CMAKE_CURRENT_LIST_DIR}/cuda_device_init.cu
+        ${CMAKE_CURRENT_LIST_DIR}/cuda_algorithm.cu
         ${CMAKE_CURRENT_LIST_DIR}/cufft_plan.cc
         ${CMAKE_CURRENT_LIST_DIR}/device_padded_image.cu
         ${CMAKE_CURRENT_LIST_DIR}/memory_policy.cc

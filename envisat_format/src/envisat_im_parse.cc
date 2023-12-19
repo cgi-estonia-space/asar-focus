@@ -16,6 +16,9 @@
 #include "fmt/format.h"
 
 #include "alus_log.h"
+#include "cuda_algorithm.h"
+#include "cuda_util.h"
+#include "envisat_format_kernels.h"
 #include "envisat_utils.h"
 #include "parse_util.h"
 
@@ -77,65 +80,8 @@ struct EchoMeta {
     uint8_t chirp_pulse_bw_code;
     uint8_t aux_tx_monitor_level;
     uint16_t resampling_factor;
-
-    std::vector<std::complex<float>> raw_data;
+    size_t raw_samples;
 };
-
-int FBAQ4Idx(int block, int idx) {
-    switch (idx) {
-        case 0b1111:
-            idx = 0;
-            break;
-        case 0b1110:
-            idx = 1;
-            break;
-        case 0b1101:
-            idx = 2;
-            break;
-        case 0b1100:
-            idx = 3;
-            break;
-        case 0b1011:
-            idx = 4;
-            break;
-        case 0b1010:
-            idx = 5;
-            break;
-        case 0b1001:
-            idx = 6;
-            break;
-        case 0b1000:
-            idx = 7;
-            break;
-        case 0b0000:
-            idx = 8;
-            break;
-        case 0b0001:
-            idx = 9;
-            break;
-        case 0b0010:
-            idx = 10;
-            break;
-        case 0b0011:
-            idx = 11;
-            break;
-        case 0b0100:
-            idx = 12;
-            break;
-        case 0b0101:
-            idx = 13;
-            break;
-        case 0b0110:
-            idx = 14;
-            break;
-        case 0b0111:
-            idx = 15;
-            break;
-    }
-
-    return 256 * idx + block;
-}
-
 #if DEBUG_PACKETS
 
 constexpr auto DEBUG_ECHOS_ONLY{false};
@@ -213,6 +159,46 @@ inline void FetchCyclePacketCount(const uint8_t* start_array, uint16_t& var) {
     var |= start_array[1] << 0;
 }
 
+inline size_t ForecastMaxBlockDataLength(const uint8_t* mdsr_start, size_t count) {
+    const uint8_t* rolling_start = mdsr_start;
+    size_t parsed_records{};
+    size_t echo_packets{};
+    uint16_t max_block_data_length{0};
+    while (parsed_records < count) {
+        rolling_start += 12;  // MJD
+        FEPAnnotations fep;
+        rolling_start = CopyBSwapPOD(fep, rolling_start);
+        rolling_start += 4;  // packet ID, sequence control.
+
+        uint16_t packet_length;
+        rolling_start = CopyBSwapPOD(packet_length, rolling_start);
+        uint16_t datafield_length;
+        rolling_start = CopyBSwapPOD(datafield_length, rolling_start);
+        if (datafield_length != 29) {
+            throw std::runtime_error(
+                fmt::format("DSR sequence = {} parsing error. Date Field Header Length should be 29 - is {}",
+                            parsed_records + 1, datafield_length));
+        }
+
+        // ??, MODE ID, Onboard time, spare, mode count, comp/beam
+        bool is_echo = rolling_start[12] & 0x80;
+        if (is_echo) {
+            const uint16_t block_data_len = packet_length - 29;
+            max_block_data_length = std::max(max_block_data_length, block_data_len);
+            echo_packets++;
+        }
+        rolling_start += fep.isp_length - datafield_length + 28;
+        parsed_records++;
+    }
+
+    if (echo_packets < 10) {
+        throw std::runtime_error(
+            "Could not gather atleast 10 echo packets in order to forecast data block lengths - invalid dataset?");
+    }
+
+    return max_block_data_length;
+}
+
 #if HANDLE_DIAGNOSTICS
 
 constexpr auto SEQUENCE_CONTROL_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint16_t, 14>()};
@@ -255,6 +241,8 @@ struct PacketParseDiagnostics {
     size_t cycle_packet_count_oos;
     size_t cycle_packet_total_missing;
     size_t calibration_packet_count;
+    size_t packet_data_blocks_min;
+    size_t packet_data_blocks_max;
 };
 #endif
 }  // namespace
@@ -262,8 +250,8 @@ struct PacketParseDiagnostics {
 namespace alus::asar::envformat {
 
 void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0& mdsr, SARMetadata& sar_meta,
-                                 ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data,
-                                 InstrumentFile& ins_file, boost::posix_time::ptime packets_start_filter,
+                                 ASARMetadata& asar_meta, cufftComplex** d_parsed_packets, InstrumentFile& ins_file,
+                                 boost::posix_time::ptime packets_start_filter,
                                  boost::posix_time::ptime packets_stop_filter) {
     FillFbaqMeta(asar_meta);
     sar_meta.carrier_frequency = ins_file.flp.radar_frequency;
@@ -280,9 +268,27 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
     uint32_t last_mode_packet_count;
     uint16_t last_cycle_packet_count;
     InitializeCounters(it, last_sequence_control, last_mode_packet_count, last_cycle_packet_count);
+    diagnostics.packet_data_blocks_min = UINT64_MAX;
+    diagnostics.packet_data_blocks_max = 0;
 #endif
     const auto start_filter_mjd = PtimeToMjd(packets_start_filter);
     const auto end_filter_mjd = PtimeToMjd(packets_stop_filter);
+
+    const auto max_forecasted_sample_blocks_bytes = ForecastMaxBlockDataLength(it, mdsr.num_dsr);
+    LOGD << "Forecasted maximum sample blocks bytes/length per range " << max_forecasted_sample_blocks_bytes;
+    const auto compressed_sample_blocks_with_length_single_range_item_bytes =
+        max_forecasted_sample_blocks_bytes + 2;  // uint16_t for length
+    const auto alloc_bytes_for_sample_blocks_with_length =
+        mdsr.num_dsr * compressed_sample_blocks_with_length_single_range_item_bytes;
+    LOGD << "Reserving " << alloc_bytes_for_sample_blocks_with_length / (1 << 20)
+         << "MiB for raw sample blocks buffer including prepending 2 byte length marker ("
+         << compressed_sample_blocks_with_length_single_range_item_bytes << "x" << mdsr.num_dsr << ")";
+    std::unique_ptr<uint8_t[]> compressed_sample_blocks_buffer(new uint8_t[alloc_bytes_for_sample_blocks_with_length]);
+
+    size_t max_samples{};
+    size_t compressed_sample_measurements_stored_in_buf{};
+    sar_meta.total_raw_samples = 0;
+
     for (size_t i = 0; i < mdsr.num_dsr; i++) {
         EchoMeta echo_meta = {};
 #if HANDLE_DIAGNOSTICS
@@ -375,6 +381,8 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
 
         it = CopyBSwapPOD(echo_meta.pri_code, it);
         it = CopyBSwapPOD(echo_meta.swst_code, it);
+        // echo_window_code specifies how many samples, without block ID bytes e.g. data_len - block count or
+        // packet_length - 29 - block_count
         it = CopyBSwapPOD(echo_meta.echo_window_code, it);
 
         {
@@ -432,32 +440,25 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
         size_t data_len = packet_length - 29;
 
         if (echo_meta.echo_flag) {
-            echo_meta.raw_data.reserve(echo_meta.echo_window_code);
-            size_t n_blocks = data_len / 64;
-            for (size_t bi = 0; bi < n_blocks; bi++) {
-                const uint8_t* block_data = it + bi * 64;
-                uint8_t block_id = block_data[0];
-                for (size_t j = 0; j < 63; j++) {
-                    uint8_t i_codeword = block_data[1 + j] >> 4;
-                    uint8_t q_codeword = block_data[1 + j] & 0xF;
-
-                    float i_samp = ins_file.fbp.i_LUT_fbaq4[FBAQ4Idx(block_id, i_codeword)];
-                    float q_samp = ins_file.fbp.q_LUT_fbaq4[FBAQ4Idx(block_id, q_codeword)];
-                    echo_meta.raw_data.emplace_back(i_samp, q_samp);
-                }
-            }
-            // Deal with the remainder
-            size_t remainder = data_len % 64;
-            const uint8_t* block_data = it + n_blocks * 64;
-            uint8_t block_id = block_data[0];
-            for (size_t j = 0; j < remainder - 1; j++) {
-                uint8_t i_codeword = block_data[1 + j] >> 4;
-                uint8_t q_codeword = block_data[1 + j] & 0xF;
-
-                float i_samp = ins_file.fbp.i_LUT_fbaq4[FBAQ4Idx(block_id, i_codeword)];
-                float q_samp = ins_file.fbp.q_LUT_fbaq4[FBAQ4Idx(block_id, q_codeword)];
-                echo_meta.raw_data.emplace_back(i_samp, q_samp);
-            }
+#if HANDLE_DIAGNOSTICS
+            diagnostics.packet_data_blocks_min = std::min(diagnostics.packet_data_blocks_min, data_len);
+            diagnostics.packet_data_blocks_max = std::max(diagnostics.packet_data_blocks_max, data_len);
+#endif
+            uint16_t sample_blocks_length = static_cast<uint16_t>(data_len);
+            const auto sample_blocks_offset_bytes =
+                (echoes.size() * compressed_sample_blocks_with_length_single_range_item_bytes);
+            const auto sample_blocks_buffer_start = compressed_sample_blocks_buffer.get() + sample_blocks_offset_bytes;
+            memcpy(sample_blocks_buffer_start, &sample_blocks_length, sizeof(sample_blocks_length));
+            memcpy(sample_blocks_buffer_start + 2, it, data_len);
+            compressed_sample_measurements_stored_in_buf++;
+            // First item is the count of whole blocks times 63 samples which is included in block, lastly is added
+            // any samples from remainder block that does not consist full 63 samples
+            const auto current_samples =
+                static_cast<size_t>(((sample_blocks_length / 64) * 63) + (sample_blocks_length % 64) -
+                                    ((sample_blocks_length % 64) > 0 ? 1 : 0));
+            max_samples = std::max(max_samples, current_samples);
+            echo_meta.raw_samples = current_samples;
+            sar_meta.total_raw_samples += current_samples;
 
             echoes.push_back(std::move(echo_meta));
         } else if (echo_meta.cal_flag) {
@@ -466,6 +467,13 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
                 const auto prf = (sar_meta.chirp.range_sampling_rate / copy_echo.pri_code);
                 const auto micros_to_add = static_cast<ul>((1 / prf) * 10e5);
                 copy_echo.isp_sensing_time = MjdAddMicros(copy_echo.isp_sensing_time, micros_to_add);
+                memcpy(compressed_sample_blocks_buffer.get() +
+                           echoes.size() * compressed_sample_blocks_with_length_single_range_item_bytes,
+                       compressed_sample_blocks_buffer.get() +
+                           (echoes.size() - 1) * compressed_sample_blocks_with_length_single_range_item_bytes,
+                       compressed_sample_blocks_with_length_single_range_item_bytes);
+                compressed_sample_measurements_stored_in_buf++;
+                sar_meta.total_raw_samples += copy_echo.raw_samples;
                 echoes.push_back(copy_echo);
             }
 #if HANDLE_DIAGNOSTICS
@@ -495,7 +503,6 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
 
     uint16_t min_swst = UINT16_MAX;
     uint16_t max_swst = 0;
-    size_t max_samples = 0;
     uint16_t swst_changes = 0;
     uint16_t prev_swst = echoes.front().swst_code;
     const int swst_multiplier{1};
@@ -527,7 +534,20 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
         }
         min_swst = std::min(min_swst, e.swst_code);
         max_swst = std::max(max_swst, e.swst_code);
-        max_samples = std::max(max_samples, e.raw_data.size());
+    }
+
+    const auto forecasted_max_samples = (max_forecasted_sample_blocks_bytes / 64) * 63 +
+                                        (max_forecasted_sample_blocks_bytes % 64) -
+                                        ((max_forecasted_sample_blocks_bytes % 64) > 0 ? 1 : 0);
+    if (max_samples != forecasted_max_samples) {
+        LOGW << "Post-parse max samples " << max_samples << " do not equal with forecast " << forecasted_max_samples;
+    }
+
+    if (echoes.size() != compressed_sample_measurements_stored_in_buf) {
+        throw std::runtime_error(
+            fmt::format("Programming error detected, there were {} packets' metadata stored but only {} compressed "
+                        "sample measurements copied",
+                        echoes.size(), compressed_sample_measurements_stored_in_buf));
     }
 
     int swath_idx = SwathIdx(asar_meta.swath);
@@ -565,6 +585,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
     const uint32_t n_pulses_swst = ins_file.fbp.mode_timelines[im_idx].r_values[swath_idx];
 
     LOGD << "n PRI before SWST = " << n_pulses_swst;
+    LOGD << "SWST changes " << swst_changes << " MIN|MAX SWST " << min_swst << "|" << max_swst;
 
     asar_meta.swst_rank = n_pulses_swst;
 
@@ -594,19 +615,29 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
     sar_meta.img.range_size = range_samples;
     sar_meta.img.azimuth_size = echoes.size();
 
-    img_data.clear();
-    img_data.resize(sar_meta.img.range_size * sar_meta.img.azimuth_size, {NAN, NAN});
+    const auto range_az_total_items = sar_meta.img.range_size * sar_meta.img.azimuth_size;
+    const auto range_az_total_bytes = range_az_total_items * sizeof(cufftComplex);
+    CHECK_CUDA_ERR(cudaMalloc(d_parsed_packets, range_az_total_bytes));
+    constexpr auto CLEAR_VALUE = NAN;
+    constexpr cufftComplex CLEAR_VALUE_COMPLEX{CLEAR_VALUE, CLEAR_VALUE};
+    static_assert(sizeof(CLEAR_VALUE_COMPLEX) == sizeof(CLEAR_VALUE) * 2);
+    cuda::algorithm::Fill(*d_parsed_packets, range_az_total_items, CLEAR_VALUE_COMPLEX);
 
-    sar_meta.total_raw_samples = 0;
-
+    std::vector<uint16_t> swst_codes;
+    swst_codes.reserve(echoes.size());
     for (size_t y = 0; y < echoes.size(); y++) {
         const auto& e = echoes[y];
-        size_t idx = y * range_samples;
-        idx += swst_multiplier * (e.swst_code - min_swst);
-        const size_t n_samples = e.raw_data.size();
-        memcpy(&img_data[idx], e.raw_data.data(), n_samples * 8);
-        sar_meta.total_raw_samples += n_samples;
+        swst_codes.push_back(e.swst_code);
     }
+
+    std::vector<float> i_lut(4096);
+    memcpy(i_lut.data(), ins_file.fbp.i_LUT_fbaq4, 4096 * sizeof(float));
+    std::vector<float> q_lut(4096);
+    memcpy(q_lut.data(), ins_file.fbp.q_LUT_fbaq4, 4096 * sizeof(float));
+    ConvertAsarImBlocksToComplex(compressed_sample_blocks_buffer.get(),
+                                 compressed_sample_blocks_with_length_single_range_item_bytes, echoes.size(),
+                                 swst_codes.data(), min_swst, *d_parsed_packets, sar_meta.img.range_size, i_lut.data(),
+                                 q_lut.data(), 4096);
 
     // TODO init guess handling? At the moment just a naive guess from nadir point
     double init_guess_lat = (asar_meta.start_nadir_lat + asar_meta.stop_nadir_lat) / 2;
@@ -655,6 +686,8 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
          << diagnostics.mode_packet_total_missing;
     LOGD << "Cycle packet [oos total] " << diagnostics.cycle_packet_count_oos << " "
          << diagnostics.cycle_packet_total_missing;
+    LOGD << "MIN|MAX datablock lengths in bytes " << diagnostics.packet_data_blocks_min << "|"
+         << diagnostics.packet_data_blocks_max;
 #endif
 }
 }  // namespace alus::asar::envformat

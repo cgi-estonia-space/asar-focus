@@ -1,3 +1,6 @@
 .idea
 cmake-build*
 build
+
+# Github Pages, on separate branch, never merged, always rebased
+docs 

@@ -16,6 +16,9 @@
 #include "fmt/format.h"
 
 #include "alus_log.h"
+#include "cuda_algorithm.h"
+#include "cuda_util.h"
+#include "envisat_format_kernels.h"
 #include "envisat_utils.h"
 #include "ers_env_format.h"
 #include "parse_util.h"
@@ -71,8 +74,6 @@ struct EchoMeta {
     uint32_t image_format_counter;
     uint16_t pri_code;
     uint16_t swst_code;
-
-    std::vector<std::complex<float>> raw_data;
 };
 
 #if DEBUG_PACKETS
@@ -191,8 +192,8 @@ inline void CalculatePrf(uint16_t pri_code, double& pri, double& prf) {
 namespace alus::asar::envformat {
 
 void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0& mdsr, SARMetadata& sar_meta,
-                             ASARMetadata& asar_meta, std::vector<std::complex<float>>& img_data,
-                             InstrumentFile& ins_file, boost::posix_time::ptime packets_start_filter,
+                             ASARMetadata& asar_meta, cufftComplex** d_parsed_packets, InstrumentFile& ins_file,
+                             boost::posix_time::ptime packets_start_filter,
                              boost::posix_time::ptime packets_stop_filter) {
     FillFbaqMeta(asar_meta);
     const uint8_t* it = reinterpret_cast<const uint8_t*>(file_data.data()) + mdsr.ds_offset;
@@ -206,8 +207,14 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
                                  " bytes) is not equal to dataset defined packets (" +
                                  std::to_string(mdsr.num_dsr * mdsr.dsr_size) + " bytes).");
     }
+    // std::vector is chosen IF actual packets should exceed the num_dsr.
     std::vector<EchoMeta> echoes;
     echoes.reserve(mdsr.num_dsr);
+    const auto alloc_bytes_for_raw_samples = mdsr.num_dsr * ers::highrate::MEASUREMENT_DATA_SIZE_BYTES;
+    LOGD << "Reserving " << alloc_bytes_for_raw_samples / (1 << 20)
+         << "MiB for raw samples ("
+         << ers::highrate::MEASUREMENT_DATA_SIZE_BYTES << "x" << mdsr.num_dsr << ")";
+    std::unique_ptr<uint8_t[]> echoes_raw(new uint8_t[alloc_bytes_for_raw_samples]);
 #if DEBUG_PACKETS
     std::vector<ErsFepAndPacketMetadata> ers_dbg_meta;
     std::ofstream debug_stream("/tmp/" + asar_meta.product_name + ".debug.csv");
@@ -386,6 +393,9 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
                                 packets_to_fill, i - 1, i));
             }
             for (size_t pf{}; pf < packets_to_fill; pf++) {
+                std::memcpy(echoes_raw.get() + echoes.size() * ers::highrate::MEASUREMENT_DATA_SIZE_BYTES,
+                            echoes_raw.get() + (echoes.size() - 1) * ers::highrate::MEASUREMENT_DATA_SIZE_BYTES,
+                            ers::highrate::MEASUREMENT_DATA_SIZE_BYTES);
                 echoes.push_back(echoes.back());
             }
         }
@@ -423,25 +433,9 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         last_image_format_counter = echo_meta.image_format_counter;
 #endif
 
-        echo_meta.raw_data.reserve(ers::highrate::MEASUREMENT_DATA_SIZE_BYTES);
-        // uint64_t i_avg_cumulative{0};
-        // uint64_t q_avg_cumulative{0};
-        for (size_t r_i{0}; r_i < 5616; r_i++) {
-            uint8_t i_sample = it[r_i * 2 + 0];
-            // i_avg_cumulative += i_sample;
-            uint8_t q_sample = it[r_i * 2 + 1];
-            // q_avg_cumulative += q_sample;
-            echo_meta.raw_data.emplace_back(static_cast<float>(i_sample), static_cast<float>(q_sample));
-        }
-        //            double i_avg = i_avg_cumulative / 5616.0;
-        //            double q_avg = q_avg_cumulative / 5616.0;
-        //            if (i_avg > 16.0 || i_avg < 15.0) {
-        //                LOGD << "average for i at MSDR no. " << i << " is OOL " << i_avg;
-        //            }
-        //            if (q_avg > 16.0 || q_avg < 15.0) {
-        //                LOGD << "average for q at MSDR no. " << i << " is OOL " << q_avg;
-        //            }
-        it += 11232;
+        std::memcpy(echoes_raw.get() + echoes.size() * ers::highrate::MEASUREMENT_DATA_SIZE_BYTES, it,
+                    ers::highrate::MEASUREMENT_DATA_SIZE_BYTES);
+        it += ers::highrate::MEASUREMENT_DATA_SIZE_BYTES;
         echoes.push_back(std::move(echo_meta));
 #if DEBUG_PACKETS
         ErsFepAndPacketMetadata meta{};
@@ -452,7 +446,7 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
 
     uint16_t min_swst = UINT16_MAX;
     uint16_t max_swst = 0;
-    size_t max_samples = 0;
+    size_t max_samples = ers::highrate::MEASUREMENT_DATA_SAMPLE_COUNT;
     uint16_t swst_changes = 0;
     uint16_t prev_swst = echoes.front().swst_code;
     const int swst_multiplier{4};
@@ -490,7 +484,6 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         }
         min_swst = std::min(min_swst, e.swst_code);
         max_swst = std::max(max_swst, e.swst_code);
-        max_samples = std::max(max_samples, e.raw_data.size());
     }
 
     asar_meta.swst_changes = swst_changes;
@@ -569,20 +562,22 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
     sar_meta.img.range_size = range_samples;
     sar_meta.img.azimuth_size = echoes.size();
 
-    img_data.clear();
-    img_data.resize(sar_meta.img.range_size * sar_meta.img.azimuth_size, {NAN, NAN});
+    const auto range_az_total_items = sar_meta.img.range_size * sar_meta.img.azimuth_size;
+    const auto range_az_total_bytes = range_az_total_items * sizeof(cufftComplex);
+    CHECK_CUDA_ERR(cudaMalloc(d_parsed_packets, range_az_total_bytes));
+    constexpr auto CLEAR_VALUE = NAN;
+    constexpr cufftComplex CLEAR_VALUE_COMPLEX{CLEAR_VALUE, CLEAR_VALUE};
+    static_assert(sizeof(CLEAR_VALUE_COMPLEX) == sizeof(CLEAR_VALUE) * 2);
+    cuda::algorithm::Fill(*d_parsed_packets, range_az_total_items, CLEAR_VALUE_COMPLEX);
 
-    sar_meta.total_raw_samples = 0;
-
+    std::vector<uint16_t> swst_codes;
+    swst_codes.reserve(echoes.size());
     for (size_t y = 0; y < echoes.size(); y++) {
-        const auto& e = echoes[y];
-        size_t idx = y * range_samples;
-        idx += swst_multiplier * (e.swst_code - min_swst);
-        const size_t n_samples = e.raw_data.size();
-        memcpy(&img_data[idx], e.raw_data.data(), n_samples * 8);
-        sar_meta.total_raw_samples += n_samples;
+        swst_codes.push_back(echoes.at(y).swst_code);
+        sar_meta.total_raw_samples += ers::highrate::MEASUREMENT_DATA_SAMPLE_COUNT;
     }
-
+    envformat::ConvertErsImSamplesToComplex(echoes_raw.get(), ers::highrate::MEASUREMENT_DATA_SAMPLE_COUNT, echoes.size(), swst_codes.data(), min_swst,
+                                            *d_parsed_packets, sar_meta.img.range_size);
     // TODO init guess handling? At the moment just a naive guess from nadir point
     double init_guess_lat = (asar_meta.start_nadir_lat + asar_meta.stop_nadir_lat) / 2;
     double init_guess_lon = asar_meta.start_nadir_lon;

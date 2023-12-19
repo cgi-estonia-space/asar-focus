@@ -9,15 +9,15 @@
  */
 #pragma once
 
+#include <map>
 #include <string_view>
+#include <variant>
 #include <vector>
+
+#include <cufft.h>
 
 #include <boost/date_time.hpp>
 #include <boost/date_time/posix_time/ptime.hpp>
-
-#include <complex>
-#include <map>
-#include <variant>
 
 #include "asar_constants.h"
 #include "doris_orbit.h"
@@ -128,8 +128,8 @@ namespace alus::asar::envformat {
 
 void ParseLevel0Header(const std::vector<char>& file_data, ASARMetadata& asar_meta);
 void ParseLevel0Packets(const std::vector<char>& file_data, SARMetadata& sar_meta, ASARMetadata& asar_meta,
-                        std::vector<std::complex<float>>& img_data,
-                        alus::asar::specification::ProductTypes product_type, InstrumentFile& ins_file,
+                        cufftComplex** d_parsed_packets, alus::asar::specification::ProductTypes product_type,
+                        InstrumentFile& ins_file,
                         boost::posix_time::ptime packets_start_filter = boost::posix_time::not_a_date_time,
                         boost::posix_time::ptime packets_stop_filter = boost::posix_time::not_a_date_time);
 
