@@ -141,6 +141,40 @@ void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, envfo
     }
 }
 
+AzimuthRangeWindow CalcResultsWindow(const SARMetadata& sar_meta, size_t lines_cached_before_sensing,
+                                     size_t lines_cached_after_sensing, size_t max_aperture_pixels) {
+    AzimuthRangeWindow az_rg_win{};
+    const auto doppler_centroid_constant_term = sar_meta.results.doppler_centroid_poly.back();
+    // Remove all cached lines in order to comply with the requested sensing start and stop times.
+    az_rg_win.lines_to_remove_before_sensing_start = lines_cached_before_sensing;
+    az_rg_win.lines_to_remove_after_sensing_stop = lines_cached_after_sensing;
+    // Determine if there are more needed to cut because the L0 does not consist enough packets to accomodate with
+    // aperture pixels.
+    if (doppler_centroid_constant_term < 0) {
+        if (lines_cached_before_sensing < max_aperture_pixels) {
+            az_rg_win.lines_to_remove_after_sensing_start = (max_aperture_pixels - lines_cached_before_sensing);
+        }
+    } else {
+        if (lines_cached_after_sensing < max_aperture_pixels) {
+            az_rg_win.lines_to_remove_before_sensing_stop = (max_aperture_pixels - lines_cached_after_sensing);
+        }
+    }
+
+    LOGD << "Doppler centroid constant term " << doppler_centroid_constant_term << " and max aperture pixels "
+         << max_aperture_pixels;
+
+    if (az_rg_win.lines_to_remove_after_sensing_start > 0) {
+        LOGI << "Need to remove " << az_rg_win.lines_to_remove_after_sensing_start << " lines after requested sensing "
+             << "start - the L0 product did not have enough packets to accommodate aperture pixel padding";
+    }
+    if (az_rg_win.lines_to_remove_before_sensing_stop > 0) {
+        LOGI << "Need to remove " << az_rg_win.lines_to_remove_before_sensing_stop << " lines before requested sensing "
+             << "stop - the L0 product did not have enough packets to accommodate aperture pixel padding";
+    }
+
+    return az_rg_win;
+}
+
 void FormatResults(DevicePaddedImage& img, char* dest_space, size_t record_header_size, float calibration_constant) {
     envformat::ConditionResults(img, dest_space, record_header_size, calibration_constant);
 }
@@ -455,6 +489,65 @@ void ConvertRawSampleSetsToComplex(const envformat::RawSampleMeasurements& raw_m
     } else {
         throw std::runtime_error("Unsupported product type for " + std::string(__FUNCTION__));
     }
+}
+
+void SubsetResultsAndReassembleMeta(DevicePaddedImage& azimuth_compressed_raster, AzimuthRangeWindow window,
+                                    std::vector<alus::asar::envformat::CommonPacketMetadata>& common_metadata,
+                                    ASARMetadata& asar_meta, SARMetadata& sar_meta, InstrumentFile& ins_file,
+                                    alus::asar::specification::ProductTypes product_type, CudaWorkspace& workspace,
+                                    DevicePaddedImage& subsetted_raster) {
+    const auto compressed_lines = static_cast<size_t>(azimuth_compressed_raster.YSize());
+    const auto metadata_lines = common_metadata.size();
+    if (compressed_lines != metadata_lines) {
+        throw std::runtime_error("Programming error detected. The resulting raster after azimuth compression has " +
+                                 std::to_string(compressed_lines) + " lines but metadata consists " +
+                                 std::to_string(metadata_lines) + " entries");
+    }
+
+    const auto lines_to_discard_beginning =
+        window.lines_to_remove_before_sensing_start + window.lines_to_remove_after_sensing_start;
+    const auto lines_to_discard_end =
+        window.lines_to_remove_before_sensing_stop + window.lines_to_remove_after_sensing_stop;
+    const auto source_range_size = azimuth_compressed_raster.XSize();
+    const auto target_range_size =
+        source_range_size - (window.near_range_pixels_to_remove + window.far_range_pixels_to_remove);
+
+    common_metadata.erase(common_metadata.begin(), common_metadata.begin() + lines_to_discard_beginning);
+    common_metadata.resize(common_metadata.size() - lines_to_discard_end);
+    const auto subset_line_count = common_metadata.size();
+
+    if (workspace.ByteSize() < subset_line_count * target_range_size * sizeof(cufftComplex)) {
+        throw std::runtime_error("Destination buffer size " + std::to_string(workspace.ByteSize()) +
+                                 " is not enough for results subsetting " + std::to_string(target_range_size) + "x" +
+                                 std::to_string(subset_line_count));
+    }
+
+    [[maybe_unused]]const auto source_range_size_bytes = source_range_size * sizeof(cufftComplex);
+    const auto subset_range_size_bytes = target_range_size * sizeof(cufftComplex);
+
+//    uint8_t* d_buffer1;
+//    CHECK_CUDA_ERR(cudaMalloc(&d_buffer1, 10*10));
+//    uint8_t* d_buffer2;
+//    CHECK_CUDA_ERR(cudaMalloc(&d_buffer2, 5*5));
+//    std::vector<uint8_t> data_test(10*10);
+//    std::iota(data_test.begin(), data_test.end(), 0);
+//    CHECK_CUDA_ERR(cudaMemcpy(d_buffer1, data_test.data(), 100, cudaMemcpyHostToDevice));
+//    std::vector<uint8_t> data_test_out(5*5);
+//    CHECK_CUDA_ERR(cudaMemcpy2D(d_buffer2, 5, d_buffer1 + 5, 10, 5, 5, cudaMemcpyDeviceToDevice));
+//    CHECK_CUDA_ERR(cudaMemcpy(data_test_out.data(), d_buffer2, 5*5, cudaMemcpyDeviceToHost));
+
+    // Strided copy of the buffer.
+    CHECK_CUDA_ERR(
+        cudaMemcpy2D(workspace.Get(), subset_range_size_bytes,
+                     azimuth_compressed_raster.Data() + (lines_to_discard_beginning * azimuth_compressed_raster.XStride()) +
+                         window.near_range_pixels_to_remove, azimuth_compressed_raster.XStride() * sizeof(cufftComplex ), subset_range_size_bytes, subset_line_count, cudaMemcpyDeviceToDevice));
+//    CHECK_CUDA_ERR(cudaMemcpy(workspace.Get(), azimuth_compressed_raster.Data() + (lines_to_discard_beginning * source_range_size), subset_line_count * subset_range_size_bytes, cudaMemcpyDeviceToDevice));
+    subsetted_raster.InitExtPtr(target_range_size, subset_line_count, target_range_size, subset_line_count, workspace);
+    workspace = azimuth_compressed_raster.ReleaseMemory();
+
+
+    AssembleMetadataFrom(common_metadata, asar_meta, sar_meta, ins_file, target_range_size,
+                         target_range_size * subset_line_count, product_type);
 }
 
 }  // namespace alus::asar::mainflow
