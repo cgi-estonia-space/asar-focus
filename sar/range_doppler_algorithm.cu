@@ -330,7 +330,7 @@ void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_i
 
     k_args.prf = metadata.pulse_repetition_frequency;
     // k_args.doppler_centroid = metadata.results.doppler_centroid;
-    k_args.azimuth_bandwidth_fraction = 0.8;
+    k_args.azimuth_bandwidth_fraction = 0.8; // Replace this with metadata.azimuth_bandwidth_fraction
 
     // double dc = CalcDopplerCentroid(metadata, metadata.img.range_size / 2);
 

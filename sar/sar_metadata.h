@@ -3,9 +3,9 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <vector>
 
-#include "sar/orbit_state_vector.h"
 #include "geo_tools.h"
 #include "math_utils.h"
+#include "sar/orbit_state_vector.h"
 
 struct ImgDimensions {
     int range_size;
@@ -92,4 +92,21 @@ inline int CalcAperturePixels(const SARMetadata& metadata, int range_pixel) {
     double pixels = (fmax / Ka) * metadata.pulse_repetition_frequency;
 
     return std::round(pixels);
+}
+
+inline std::vector<size_t> CalcAperturePixels(const SARMetadata& sar_meta) {
+    constexpr size_t STEP_COUNT{10};  // TODO investigate - connected to EstimateProcessingVelocity()'s similar count.
+    std::vector<size_t> aperture_pixels;
+    aperture_pixels.reserve(STEP_COUNT);
+
+    const int range_start = 0;
+    const int range_end = (sar_meta.img.range_size - sar_meta.chirp.n_samples);
+
+    const int step = (range_end - range_start) / STEP_COUNT;
+
+    for (int range_idx = range_start; range_idx < range_end; range_idx += step) {
+        aperture_pixels.push_back(static_cast<size_t>(CalcAperturePixels(sar_meta, range_idx)));
+    }
+
+    return aperture_pixels;
 }
