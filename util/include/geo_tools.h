@@ -77,3 +77,5 @@ struct Velocity3D {
 };
 
 GeoPos3D RangeDopplerGeoLocate(Velocity3D sensor_vel, GeoPos3D sensor_pos, GeoPos3D init_guess, double slant_range);
+
+double CalcIncidenceAngle(GeoPos3D earth_point, GeoPos3D sensor_pos);

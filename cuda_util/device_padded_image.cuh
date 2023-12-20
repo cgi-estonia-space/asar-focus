@@ -124,6 +124,10 @@
 
         double CalcTotalIntensity(size_t sm_count);
 
+        // calculate statistics, return value contains I and Q channel results
+        cufftComplex CalcStdDev(float i_mean, float q_mean, size_t total_samples);
+        cufftComplex CalcMean(size_t total_samples);
+
         void ZeroNaNs();
 
         DevicePaddedImage() = default;

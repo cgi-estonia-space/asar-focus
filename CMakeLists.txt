@@ -22,6 +22,7 @@ set(SAR_SOURCES
         sar/range_doppler_algorithm.cu
         sar/range_doppler_algorithm.cuh
         sar/sar_chirp.h
+        sar/sar_chirp.cpp
         sar/sar_metadata.h
 )
 
