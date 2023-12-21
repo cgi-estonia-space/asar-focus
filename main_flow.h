@@ -21,6 +21,7 @@
 #include "doris_orbit.h"
 #include "envisat_aux_file.h"
 #include "envisat_lvl0_parser.h"
+#include "envisat_lvl1_writer.h"
 #include "envisat_types.h"
 #include "sar/sar_metadata.h"
 
@@ -58,9 +59,16 @@ void StorePlots(std::string output_path, std::string product_name, const SARMeta
 void StoreIntensity(std::string output_path, std::string product_name, std::string postfix,
                     const DevicePaddedImage& dev_padded_img);
 
+/*
+ * Can be called multiple times during processing. In order to separate calculations before compression the SWST
+ * multiplier can be left unspecified e.g. default -1. After (range) compressions SWST multiplier can be set to 0 in
+ * order to not screw up sample count calculation because SWST influenced offsets and everything has been
+ * compensated/removed.
+ */
 void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_meta, ASARMetadata& asar_meta,
                           SARMetadata& sar_meta, InstrumentFile& ins_file, size_t max_raw_samples_at_range,
-                          size_t total_raw_samples, alus::asar::specification::ProductTypes product_type);
+                          size_t total_raw_samples, alus::asar::specification::ProductTypes product_type,
+                          int swst_multiplier = -1);
 
 // d_converted_measurements could be CudaWorkspace array now since we can estimate FFT beforehand when parsing metadata
 // separately now.
@@ -72,7 +80,9 @@ void ConvertRawSampleSetsToComplex(const envformat::RawSampleMeasurements& raw_m
 void SubsetResultsAndReassembleMeta(DevicePaddedImage& azimuth_compressed_raster, AzimuthRangeWindow window,
                                     std::vector<alus::asar::envformat::CommonPacketMetadata>& common_metadata,
                                     ASARMetadata& asar_meta, SARMetadata& sar_meta, InstrumentFile& ins_file,
-                                    alus::asar::specification::ProductTypes product_type,
-                                    CudaWorkspace& workspace, DevicePaddedImage& subsetted_raster);
+                                    alus::asar::specification::ProductTypes product_type, CudaWorkspace& workspace,
+                                    DevicePaddedImage& subsetted_raster);
+
+void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed);
 
 }  // namespace alus::asar::mainflow
