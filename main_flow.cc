@@ -240,13 +240,17 @@ void StoreIntensity(std::string output_path, std::string product_name, std::stri
 
 void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_meta, ASARMetadata& asar_meta,
                           SARMetadata& sar_meta, InstrumentFile& ins_file, size_t max_raw_samples_at_range,
-                          size_t total_raw_samples, alus::asar::specification::ProductTypes product_type) {
+                          size_t total_raw_samples, alus::asar::specification::ProductTypes product_type,
+                          int swst_mult) {
     uint16_t min_swst = UINT16_MAX;
     uint16_t max_swst = 0;
     uint16_t swst_changes = 0;
     uint16_t prev_swst = parsed_meta.front().swst_code;
     const auto instrument = specification::GetInstrumentFrom(product_type);
-    const int swst_multiplier{instrument == specification::Instrument::ASAR ? 1 : 4};
+    int swst_multiplier{instrument == specification::Instrument::ASAR ? 1 : 4};
+    if (swst_mult >= 0) {
+        swst_multiplier = swst_mult;
+    }
 
     sar_meta.carrier_frequency = ins_file.flp.radar_frequency;
     sar_meta.chirp.range_sampling_rate = ins_file.flp.radar_sampling_rate;
@@ -281,29 +285,38 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
     asar_meta.last_mjd = parsed_meta.back().sensing_time;
     asar_meta.last_sbt = parsed_meta.back().onboard_time;
 
-    if (instrument == specification::Instrument::ASAR) {
-        for (const auto& e : parsed_meta) {
-            if (prev_swst != e.swst_code) {
-                prev_swst = e.swst_code;
-                swst_changes++;
-            }
-            min_swst = std::min(min_swst, e.swst_code);
-            max_swst = std::max(max_swst, e.swst_code);
-        }
-    }
-
-    if (instrument == specification::Instrument::SAR) {
-        for (auto& e : parsed_meta) {
-            if (prev_swst != e.swst_code) {
-                if ((e.swst_code < 500) || (e.swst_code > 1500) || ((prev_swst - e.swst_code) % 22 != 0)) {
-                    e.swst_code = prev_swst;
-                    continue;
+    {
+        size_t packet_index{};
+        if (instrument == specification::Instrument::ASAR) {
+            for (const auto& e : parsed_meta) {
+                if (prev_swst != e.swst_code) {
+                    LOGV << "SWST change at line " << packet_index << " from " << prev_swst << " to " << e.swst_code;
+                    prev_swst = e.swst_code;
+                    swst_changes++;
                 }
-                prev_swst = e.swst_code;
-                swst_changes++;
+                min_swst = std::min(min_swst, e.swst_code);
+                max_swst = std::max(max_swst, e.swst_code);
+                packet_index++;
             }
-            min_swst = std::min(min_swst, e.swst_code);
-            max_swst = std::max(max_swst, e.swst_code);
+        }
+
+        if (instrument == specification::Instrument::SAR) {
+            for (auto& e : parsed_meta) {
+                if (prev_swst != e.swst_code) {
+                    LOGV << "SWST change at line " << packet_index << " from " << prev_swst << " to " << e.swst_code;
+                    if ((e.swst_code < 500) || (e.swst_code > 1500) || ((prev_swst - e.swst_code) % 22 != 0)) {
+                        LOGV << "Invalid SWST code " << e.swst_code << " at line " << packet_index;
+                        e.swst_code = prev_swst;
+                        packet_index++;
+                        continue;
+                    }
+                    prev_swst = e.swst_code;
+                    swst_changes++;
+                }
+                min_swst = std::min(min_swst, e.swst_code);
+                max_swst = std::max(max_swst, e.swst_code);
+                packet_index++;
+            }
         }
     }
 
@@ -426,6 +439,7 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
     auto center_time = asar_meta.sensing_start + boost::posix_time::microseconds(static_cast<uint32_t>(center_s * 1e6));
 
     // TODO investigate fast time effect on geolocation
+    // Use CalcR0() to calculate new slant_range_first_sample_time.
     double slant_range_center = sar_meta.slant_range_first_sample +
                                 ((sar_meta.img.range_size - sar_meta.chirp.n_samples) / 2) * sar_meta.range_spacing;
 
@@ -526,32 +540,38 @@ void SubsetResultsAndReassembleMeta(DevicePaddedImage& azimuth_compressed_raster
                                  std::to_string(subset_line_count));
     }
 
-    [[maybe_unused]]const auto source_range_size_bytes = source_range_size * sizeof(cufftComplex);
+    [[maybe_unused]] const auto source_range_size_bytes = source_range_size * sizeof(cufftComplex);
     const auto subset_range_size_bytes = target_range_size * sizeof(cufftComplex);
 
-//    uint8_t* d_buffer1;
-//    CHECK_CUDA_ERR(cudaMalloc(&d_buffer1, 10*10));
-//    uint8_t* d_buffer2;
-//    CHECK_CUDA_ERR(cudaMalloc(&d_buffer2, 5*5));
-//    std::vector<uint8_t> data_test(10*10);
-//    std::iota(data_test.begin(), data_test.end(), 0);
-//    CHECK_CUDA_ERR(cudaMemcpy(d_buffer1, data_test.data(), 100, cudaMemcpyHostToDevice));
-//    std::vector<uint8_t> data_test_out(5*5);
-//    CHECK_CUDA_ERR(cudaMemcpy2D(d_buffer2, 5, d_buffer1 + 5, 10, 5, 5, cudaMemcpyDeviceToDevice));
-//    CHECK_CUDA_ERR(cudaMemcpy(data_test_out.data(), d_buffer2, 5*5, cudaMemcpyDeviceToHost));
+    //    uint8_t* d_buffer1;
+    //    CHECK_CUDA_ERR(cudaMalloc(&d_buffer1, 10*10));
+    //    uint8_t* d_buffer2;
+    //    CHECK_CUDA_ERR(cudaMalloc(&d_buffer2, 5*5));
+    //    std::vector<uint8_t> data_test(10*10);
+    //    std::iota(data_test.begin(), data_test.end(), 0);
+    //    CHECK_CUDA_ERR(cudaMemcpy(d_buffer1, data_test.data(), 100, cudaMemcpyHostToDevice));
+    //    std::vector<uint8_t> data_test_out(5*5);
+    //    CHECK_CUDA_ERR(cudaMemcpy2D(d_buffer2, 5, d_buffer1 + 5, 10, 5, 5, cudaMemcpyDeviceToDevice));
+    //    CHECK_CUDA_ERR(cudaMemcpy(data_test_out.data(), d_buffer2, 5*5, cudaMemcpyDeviceToHost));
 
     // Strided copy of the buffer.
-    CHECK_CUDA_ERR(
-        cudaMemcpy2D(workspace.Get(), subset_range_size_bytes,
-                     azimuth_compressed_raster.Data() + (lines_to_discard_beginning * azimuth_compressed_raster.XStride()) +
-                         window.near_range_pixels_to_remove, azimuth_compressed_raster.XStride() * sizeof(cufftComplex ), subset_range_size_bytes, subset_line_count, cudaMemcpyDeviceToDevice));
-//    CHECK_CUDA_ERR(cudaMemcpy(workspace.Get(), azimuth_compressed_raster.Data() + (lines_to_discard_beginning * source_range_size), subset_line_count * subset_range_size_bytes, cudaMemcpyDeviceToDevice));
+    CHECK_CUDA_ERR(cudaMemcpy2D(workspace.Get(), subset_range_size_bytes,
+                                azimuth_compressed_raster.Data() +
+                                    (lines_to_discard_beginning * azimuth_compressed_raster.XStride()) +
+                                    window.near_range_pixels_to_remove,
+                                azimuth_compressed_raster.XStride() * sizeof(cufftComplex), subset_range_size_bytes,
+                                subset_line_count, cudaMemcpyDeviceToDevice));
+    //    CHECK_CUDA_ERR(cudaMemcpy(workspace.Get(), azimuth_compressed_raster.Data() + (lines_to_discard_beginning *
+    //    source_range_size), subset_line_count * subset_range_size_bytes, cudaMemcpyDeviceToDevice));
     subsetted_raster.InitExtPtr(target_range_size, subset_line_count, target_range_size, subset_line_count, workspace);
     workspace = azimuth_compressed_raster.ReleaseMemory();
 
-
     AssembleMetadataFrom(common_metadata, asar_meta, sar_meta, ins_file, target_range_size,
-                         target_range_size * subset_line_count, product_type);
+                         target_range_size * subset_line_count, product_type, 0);
+}
+
+void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed) {
+    ims.main_processing_params.azimuth_processing_information.num_lines_proc = total_packets_processed;
 }
 
 }  // namespace alus::asar::mainflow

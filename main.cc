@@ -292,12 +292,14 @@ int main(int argc, char* argv[]) {
 
         auto result_file_assembly = TimeStart();
 
+        EnvisatIMS ims{};
+        alus::asar::mainflow::PrefillIms(ims, packets_metadata.size());
+
         DevicePaddedImage subsetted_raster;
         alus::asar::mainflow::SubsetResultsAndReassembleMeta(az_compressed_image, az_rg_windowing, packets_metadata,
                                                              asar_meta, sar_meta, ins_file, product_type, d_workspace,
                                                              subsetted_raster);
         // az_compressed_image is unused from now on.
-        sar_meta.img.range_size = subsetted_raster.XSize(); // TODO - hackathon
         constexpr size_t record_header_bytes = 12 + 1 + 4;
         const auto mds_record_size = subsetted_raster.XSize() * sizeof(IQ16) + record_header_bytes;
         const auto mds_record_count = subsetted_raster.YSize();
@@ -308,7 +310,6 @@ int main(int argc, char* argv[]) {
             mds.buf = static_cast<char*>(alus::util::Memalloc(mds.n_records * mds.record_size));
         });
 
-        EnvisatIMS ims{};
         ConstructIMS(ims, sar_meta, asar_meta, mds, GetSoftwareVersion());
         if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
             throw std::runtime_error("Could not create L1 file at " + lvl1_out_full_path);

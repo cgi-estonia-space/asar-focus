@@ -100,7 +100,7 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
 
     {
         auto& az = out.azimuth_processing_information;
-        az.num_lines_proc = sar_meta.img.azimuth_size;
+        // Prefilled - az.num_lines_proc
         az.num_look_az = 1;
         az.to_bw_az = sar_meta.pulse_repetition_frequency * sar_meta.azimuth_bandwidth_fraction;
         CopyStrPad(az.filter_az, "NONE");
