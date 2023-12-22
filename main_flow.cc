@@ -152,7 +152,7 @@ AzimuthRangeWindow CalcResultsWindow(double doppler_centroid_constant_term, size
     az_rg_win.lines_to_remove_after_sensing_stop = lines_cached_after_sensing;
     // Determine if there are more needed to cut because the L0 does not consist enough packets to accomodate with
     // aperture pixels.
-    if (doppler_centroid_constant_term < 0) {
+    if (doppler_centroid_constant_term > 0) {
         if (lines_cached_before_sensing < max_aperture_pixels) {
             az_rg_win.lines_to_remove_after_sensing_start = (max_aperture_pixels - lines_cached_before_sensing);
         }
@@ -174,13 +174,15 @@ AzimuthRangeWindow CalcResultsWindow(double doppler_centroid_constant_term, size
              << "stop - the L0 product did not have enough packets to accommodate aperture pixel padding";
     }
 
-    // Based on visual inspection with different window sizes. First are "nodata" resulting in windowing.
+    // Based on visual inspection with different RCMC window sizes. First are "nodata" resulting in windowing.
     // Extra two are visually meaningless focussed pixels. For Window size 16 there are up to 6 pixels nodata on near
     // range. Adding two which have data but not focussed so good we get 8 for near range. Similar result to window
-    // size 8, which would result in 4 pixels
+    // size 8, which would result in 4 pixels. This is certified on ERS scene which does not have SWST change, where
+    // the "not so well focussed" pixels are not present. So the effect is purely driven by the RCMC window size and
+    // half should be deducted near and half far range.
     const auto rcmc_window_coef_near_range = (rcmc_params.window_size / 2);
-    // For far range no meaningless focussed pixels could be detected right now. but the effect of the window is
-    // about half of the window size.
+    // For far range no meaningless focussed pixels could not be detected for scene with SWST change.
+    // The effect of the window is still half of the window size.
     const auto rcmc_window_coef_far_range = (rcmc_params.window_size / 2);
     az_rg_win.near_range_pixels_to_remove = rcmc_window_coef_near_range;
     az_rg_win.far_range_pixels_to_remove = rcmc_window_coef_far_range;
