@@ -23,6 +23,7 @@
 #include "envisat_lvl0_parser.h"
 #include "envisat_lvl1_writer.h"
 #include "envisat_types.h"
+#include "sar/focussing_details.h"
 #include "sar/sar_metadata.h"
 
 namespace alus::asar::mainflow {
@@ -47,8 +48,9 @@ struct AzimuthRangeWindow {
     size_t lines_to_remove_after_sensing_stop;
 };
 
-AzimuthRangeWindow CalcResultsWindow(const SARMetadata& sar_meta, size_t lines_before_sensing,
-                                     size_t lines_after_sensing, size_t max_aperture_pixels);
+AzimuthRangeWindow CalcResultsWindow(double doppler_centroid_constant_term, size_t lines_before_sensing,
+                                     size_t lines_after_sensing, size_t max_aperture_pixels,
+                                     const sar::focus::RcmcParameters& rcmc_params);
 
 // Calibrate, clamp and Big endian results with empty header into dest_space, which shall be a device memory.
 void FormatResults(DevicePaddedImage& img, char* dest_space, size_t record_header_size, float calibration_constant);
@@ -83,6 +85,6 @@ void SubsetResultsAndReassembleMeta(DevicePaddedImage& azimuth_compressed_raster
                                     alus::asar::specification::ProductTypes product_type, CudaWorkspace& workspace,
                                     DevicePaddedImage& subsetted_raster);
 
-void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed);
+void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed, const sar::focus::RcmcParameters& rcmc_params);
 
 }  // namespace alus::asar::mainflow

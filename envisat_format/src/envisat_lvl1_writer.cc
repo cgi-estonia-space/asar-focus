@@ -88,8 +88,8 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
         r.range_samp_rate = sar_meta.chirp.range_sampling_rate;
         r.radar_freq = sar_meta.carrier_frequency;
         r.num_looks_range = 1;
-        CopyStrPad(r.filter_range, "NONE");  // rc windowning TODO
-        r.filter_coef_range = 0.0f;
+        // r.filter_window has been prefilled.
+        // r.filter_coef_range has been prefilled.
         r.look_bw_range[0] = out.downlink_header.tx_pulse_bw_value[0];
         r.tot_bw_range[0] = out.downlink_header.tx_pulse_bw_value[0];
 

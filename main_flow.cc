@@ -141,10 +141,11 @@ void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, envfo
     }
 }
 
-AzimuthRangeWindow CalcResultsWindow(const SARMetadata& sar_meta, size_t lines_cached_before_sensing,
-                                     size_t lines_cached_after_sensing, size_t max_aperture_pixels) {
+AzimuthRangeWindow CalcResultsWindow(double doppler_centroid_constant_term, size_t lines_cached_before_sensing,
+                                     size_t lines_cached_after_sensing, size_t max_aperture_pixels,
+                                     const sar::focus::RcmcParameters& rcmc_params) {
     AzimuthRangeWindow az_rg_win{};
-    const auto doppler_centroid_constant_term = sar_meta.results.doppler_centroid_poly.back();
+
     // Remove all cached lines in order to comply with the requested sensing start and stop times.
     az_rg_win.lines_to_remove_before_sensing_start = lines_cached_before_sensing;
     az_rg_win.lines_to_remove_after_sensing_stop = lines_cached_after_sensing;
@@ -171,6 +172,17 @@ AzimuthRangeWindow CalcResultsWindow(const SARMetadata& sar_meta, size_t lines_c
         LOGI << "Need to remove " << az_rg_win.lines_to_remove_before_sensing_stop << " lines before requested sensing "
              << "stop - the L0 product did not have enough packets to accommodate aperture pixel padding";
     }
+
+    // Based on visual inspection with different window sizes. First are "nodata" resulting in windowing.
+    // Extra two are visually meaningless focussed pixels. For Window size 16 there are up to 6 pixels nodata on near
+    // range. Adding two which have data but not focussed so good we get 8 for near range. Similar result to window
+    // size 8, which would result in 4 pixels
+    const auto rcmc_window_coef_near_range = (rcmc_params.window_size / 2);
+    // For far range no meaningless focussed pixels could be detected right now. but the effect of the window is
+    // about half of the window size.
+    const auto rcmc_window_coef_far_range = (rcmc_params.window_size / 2);
+    az_rg_win.near_range_pixels_to_remove = rcmc_window_coef_near_range;
+    az_rg_win.far_range_pixels_to_remove = rcmc_window_coef_far_range;
 
     return az_rg_win;
 }
@@ -372,6 +384,9 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
     }
 
     if (instrument == specification::Instrument::SAR) {
+        // if  swst_multiplier != 0 - do not have previous results
+        // else sar_meta.slant_range_first_sample = CalcR0(sar_meta, pixels cut)
+        // asar_meta.two_way_slant_range_time = (slant_range_first_sample * 2) / c
         const auto delay_time = ins_file.flp.range_gate_bias;
         // ISCE2 uses 210.943006e-9, but
         // ERS-1-Satellite-to-Ground-Segment-Interface-Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05
@@ -522,33 +537,22 @@ void SubsetResultsAndReassembleMeta(DevicePaddedImage& azimuth_compressed_raster
         window.lines_to_remove_before_sensing_start + window.lines_to_remove_after_sensing_start;
     const auto lines_to_discard_end =
         window.lines_to_remove_before_sensing_stop + window.lines_to_remove_after_sensing_stop;
-    const auto source_range_size = azimuth_compressed_raster.XSize();
-    const auto target_range_size =
-        source_range_size - (window.near_range_pixels_to_remove + window.far_range_pixels_to_remove);
+    const auto source_range_pixels = azimuth_compressed_raster.XSize();
+    const auto subset_range_pixels =
+        source_range_pixels - (window.near_range_pixels_to_remove + window.far_range_pixels_to_remove);
 
     common_metadata.erase(common_metadata.begin(), common_metadata.begin() + lines_to_discard_beginning);
     common_metadata.resize(common_metadata.size() - lines_to_discard_end);
     const auto subset_line_count = common_metadata.size();
 
-    if (workspace.ByteSize() < subset_line_count * target_range_size * sizeof(cufftComplex)) {
+    if (workspace.ByteSize() < subset_line_count * subset_range_pixels * sizeof(cufftComplex)) {
         throw std::runtime_error("Destination buffer size " + std::to_string(workspace.ByteSize()) +
-                                 " is not enough for results subsetting " + std::to_string(target_range_size) + "x" +
+                                 " is not enough for results subsetting " + std::to_string(subset_range_pixels) + "x" +
                                  std::to_string(subset_line_count));
     }
 
-    [[maybe_unused]] const auto source_range_size_bytes = source_range_size * sizeof(cufftComplex);
-    const auto subset_range_size_bytes = target_range_size * sizeof(cufftComplex);
-
-    //    uint8_t* d_buffer1;
-    //    CHECK_CUDA_ERR(cudaMalloc(&d_buffer1, 10*10));
-    //    uint8_t* d_buffer2;
-    //    CHECK_CUDA_ERR(cudaMalloc(&d_buffer2, 5*5));
-    //    std::vector<uint8_t> data_test(10*10);
-    //    std::iota(data_test.begin(), data_test.end(), 0);
-    //    CHECK_CUDA_ERR(cudaMemcpy(d_buffer1, data_test.data(), 100, cudaMemcpyHostToDevice));
-    //    std::vector<uint8_t> data_test_out(5*5);
-    //    CHECK_CUDA_ERR(cudaMemcpy2D(d_buffer2, 5, d_buffer1 + 5, 10, 5, 5, cudaMemcpyDeviceToDevice));
-    //    CHECK_CUDA_ERR(cudaMemcpy(data_test_out.data(), d_buffer2, 5*5, cudaMemcpyDeviceToHost));
+    [[maybe_unused]] const auto source_range_size_bytes = source_range_pixels * sizeof(cufftComplex);
+    const auto subset_range_size_bytes = subset_range_pixels * sizeof(cufftComplex);
 
     // Strided copy of the buffer.
     CHECK_CUDA_ERR(cudaMemcpy2D(workspace.Get(), subset_range_size_bytes,
@@ -557,17 +561,26 @@ void SubsetResultsAndReassembleMeta(DevicePaddedImage& azimuth_compressed_raster
                                     window.near_range_pixels_to_remove,
                                 azimuth_compressed_raster.XStride() * sizeof(cufftComplex), subset_range_size_bytes,
                                 subset_line_count, cudaMemcpyDeviceToDevice));
-    //    CHECK_CUDA_ERR(cudaMemcpy(workspace.Get(), azimuth_compressed_raster.Data() + (lines_to_discard_beginning *
-    //    source_range_size), subset_line_count * subset_range_size_bytes, cudaMemcpyDeviceToDevice));
-    subsetted_raster.InitExtPtr(target_range_size, subset_line_count, target_range_size, subset_line_count, workspace);
+    subsetted_raster.InitExtPtr(subset_range_pixels, subset_line_count, subset_range_pixels, subset_line_count,
+                                workspace);
     workspace = azimuth_compressed_raster.ReleaseMemory();
 
-    AssembleMetadataFrom(common_metadata, asar_meta, sar_meta, ins_file, target_range_size,
-                         target_range_size * subset_line_count, product_type, 0);
+    AssembleMetadataFrom(common_metadata, asar_meta, sar_meta, ins_file, subset_range_pixels,
+                         subset_range_pixels * subset_line_count, product_type, 0);
 }
 
-void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed) {
+void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed, const sar::focus::RcmcParameters& rcmc_params) {
     ims.main_processing_params.azimuth_processing_information.num_lines_proc = total_packets_processed;
+
+    auto& range_processing_meta = ims.main_processing_params.range_processing_information;
+    auto filter_window_meta_str = rcmc_params.window_name;
+    if (filter_window_meta_str.length() > sizeof(range_processing_meta.filter_range)) {
+        filter_window_meta_str.erase(filter_window_meta_str.end() -
+                                         (filter_window_meta_str.length() - sizeof(range_processing_meta.filter_range)),
+                                     filter_window_meta_str.end());
+    }
+    CopyStrPad(range_processing_meta.filter_range, filter_window_meta_str);
+    range_processing_meta.filter_coef_range = rcmc_params.window_coef_range;
 }
 
 }  // namespace alus::asar::mainflow

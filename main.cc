@@ -29,10 +29,9 @@
 #include "envisat_types.h"
 #include "file_async.h"
 #include "geo_tools.h"
-#include "img_output.h"
 #include "main_flow.h"
-#include "math_utils.h"
 #include "mem_alloc.h"
+#include "sar/focussing_details.h"
 #include "sar/fractional_doppler_centroid.cuh"
 #include "sar/iq_correction.cuh"
 #include "sar/processing_velocity_estimation.h"
@@ -270,8 +269,9 @@ int main(int argc, char* argv[]) {
 
         auto az_comp_start = TimeStart();
         DevicePaddedImage az_compressed_image;
+        // img is unused after, everything will be traded to 'az_compressed_image'.
         RangeDopplerAlgorithm(sar_meta, img, az_compressed_image, d_workspace);
-        // img is unused from now on, everything got traded to 'az_compressed_image'.
+        const auto rcmc_parameters = alus::sar::focus::GetRcmcParameters();
 
         az_compressed_image.ZeroFillPaddings();
 
@@ -283,8 +283,8 @@ int main(int argc, char* argv[]) {
         auto lvl1_file_handle = alus::util::FileAsync(lvl1_out_full_path);
 
         const auto az_rg_windowing = alus::asar::mainflow::CalcResultsWindow(
-            sar_meta, packets_before_sensing_start, packets_after_sensing_stop,
-            *std::max_element(aperture_pixels.cbegin(), aperture_pixels.cend()));
+            sar_meta.results.doppler_centroid_poly.back(), packets_before_sensing_start, packets_after_sensing_stop,
+            *std::max_element(aperture_pixels.cbegin(), aperture_pixels.cend()), rcmc_parameters);
 
         CHECK_CUDA_ERR(cudaDeviceSynchronize());  // For ZeroFillPaddings() - the kernel was left running async.
         TimeStop(az_comp_start, "Azimuth compression");
@@ -297,7 +297,7 @@ int main(int argc, char* argv[]) {
         auto result_file_assembly = TimeStart();
 
         EnvisatIMS ims{};
-        alus::asar::mainflow::PrefillIms(ims, packets_metadata.size());
+        alus::asar::mainflow::PrefillIms(ims, packets_metadata.size(), rcmc_parameters);
 
         DevicePaddedImage subsetted_raster;
         alus::asar::mainflow::SubsetResultsAndReassembleMeta(az_compressed_image, az_rg_windowing, packets_metadata,
