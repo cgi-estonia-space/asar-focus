@@ -13,6 +13,7 @@
 #include "cuda_cleanup.h"
 #include "cufft_plan.h"
 #include "cufft_checks.h"
+#include "focussing_details.h"
 
 #define INPLACE_AZIMUTH_FFT 0  // 0 -> transpose + range FFT + transpose, 1 -> azimuth FFT
 
@@ -25,8 +26,6 @@
 #elif RCMC_INTERPOLATOR_SIZE == 8
 
 // all windows generated with NumPy 1.17.4
-
-const int N_INTERPOLATOR = RCMC_INTERPOLATOR_SIZE;
 // No window
 //__constant__ const float WINDOW[8] = {1, 1, 1, 1, 1, 1, 1};
 
@@ -384,4 +383,23 @@ void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_i
 
     CHECK_CUDA_ERR(cudaDeviceSynchronize());
     CHECK_CUDA_ERR(cudaGetLastError());
+}
+
+namespace alus::sar::focus {
+
+RcmcParameters GetRcmcParameters() {
+    RcmcParameters params{};
+    params.window_size = N_INTERPOLATOR;
+    float win_min{std::numeric_limits<float>::max()};
+    float win_max{std::numeric_limits<float>::min()};
+    for (size_t i{}; i < (sizeof(WINDOW) / sizeof(WINDOW[0])); i++) {
+        win_min = std::min(WINDOW[i], win_min);
+        win_max = std::max(WINDOW[i], win_max);
+    }
+    params.window_coef_range = win_max - win_min;
+    params.window_name = "BLACKMAN";
+
+    return params;
+}
+
 }
