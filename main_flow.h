@@ -70,7 +70,7 @@ void StoreIntensity(std::string output_path, std::string product_name, std::stri
 void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_meta, ASARMetadata& asar_meta,
                           SARMetadata& sar_meta, InstrumentFile& ins_file, size_t max_raw_samples_at_range,
                           size_t total_raw_samples, alus::asar::specification::ProductTypes product_type,
-                          int swst_multiplier = -1);
+                          size_t range_pixels_recalib = 0);
 
 // d_converted_measurements could be CudaWorkspace array now since we can estimate FFT beforehand when parsing metadata
 // separately now.

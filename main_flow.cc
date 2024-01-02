@@ -255,15 +255,15 @@ void StoreIntensity(std::string output_path, std::string product_name, std::stri
 void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_meta, ASARMetadata& asar_meta,
                           SARMetadata& sar_meta, InstrumentFile& ins_file, size_t max_raw_samples_at_range,
                           size_t total_raw_samples, alus::asar::specification::ProductTypes product_type,
-                          int swst_mult) {
+                          size_t range_pixels_recalib) {
     uint16_t min_swst = UINT16_MAX;
     uint16_t max_swst = 0;
     uint16_t swst_changes = 0;
     uint16_t prev_swst = parsed_meta.front().swst_code;
     const auto instrument = specification::GetInstrumentFrom(product_type);
     int swst_multiplier{instrument == specification::Instrument::ASAR ? 1 : 4};
-    if (swst_mult >= 0) {
-        swst_multiplier = swst_mult;
+    if (range_pixels_recalib > 0) {
+        swst_multiplier = 0;
     }
 
     sar_meta.carrier_frequency = ins_file.flp.radar_frequency;
@@ -383,10 +383,16 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
     asar_meta.swst_rank = n_pulses_swst;
 
     if (instrument == specification::Instrument::ASAR) {
-        // TODO Range gate bias must be included in this calculation
+        const auto delay_time = ins_file.flp.range_gate_bias;
         sar_meta.pulse_repetition_frequency = sar_meta.chirp.range_sampling_rate / parsed_meta.front().pri_code;
-        asar_meta.two_way_slant_range_time =
-            (min_swst + n_pulses_swst * parsed_meta.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate);
+        if (range_pixels_recalib == 0) {
+            asar_meta.two_way_slant_range_time =
+                ((min_swst + n_pulses_swst * parsed_meta.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate) -
+                 delay_time);
+        } else {
+            sar_meta.slant_range_first_sample = CalcR0(sar_meta, range_pixels_recalib);
+            asar_meta.two_way_slant_range_time = (sar_meta.slant_range_first_sample * 2) / c;
+        }
     }
 
     if (instrument == specification::Instrument::SAR) {
@@ -405,8 +411,14 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
                  << "is out of the specification (ERS-1-Satellite-to-Ground-Segment-Interface-"
                  << "Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05) range [1640, 1720] Hz" << std::endl;
         }
-        asar_meta.two_way_slant_range_time =
-            n_pulses_swst * pri + min_swst * swst_multiplier / sar_meta.chirp.range_sampling_rate - delay_time;
+
+        if (range_pixels_recalib == 0) {
+            asar_meta.two_way_slant_range_time =
+                n_pulses_swst * pri + min_swst * swst_multiplier / sar_meta.chirp.range_sampling_rate - delay_time;
+        } else {
+            sar_meta.slant_range_first_sample = CalcR0(sar_meta, range_pixels_recalib);
+            asar_meta.two_way_slant_range_time = (sar_meta.slant_range_first_sample * 2) / c;
+        }
     }
 
     LOGD << "PRF " << sar_meta.pulse_repetition_frequency << " PRI " << 1 / sar_meta.pulse_repetition_frequency;
@@ -572,7 +584,7 @@ void SubsetResultsAndReassembleMeta(DevicePaddedImage& azimuth_compressed_raster
     workspace = azimuth_compressed_raster.ReleaseMemory();
 
     AssembleMetadataFrom(common_metadata, asar_meta, sar_meta, ins_file, subset_range_pixels,
-                         subset_range_pixels * subset_line_count, product_type, 0);
+                         subset_range_pixels * subset_line_count, product_type, window.near_range_pixels_to_remove);
 }
 
 void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed, const sar::focus::RcmcParameters& rcmc_params) {
