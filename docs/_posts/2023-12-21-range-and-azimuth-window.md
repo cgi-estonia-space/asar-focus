@@ -35,8 +35,9 @@ During the processing the lines near sensing start and/or end should be padded/p
 That's why there are always **more lines processed** than the actual level 1 product.
 
 For example a reference PF-ASAR L1 IMS product (ASA_IMS_1PNESA20040109_194924_000000182023_00157_09730_0000.N1)
-has the following dimensions - `5174 x 30181`\
-Metadata  `num_lines_proc = 31514`\
+has the following dimensions\
+`5174 x 30181`\
+Metadata  - `num_lines_proc = 31514`\
 So there are extra 1333 lines processed for correctly focussed picture.
 
 Next chapters describe how this is implemented by the **asar-focus** processor.
@@ -113,13 +114,19 @@ dataset seems to not correctly compensate for range/line focussing padded pixels
 
 ![near range padding pixels reference](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/ASA_IMS_1PNESA20040229_212504_000000172024_00387_10461_0000_near_range_padding_pixels.N1)
 
-This is present only on near range. One could conclude the following:
+This is present on near and far range. One could conclude the following:
 * SWST change might not be correctly handled
-* If SWST change has been correctly handled then the area (around 36 pixels due to SWST difference) in near range has\
-  not been correctly focussed as the pixel values are blurred along the section
-* Since these artifacts are not present far range, the cuts in that section could be suboptimal
-* Pixels placement could be wrong for the processor currently developed and described in this post.
+* If SWST change has been correctly handled then the area (around 36 pixels due to SWST difference) in near/far range has 
+  not been correctly focussed as the pixel values are blurred along the section near SWST change, finally converging into properly focussed pixels along azimuth direction 
+* Pixels placement/handling could be wrong for the processor currently developed and described in this post.
 
-Same section of the same focussed L0 dataset is presented below by the GPU processor
+Same section of the same focussed L0 dataset is presented below by the GPU processor (note not so well focussed reflections - but this is a topic of another post)
 
 ![near range pixels comparison](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/ASA_IMS_1PNPDK20040229_212454_000000492024_00387_10461_2585_near_range_comparison.png)
+
+Same scene, far range SWST change. Results displayed are terrain corrected and displayed on map in QGIS.
+First reference processor, then GPU processor
+
+![far range pixels comparison reference](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/ASA_IMS_1PNESA20040229_212504_000000172024_00387_10461_0000_far_range_tc_swst_change_qgis.png)
+
+![far range pixels comparison gpu processor](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/ASA_IMS_1PNPDK20040229_212454_000000492024_00387_10461_2585_far_range_tc_swst_change_qgis.png)
