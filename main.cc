@@ -236,10 +236,6 @@ int main(int argc, char* argv[]) {
         sar_meta.results.doppler_centroid_poly = CalculateDopplerCentroid(img, sar_meta.pulse_repetition_frequency);
         TimeStop(dc_start, "fractional DC estimation");
 
-        if (args.StorePlots()) {
-            alus::asar::mainflow::StorePlots(args.GetOutputPath().data(), wif_name_base, sar_meta, chirp);
-        }
-
         if (args.StoreIntensity()) {
             alus::asar::mainflow::StoreIntensity(args.GetOutputPath().data(), wif_name_base, "raw", img);
         }
@@ -287,6 +283,11 @@ int main(int argc, char* argv[]) {
         if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
             throw std::runtime_error("Could not create L1 file at " + lvl1_out_full_path);
         }
+
+        if (args.StorePlots()) {
+            alus::asar::mainflow::StorePlots(args.GetOutputPath().data(), wif_name_base, sar_meta, chirp);
+        }
+
         lvl1_file_handle.Write(&ims, sizeof(ims));
 
         CHECK_CUDA_ERR(cudaDeviceSynchronize());
@@ -323,6 +324,8 @@ int main(int argc, char* argv[]) {
 
         CHECK_CUDA_ERR(cudaMemcpy(mds.buf, device_mds_buf, mds.n_records * mds.record_size, cudaMemcpyDeviceToHost));
         TimeStop(mds_formation, "MDS Host buffer transfer");
+
+
 
         auto file_write = TimeStart();
         if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
