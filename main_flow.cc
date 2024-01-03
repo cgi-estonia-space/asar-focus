@@ -24,6 +24,7 @@
 #include "ers_aux_file.h"
 #include "img_output.h"
 #include "plot.h"
+#include "globe_plot.h"
 #include "sar/iq_correction.cuh"
 #include "status_assembly.h"
 
@@ -190,6 +191,9 @@ void StorePlots(std::string output_path, std::string product_name, const SARMeta
         line.line_name = "Doppler centroid";
         PolyvalRange(sar_metadata.results.doppler_centroid_poly, 0, sar_metadata.img.range_size, line.x, line.y);
         Plot(plot_args);
+    }
+    {
+        PlotGlobe(sar_metadata, output_path + "/" + product_name + "_globe.html");
     }
 }
 
