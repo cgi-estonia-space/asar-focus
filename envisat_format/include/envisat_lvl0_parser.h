@@ -28,16 +28,13 @@
 #include "sar/orbit_state_vector.h"
 #include "sar/sar_metadata.h"
 
-/**
- * Envisat LVL0 IM file parser, ex ASA_IM__0PNPDE20040111_085939_000000182023_00179_09752_2307.N1
- * Extracts RAW echo data and relevant metadata needed for SAR focussing
- */
-
 struct ASARMetadata {
     std::string lvl0_file_name;
     std::string product_name;
     std::string instrument_file;
     std::string configuration_file;
+    std::string external_calibration_file;
+    std::string external_characterization_file;
     std::string orbit_dataset_name;
     std::string acquistion_station;
     std::string processing_station;
@@ -126,11 +123,59 @@ struct ASARMetadata {
 
 namespace alus::asar::envformat {
 
+int SwathIdx(const std::string& swath);
+
+struct ForecastMeta {
+    size_t packet_start_offset_bytes;
+    mjd isp_sensing_time;
+};
+
+struct CommonPacketMetadata {
+    mjd sensing_time;
+    uint16_t swst_code;
+    uint16_t pri_code;
+    uint64_t onboard_time;
+    uint16_t sample_count;                    // Count of measurement I/Q samples, not equal to bytes.
+    uint16_t measurement_array_length_bytes;  // Including any block information etc...
+
+    struct {
+        uint8_t chirp_pulse_bw_code;
+        uint8_t upconverter_raw;
+        uint8_t downconverter_raw;
+        uint16_t tx_pulse_code;
+        uint8_t antenna_beam_set_no;
+        uint8_t beam_adj_delta;
+        uint16_t resampling_factor;
+    } asar;
+};
+
+struct RawSampleMeasurements {
+    std::unique_ptr<uint8_t[]> raw_samples;
+    size_t single_entry_length; // Length in bytes of the maximum sample measurement record, including block id etc.
+    size_t entries_total; // How many lines in azimuth direction
+    size_t max_samples; // Maximum samples that the entries will consist. Can fluctuate.
+    size_t total_samples; // Total IQ samples collected over all of the range and azimuth directions.
+    size_t no_of_product_errors_compensated;
+};
+
+DSD_lvl0 ParseSphAndGetMdsr(ASARMetadata& asar_meta, const SARMetadata& sar_meta, const std::vector<char>& file_data);
+
+/* Current silent contract is that every packet of the returned list of ForecastMeta shall be parsed by the
+ * ParseLevel0Packets. That also means that any duplicates and/or missing packets shall be compensated already
+ * during FetchMeta. Parsing packets would just respect the offsets. But it can throw if there are discrepancies,
+ * which would indicate programming error. Current FetchMeta is simple byte offsets starting from MDSR (not L0 ds)
+ * and sensing time. Later more fields could be added and parsed to implement more comprehensive parsing scheme.
+ */
+std::vector<ForecastMeta> FetchMeta(const std::vector<char>& file_data, boost::posix_time::ptime packets_start_filter,
+                                    boost::posix_time::ptime packets_stop_filter,
+                                    specification::ProductTypes product_type, size_t& packets_before_start,
+                                    size_t& packets_after_stop);
+
 void ParseLevel0Header(const std::vector<char>& file_data, ASARMetadata& asar_meta);
-void ParseLevel0Packets(const std::vector<char>& file_data, SARMetadata& sar_meta, ASARMetadata& asar_meta,
-                        cufftComplex** d_parsed_packets, alus::asar::specification::ProductTypes product_type,
-                        InstrumentFile& ins_file,
-                        boost::posix_time::ptime packets_start_filter = boost::posix_time::not_a_date_time,
-                        boost::posix_time::ptime packets_stop_filter = boost::posix_time::not_a_date_time);
+
+RawSampleMeasurements ParseLevel0Packets(const std::vector<char>& file_data, size_t mdsr_offset_bytes,
+                                         const std::vector<ForecastMeta>& entries_to_be_parsed,
+                                         alus::asar::specification::ProductTypes product_type, InstrumentFile& ins_file,
+                                         std::vector<CommonPacketMetadata>& common_metadata);
 
 }  // namespace alus::asar::envformat

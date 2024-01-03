@@ -81,7 +81,19 @@ ProductTypes TryDetermineTargetProductFrom(ProductTypes in_product, std::string_
     }
 
     throw std::runtime_error("Focussing '" + std::string(user_defined_target_type) +
-                             "' product from given input is not supported.");
+                             "' product from given input is not supported or valid.");
+}
+
+Instrument GetInstrumentFrom(ProductTypes product) {
+    if (product == ProductTypes::SAR_IM0 || product == ProductTypes::SAR_IMS) {
+        return Instrument::SAR;
+    }
+
+    if (product == ProductTypes::ASA_IM0 || product == ProductTypes::ASA_IMS) {
+        return Instrument::ASAR;
+    }
+
+    throw std::runtime_error("Unsupported product type supplied to " + std::string(__FUNCTION__));
 }
 
 }  // namespace alus::asar::specification

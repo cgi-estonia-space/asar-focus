@@ -26,7 +26,7 @@
 #define HANDLE_DIAGNOSTICS 1
 
 namespace {
-void FillFbaqMeta(ASARMetadata& asar_meta) {
+void FillFbaqMetaAsar(ASARMetadata& asar_meta) {
     asar_meta.compression_metadata.echo_method = "FBAQ";
     asar_meta.compression_metadata.echo_ratio = "4/8";
     asar_meta.compression_metadata.init_cal_method = "NONE";  // TBD
@@ -42,16 +42,6 @@ template <class T>
     memcpy(&dest, src, sizeof(T));
     dest = bswap(dest);
     return src + sizeof(T);
-}
-
-int SwathIdx(const std::string& swath) {
-    if (swath.size() == 3 && swath[0] == 'I' && swath[1] == 'S') {
-        char idx = swath[2];
-        if (idx >= '1' && idx <= '7') {
-            return idx - '1';
-        }
-    }
-    throw std::runtime_error("MDSR contains swath '" + swath + "' which is not supported or invalid.");
 }
 
 struct EchoMeta {
@@ -211,7 +201,7 @@ void InitializeCounters(const uint8_t* packets_start, uint16_t& sequence_control
         CopyBSwapPOD(sequence_control,
                      packets_start + sizeof(EchoMeta::isp_sensing_time) + sizeof(FEPAnnotations) + sizeof(uint16_t));
     sequence_control = sequence_control & 0x3FFF;
-    if (sequence_control != 0) {
+    if (sequence_control == 0) {
         sequence_control = SEQUENCE_CONTROL_MAX;
     } else {
         sequence_control--;
@@ -245,15 +235,445 @@ struct PacketParseDiagnostics {
     size_t packet_data_blocks_max;
 };
 #endif
+
+inline const uint8_t* FetchPacketFrom(const uint8_t* start, alus::asar::envformat::ForecastMeta& meta, bool& is_echo,
+                                      bool& is_cal) {
+    // Source: ENVISAT-1 ASAR INTERPRETATION OF SOURCE PACKET DATA
+    // PO-TN-MMS-SR-0248
+    auto it = CopyBSwapPOD(meta.isp_sensing_time, start);
+    FEPAnnotations fep;
+    it = CopyBSwapPOD(fep, it);
+    it += sizeof(uint16_t);  // Packet ID
+    it += sizeof(uint16_t);  // Sequence control
+    uint16_t packet_length;
+    it = CopyBSwapPOD(packet_length, it);
+    uint16_t datafield_length;
+    it = CopyBSwapPOD(datafield_length, it);
+
+    if (datafield_length != 29) {
+        throw std::runtime_error(
+            fmt::format("Fetching metadat for ENVISAT IM parse error. Date Field Header Length should be 29 - is {}",
+                        datafield_length));
+    }
+
+    const auto next_one = it + (fep.isp_length - datafield_length + 28);
+
+    uint8_t echo_cal_flags = it[12];
+    is_echo = echo_cal_flags & 0x80;
+    is_cal = echo_cal_flags & 0x20;
+
+    return next_one;
+}
+
+inline void TransferMetadata(const EchoMeta& echo_meta, uint16_t measurement_bytes_length,
+                             alus::asar::envformat::CommonPacketMetadata& common_meta) {
+    common_meta.sensing_time = echo_meta.isp_sensing_time;
+    common_meta.onboard_time = echo_meta.onboard_time;
+    common_meta.pri_code = echo_meta.pri_code;
+    common_meta.swst_code = echo_meta.swst_code;
+    common_meta.sample_count = echo_meta.raw_samples;
+    common_meta.measurement_array_length_bytes = measurement_bytes_length;
+
+    common_meta.asar.chirp_pulse_bw_code = echo_meta.chirp_pulse_bw_code;
+    common_meta.asar.upconverter_raw = echo_meta.upconverter_raw;
+    common_meta.asar.downconverter_raw = echo_meta.downconverter_raw;
+    common_meta.asar.tx_pulse_code = echo_meta.tx_pulse_code;
+    common_meta.asar.antenna_beam_set_no = echo_meta.antenna_beam_set_no;
+    common_meta.asar.beam_adj_delta = echo_meta.beam_adj_delta;
+    common_meta.asar.resampling_factor = echo_meta.resampling_factor;
+}
+
 }  // namespace
 
 namespace alus::asar::envformat {
+
+std::vector<ForecastMeta> FetchEnvisatL0ImForecastMeta(const std::vector<char>& file_data, const DSD_lvl0& mdsr,
+                                                       boost::posix_time::ptime packets_start_filter,
+                                                       boost::posix_time::ptime packets_stop_filter,
+                                                       size_t& packets_before_start, size_t& packets_after_stop) {
+    std::vector<ForecastMeta> forecast_meta{};
+    size_t packets_before_requested_start{};
+    size_t packets_after_requested_stop{};
+    const auto* const packets_start = reinterpret_cast<const uint8_t*>(file_data.data() + mdsr.ds_offset);
+    const uint8_t* next_packet = reinterpret_cast<const uint8_t*>(file_data.data() + mdsr.ds_offset);
+    const auto start_mjd = PtimeToMjd(packets_start_filter);
+    const auto stop_mjd = PtimeToMjd(packets_stop_filter);
+
+    bool echo{false};
+    bool cal{false};
+    size_t i{};
+    for (; i < mdsr.num_dsr; i++) {
+        ForecastMeta current_meta;
+        current_meta.packet_start_offset_bytes = next_packet - packets_start;
+        next_packet = FetchPacketFrom(next_packet, current_meta, echo, cal);
+
+        //LOGD << i << " " << MjdToPtime(current_meta.isp_sensing_time);
+
+        if (forecast_meta.size() == 0 && !echo) {
+            continue;
+        }
+
+        if (!echo && !cal) {
+            continue;
+        }
+
+        if (current_meta.isp_sensing_time < start_mjd) {
+            packets_before_requested_start++;
+        }
+
+        if (current_meta.isp_sensing_time > stop_mjd) {
+            packets_after_requested_stop++;
+        }
+
+        // In case the packets_after_stop is equal to 0. Delete one at the back.
+        if (packets_after_requested_stop > packets_after_stop) {
+            packets_after_requested_stop--;
+            break;
+        }
+
+        forecast_meta.push_back(current_meta);
+    }
+
+    //std::ofstream debug_stream("/tmp/fetch_meta.debug.csv");
+//    for (size_t j{}; j < 10; j++) {
+//        LOGD << j << " " << MjdToPtime(forecast_meta.at(j).isp_sensing_time);
+//    }
+//
+//    LOGD << "FROM the back";
+//    for (size_t j{forecast_meta.size() - 10}; j < forecast_meta.size(); j++) {
+//        LOGD << j << " " << MjdToPtime(forecast_meta.at(j).isp_sensing_time);
+//    }
+
+    if (packets_before_requested_start > packets_before_start) {
+        forecast_meta.erase(forecast_meta.begin(),
+                            forecast_meta.begin() + (packets_before_requested_start - packets_before_start));
+        packets_before_requested_start -= (packets_before_requested_start - packets_before_start);
+
+        // Make sure that the first packet is not an echo!
+        auto forecast_meta_it = forecast_meta.begin();
+        while (forecast_meta_it != forecast_meta.end()) {
+            ForecastMeta meta;
+            bool is_echo{false};
+            bool is_cal{false};
+            [[maybe_unused]] auto discard =
+                FetchPacketFrom(packets_start + forecast_meta_it->packet_start_offset_bytes, meta, is_echo, is_cal);
+            if (!is_echo) {
+                if (!cal) {
+                    throw std::runtime_error(
+                        "Programming error detected - only echo and calibration packets should have been fetched.");
+                }
+                forecast_meta.erase(forecast_meta_it);
+                packets_before_requested_start--;
+                forecast_meta_it = forecast_meta.begin();
+            } else {
+                break;
+            }
+        }
+    }
+
+    packets_before_start = packets_before_requested_start;
+    packets_after_stop = packets_after_requested_stop;
+
+    return forecast_meta;
+}
+
+RawSampleMeasurements ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, size_t mdsr_offset_bytes,
+                                                  const std::vector<ForecastMeta>& entries_to_be_parsed,
+                                                  InstrumentFile& ins_file,
+                                                  std::vector<CommonPacketMetadata>& common_metadata) {
+    const uint8_t* const packets_start = reinterpret_cast<const uint8_t*>(file_data.data()) + mdsr_offset_bytes;
+    const uint8_t* it = packets_start + entries_to_be_parsed.front().packet_start_offset_bytes;
+    const auto num_dsr = entries_to_be_parsed.size();
+
+    LOGD << MjdToPtime(entries_to_be_parsed.front().isp_sensing_time);
+    LOGD << entries_to_be_parsed.front().packet_start_offset_bytes;
+
+    const auto range_sampling_rate = ins_file.flp.radar_sampling_rate;
+#if DEBUG_PACKETS
+    std::vector<EnvisatFepAndPacketHeader> envisat_dbg_meta;
+    std::ofstream debug_stream("/tmp/" + asar_meta.product_name + ".debug.csv");
+#endif
+#if HANDLE_DIAGNOSTICS
+    PacketParseDiagnostics diagnostics{};
+    uint16_t last_sequence_control;
+    uint32_t last_mode_packet_count;
+    uint16_t last_cycle_packet_count;
+    InitializeCounters(it, last_sequence_control, last_mode_packet_count, last_cycle_packet_count);
+    diagnostics.packet_data_blocks_min = UINT64_MAX;
+    diagnostics.packet_data_blocks_max = 0;
+#endif
+
+    const auto max_forecasted_sample_blocks_bytes = ForecastMaxBlockDataLength(it, num_dsr);
+    LOGD << "Forecasted maximum sample blocks bytes/length per range " << max_forecasted_sample_blocks_bytes;
+    const auto compressed_sample_blocks_with_length_single_range_item_bytes =
+        max_forecasted_sample_blocks_bytes + 2;  // uint16_t for length
+    const auto alloc_bytes_for_sample_blocks_with_length =
+        num_dsr * compressed_sample_blocks_with_length_single_range_item_bytes;
+    LOGD << "Reserving " << alloc_bytes_for_sample_blocks_with_length / (1 << 20)
+         << "MiB for raw sample blocks buffer including prepending 2 byte length marker ("
+         << compressed_sample_blocks_with_length_single_range_item_bytes << "x" << num_dsr << ")";
+    RawSampleMeasurements raw_measurements{};
+    raw_measurements.single_entry_length = max_forecasted_sample_blocks_bytes;
+    raw_measurements.entries_total = num_dsr;
+    raw_measurements.raw_samples = std::unique_ptr<uint8_t[]>(new uint8_t[alloc_bytes_for_sample_blocks_with_length]);
+    auto compressed_sample_blocks_buffer = raw_measurements.raw_samples.get();
+
+    size_t max_samples{};
+    size_t& total_samples = raw_measurements.total_samples;
+    size_t compressed_sample_measurement_sets_stored_in_buffer{};
+    size_t packet_index{};
+    for (const auto& entry : entries_to_be_parsed) {
+        it = packets_start + entry.packet_start_offset_bytes;
+        EchoMeta echo_meta = {};
+
+        // Source: ENVISAT-1 ASAR INTERPRETATION OF SOURCE PACKET DATA
+        // PO-TN-MMS-SR-0248
+        it = CopyBSwapPOD(echo_meta.isp_sensing_time, it);
+
+        if (echo_meta.isp_sensing_time != entry.isp_sensing_time) {
+            throw std::runtime_error(fmt::format(
+                "Discrepancy between packet list '{}' and actual parsed packet sensing time '{}' at packet index {}",
+                to_simple_string(MjdToPtime(entry.isp_sensing_time)),
+                to_simple_string(MjdToPtime(echo_meta.isp_sensing_time)), packet_index));
+        }
+
+        FEPAnnotations fep;
+        it = CopyBSwapPOD(fep, it);
+
+        // This is actually application process ID plus some bits, needs to be refactored, more info - PO-ID-DOR-SY-0032
+        uint16_t packet_id;
+        it = CopyBSwapPOD(packet_id, it);
+
+        uint16_t sequence_control;
+        it = CopyBSwapPOD(sequence_control, it);
+
+        [[maybe_unused]] uint8_t segmentation_flags = sequence_control >> 14;
+        // Wrap around sequence counter for the number of packets minus one transmitted for the Application Process ID
+        // to which the source data applies. Thus the first packet in the data stream has a Source Sequence Count of 0.
+        sequence_control = sequence_control & 0x3FFF;  // It is 14 bit rolling value
+
+        uint16_t packet_length;
+        it = CopyBSwapPOD(packet_length, it);
+
+        uint16_t datafield_length;
+        it = CopyBSwapPOD(datafield_length, it);
+
+        // 28 bytes from mode_id until block loop. 29 is datafield_length.
+        // Exclude also 32 bytes above (FEP, ISP sensing time).
+
+        if (datafield_length != 29) {
+            throw std::runtime_error(
+                fmt::format("DSR index = {} parsing error. Date Field Header Length should be 29 - is {}", packet_index,
+                            datafield_length));
+        }
+
+        it++;
+        echo_meta.mode_id = *it;
+        it++;
+
+        if (echo_meta.mode_id != 0x54) {
+            throw std::runtime_error(
+                fmt::format("Expected only IM mode packets, but encountered mode ID {:#x}", echo_meta.mode_id));
+        }
+
+        // Wrap around counter indicating the time at which the first sampled window in
+        // the source data was acquired. The lsb represents an interval of 15.26 µs nominal.
+        echo_meta.onboard_time = 0;
+        echo_meta.onboard_time |= static_cast<uint64_t>(it[0]) << 32;
+        echo_meta.onboard_time |= static_cast<uint64_t>(it[1]) << 24;
+        echo_meta.onboard_time |= static_cast<uint64_t>(it[2]) << 16;
+        echo_meta.onboard_time |= static_cast<uint64_t>(it[3]) << 8;
+        echo_meta.onboard_time |= static_cast<uint64_t>(it[4]) << 0;
+
+        it += 5;
+        it++;  // spare byte after 40 bit onboard time
+
+        // Wrap around sequence counter for the number of packets minus one transmitted for the Mode ID to which
+        // the source data applies. Thus the first packet in the data stream has a Mode Packet Count of 0.
+        FetchModePacketCount(it, echo_meta.mode_count);
+        it += 3;
+
+        echo_meta.antenna_beam_set_no = *it >> 2;
+        echo_meta.comp_ratio = *it & 0x3;
+        it++;
+
+        echo_meta.echo_flag = *it & 0x80;
+        echo_meta.noise_flag = *it & 0x40;
+        echo_meta.cal_flag = *it & 0x20;
+        echo_meta.cal_type = *it & 0x10;
+        // Sequence counter for the number of packets minus one transmitted since the last commanded data field change.
+        // Thus the first packet in the data stream following a commanded change in data field header has a
+        // Mode Packet Count of 0.
+        FetchCyclePacketCount(it, echo_meta.cycle_count);
+        it += 2;
+
+        it = CopyBSwapPOD(echo_meta.pri_code, it);
+        it = CopyBSwapPOD(echo_meta.swst_code, it);
+        // echo_window_code specifies how many samples, without block ID bytes e.g. data_len - block count or
+        // packet_length - 29 - block_count
+        it = CopyBSwapPOD(echo_meta.echo_window_code, it);
+
+        {
+            uint16_t data;
+            it = CopyBSwapPOD(data, it);
+            echo_meta.upconverter_raw = data >> 12;
+            echo_meta.downconverter_raw = (data >> 7) & 0x1F;
+            echo_meta.tx_pol = data & 0x40;
+            echo_meta.rx_pol = data & 0x20;
+            echo_meta.cal_row_number = data & 0x1F;
+        }
+        {
+            uint16_t data = -1;
+            it = CopyBSwapPOD(data, it);
+            echo_meta.tx_pulse_code = data >> 6;
+            echo_meta.beam_adj_delta = data & 0x3F;
+        }
+
+        echo_meta.chirp_pulse_bw_code = it[0];
+        echo_meta.aux_tx_monitor_level = it[1];
+        it += 2;
+
+        it = CopyBSwapPOD(echo_meta.resampling_factor, it);
+
+#if HANDLE_DIAGNOSTICS
+        const auto seq_ctrl_gap =
+            parseutil::CounterGap<uint16_t, SEQUENCE_CONTROL_MAX>(last_sequence_control, sequence_control);
+        // Value 0 denotes reset.
+        // When seq_ctrl_gap is 0, this is not handled - could be massive rollover or duplicate.
+        if (seq_ctrl_gap > 1) {
+            diagnostics.sequence_control_oos++;
+            diagnostics.sequence_control_total_missing += (seq_ctrl_gap - 1);
+        }
+        last_sequence_control = sequence_control;
+
+        const auto mode_packet_gap =
+            parseutil::CounterGap<uint32_t, MODE_PACKET_COUNT_MAX>(last_mode_packet_count, echo_meta.mode_count);
+        // When gap is 0, this is not handled - could be massive rollover or duplicate.
+        if (mode_packet_gap > 1) {
+            diagnostics.mode_packet_count_oos++;
+            diagnostics.mode_packet_total_missing += (mode_packet_gap - 1);
+        }
+        last_mode_packet_count = echo_meta.mode_count;
+
+        const auto cycle_packet_gap =
+            parseutil::CounterGap<uint16_t, CYCLE_PACKET_COUNT_MAX>(last_cycle_packet_count, echo_meta.cycle_count);
+        // When gap is 0, this is not handled - could be massive rollover or duplicate.
+        if (cycle_packet_gap > 1) {
+            diagnostics.cycle_packet_count_oos++;
+            diagnostics.cycle_packet_total_missing += cycle_packet_gap;
+        }
+        last_cycle_packet_count = echo_meta.cycle_count;
+#endif
+
+        size_t data_len = packet_length - 29;
+
+        if (echo_meta.echo_flag) {
+#if HANDLE_DIAGNOSTICS
+            diagnostics.packet_data_blocks_min = std::min(diagnostics.packet_data_blocks_min, data_len);
+            diagnostics.packet_data_blocks_max = std::max(diagnostics.packet_data_blocks_max, data_len);
+#endif
+            uint16_t sample_blocks_length = static_cast<uint16_t>(data_len);
+            const auto sample_blocks_offset_bytes =
+                (packet_index * compressed_sample_blocks_with_length_single_range_item_bytes);
+            const auto sample_blocks_buffer_start = compressed_sample_blocks_buffer + sample_blocks_offset_bytes;
+            memcpy(sample_blocks_buffer_start, &sample_blocks_length, sizeof(sample_blocks_length));
+            memcpy(sample_blocks_buffer_start + 2, it, data_len);
+            // First item is the count of whole blocks times 63 samples which is included in block, lastly is added
+            // any samples from remainder block that does not consist full 63 samples
+            const auto current_samples =
+                static_cast<size_t>(((sample_blocks_length / 64) * 63) + (sample_blocks_length % 64) -
+                                    ((sample_blocks_length % 64) > 0 ? 1 : 0));
+            max_samples = std::max(max_samples, current_samples);
+            echo_meta.raw_samples = current_samples;
+            total_samples += current_samples;
+            compressed_sample_measurement_sets_stored_in_buffer++;
+
+            TransferMetadata(echo_meta, sample_blocks_length, common_metadata.at(packet_index));
+        } else if (echo_meta.cal_flag) {
+            if (packet_index > 0) {
+                auto copy_echo = common_metadata.at(packet_index - 1);
+                const auto prf = (range_sampling_rate / copy_echo.pri_code);
+                const auto micros_to_add = static_cast<ul>((1 / prf) * 10e5);
+                copy_echo.sensing_time = MjdAddMicros(copy_echo.sensing_time, micros_to_add);
+                memcpy(compressed_sample_blocks_buffer +
+                           packet_index * compressed_sample_blocks_with_length_single_range_item_bytes,
+                       compressed_sample_blocks_buffer +
+                           (packet_index - 1) * compressed_sample_blocks_with_length_single_range_item_bytes,
+                       compressed_sample_blocks_with_length_single_range_item_bytes);
+                total_samples += copy_echo.sample_count;
+                compressed_sample_measurement_sets_stored_in_buffer++;
+                common_metadata.at(packet_index) = copy_echo;
+            }
+#if HANDLE_DIAGNOSTICS
+            last_cycle_packet_count = 0;  // Special value to mark reset;
+            diagnostics.calibration_packet_count++;
+#endif
+        } else {
+            throw std::runtime_error(
+                "Programming error detected - only echo and calibration packets should have been fetched.");
+        }
+
+        packet_index++;
+
+#if DEBUG_PACKETS
+        if ((!DEBUG_ECHOS_ONLY && echo_meta.cal_flag) || echo_meta.echo_flag) {
+            EnvisatFepAndPacketHeader d;
+            d.fep_annotations = fep;
+            d.datafield_length = datafield_length;
+            d.packet_id = packet_id;
+            d.packet_length = packet_length;
+            d.sequence_control = sequence_control;
+            d.echo_meta = echo_meta;
+            if (echo_meta.cal_flag) {
+                d.echo_meta.isp_sensing_time = echoes.back().isp_sensing_time;
+            }
+            envisat_dbg_meta.push_back(d);
+        }
+#endif
+    }
+
+#if DEBUG_PACKETS
+    DebugEnvisatPackets(envisat_dbg_meta, envisat_dbg_meta.size(), debug_stream);
+#endif
+
+    const auto forecasted_max_samples = (max_forecasted_sample_blocks_bytes / 64) * 63 +
+                                        (max_forecasted_sample_blocks_bytes % 64) -
+                                        ((max_forecasted_sample_blocks_bytes % 64) > 0 ? 1 : 0);
+    if (max_samples != forecasted_max_samples) {
+        throw std::runtime_error(fmt::format("Post-parse max samples {} do not equal with forecast {}", max_samples,
+                                             forecasted_max_samples));
+    }
+
+    raw_measurements.max_samples = max_samples;
+
+    if (entries_to_be_parsed.size() != compressed_sample_measurement_sets_stored_in_buffer) {
+        throw std::runtime_error(
+            fmt::format("Programming error detected, there were {} packets fetch to be stored but only {} compressed "
+                        "sample measurements copied",
+                        entries_to_be_parsed.size(), compressed_sample_measurement_sets_stored_in_buffer));
+    }
+
+#if HANDLE_DIAGNOSTICS
+    LOGD << "Diagnostic summary of the packets";
+    LOGD << "Calibration packets - " << diagnostics.calibration_packet_count;
+    LOGD << "Seq ctrl [oos total] " << diagnostics.sequence_control_oos << " "
+         << diagnostics.sequence_control_total_missing;
+    LOGD << "Mode packet [oos total] " << diagnostics.mode_packet_count_oos << " "
+         << diagnostics.mode_packet_total_missing;
+    LOGD << "Cycle packet [oos total] " << diagnostics.cycle_packet_count_oos << " "
+         << diagnostics.cycle_packet_total_missing;
+    LOGD << "MIN|MAX datablock lengths in bytes " << diagnostics.packet_data_blocks_min << "|"
+         << diagnostics.packet_data_blocks_max;
+#endif
+
+    return raw_measurements;
+}
 
 void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0& mdsr, SARMetadata& sar_meta,
                                  ASARMetadata& asar_meta, cufftComplex** d_parsed_packets, InstrumentFile& ins_file,
                                  boost::posix_time::ptime packets_start_filter,
                                  boost::posix_time::ptime packets_stop_filter) {
-    FillFbaqMeta(asar_meta);
+    FillFbaqMetaAsar(asar_meta);
     sar_meta.carrier_frequency = ins_file.flp.radar_frequency;
     sar_meta.chirp.range_sampling_rate = ins_file.flp.radar_sampling_rate;
     std::vector<EchoMeta> echoes;  // Via MDSR - the count of data records -> reserve()?
@@ -526,7 +946,6 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
     asar_meta.last_mjd = echoes.back().isp_sensing_time;
     asar_meta.last_sbt = echoes.back().onboard_time;
 
-    std::vector<float> v;
     for (auto& e : echoes) {
         if (prev_swst != e.swst_code) {
             prev_swst = e.swst_code;

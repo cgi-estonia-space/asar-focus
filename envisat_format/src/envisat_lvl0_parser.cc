@@ -14,6 +14,8 @@
 
 #include <sstream>
 
+#include "fmt/format.h"
+
 #include "alus_log.h"
 #include "asar_constants.h"
 #include "envisat_aux_file.h"
@@ -30,6 +32,20 @@ double NadirLLParse(const std::string& str) {
         val = -val;
     }
     return val * 1e-6;
+}
+
+}  // namespace
+
+namespace alus::asar::envformat {
+
+int SwathIdx(const std::string& swath) {
+    if (swath.size() == 3 && swath[0] == 'I' && swath[1] == 'S') {
+        char idx = swath[2];
+        if (idx >= '1' && idx <= '7') {
+            return idx - '1';
+        }
+    }
+    throw std::runtime_error("MDSR contains swath '" + swath + "' which is not supported or invalid.");
 }
 
 DSD_lvl0 ParseSphAndGetMdsr(ASARMetadata& asar_meta, const SARMetadata& sar_meta, const std::vector<char>& file_data) {
@@ -73,9 +89,28 @@ DSD_lvl0 ParseSphAndGetMdsr(ASARMetadata& asar_meta, const SARMetadata& sar_meta
     return dsds.front();
 }
 
-}  // namespace
+DSD_lvl0 ParseMdsr(const std::vector<char>& file_data) {
+    ProductHeader sph = {};
+    sph.Load(file_data.data() + MPH_SIZE, SPH_SIZE);
+    auto dsds = ExtractDSDs(sph);
+    return dsds.front();
+}
 
-namespace alus::asar::envformat {
+std::vector<ForecastMeta> FetchMeta(const std::vector<char>& file_data, boost::posix_time::ptime packets_start_filter,
+                                    boost::posix_time::ptime packets_stop_filter,
+                                    specification::ProductTypes product_type, size_t& packets_before_start,
+                                    size_t& packets_after_stop) {
+    const auto mdsr = ParseMdsr(file_data);
+    if (product_type == specification::ASA_IM0) {
+        return FetchEnvisatL0ImForecastMeta(file_data, mdsr, packets_start_filter, packets_stop_filter,
+                                            packets_before_start, packets_after_stop);
+    } else if (product_type == specification::SAR_IM0) {
+        return FetchErsL0ImForecastMeta(file_data, mdsr, packets_start_filter, packets_stop_filter,
+                                        packets_before_start, packets_after_stop);
+    } else {
+        throw std::invalid_argument("Unsupported product type supplied for level 0 packet parsing.");
+    }
+}
 
 void ParseLevel0Header(const std::vector<char>& file_data, ASARMetadata& asar_meta) {
     ProductHeader mph = {};
@@ -92,18 +127,22 @@ void ParseLevel0Header(const std::vector<char>& file_data, ASARMetadata& asar_me
     asar_meta.processing_station = mph.Get("PROC_CENTER");
 }
 
-void ParseLevel0Packets(const std::vector<char>& file_data, SARMetadata& sar_meta, ASARMetadata& asar_meta,
-                        cufftComplex** d_parsed_packets, alus::asar::specification::ProductTypes product_type,
-                        InstrumentFile& ins_file, boost::posix_time::ptime packets_start_filter,
-                        boost::posix_time::ptime packets_stop_filter) {
+RawSampleMeasurements ParseLevel0Packets(const std::vector<char>& file_data, size_t mdsr_offset_bytes,
+                                         const std::vector<ForecastMeta>& entries_to_be_parsed,
+                                         alus::asar::specification::ProductTypes product_type, InstrumentFile& ins_file,
+                                         std::vector<CommonPacketMetadata>& common_metadata) {
+    if (entries_to_be_parsed.size() != common_metadata.size()) {
+        throw std::runtime_error(
+            fmt::format("Programming error detected - the packet count {} which are to be parsed does not equal given "
+                        "metadata entry count {}",
+                        entries_to_be_parsed.size(), common_metadata.size()));
+    }
+
     if (product_type == specification::ASA_IM0) {
-        const auto& mdsr = ParseSphAndGetMdsr(asar_meta, sar_meta, file_data);
-        ParseEnvisatLevel0ImPackets(file_data, mdsr, sar_meta, asar_meta, d_parsed_packets, ins_file,
-                                    packets_start_filter, packets_stop_filter);
+        return ParseEnvisatLevel0ImPackets(file_data, mdsr_offset_bytes, entries_to_be_parsed, ins_file,
+                                           common_metadata);
     } else if (product_type == specification::SAR_IM0) {
-        const auto& mdsr = ParseSphAndGetMdsr(asar_meta, sar_meta, file_data);
-        ParseErsLevel0ImPackets(file_data, mdsr, sar_meta, asar_meta, d_parsed_packets, ins_file, packets_start_filter,
-                                packets_stop_filter);
+        return ParseErsLevel0ImPackets(file_data, mdsr_offset_bytes, entries_to_be_parsed, ins_file, common_metadata);
     } else {
         throw std::invalid_argument("Unsupported product type supplied for level 0 packet parsing.");
     }

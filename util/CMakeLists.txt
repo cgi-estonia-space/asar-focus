@@ -9,6 +9,7 @@ list(APPEND UTIL_SOURCES
         ${CMAKE_CURRENT_LIST_DIR}/src/img_output.cc
         ${CMAKE_CURRENT_LIST_DIR}/src/math_utils.cc
         ${CMAKE_CURRENT_LIST_DIR}/src/plot.cc
+        ${CMAKE_CURRENT_LIST_DIR}/src/globe_plot.cc
         )
 
 add_library(util-static STATIC ${UTIL_SOURCES})
@@ -21,6 +22,7 @@ target_link_libraries(util-static
         PUBLIC
         CUDA::cudart
         gdal
+        fmt::fmt
         Boost::date_time
         Eigen3::Eigen
         app-static

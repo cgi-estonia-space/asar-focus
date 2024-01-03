@@ -410,8 +410,12 @@ void ConstructIMS(EnvisatIMS& ims, const SARMetadata& sar_meta, const ASARMetada
         sph.dsds[12].SetReferenceDSD("LEVEL 0 PRODUCT", asar_meta.lvl0_file_name);
         sph.dsds[13].SetReferenceDSD("ASAR PROCESSOR CONFIG", asar_meta.configuration_file);
         sph.dsds[14].SetReferenceDSD("INSTRUMENT CHARACTERIZATION", asar_meta.instrument_file);
-        sph.dsds[15].SetEmptyDSD("EXTERNAL CHARACTERIZATION", 'R');
-        sph.dsds[16].SetReferenceDSD("EXTERNAL CALIBRATION", "DUMMY FILE NAME");
+        if (asar_meta.external_characterization_file.empty()) {
+            sph.dsds[15].SetEmptyDSD("EXTERNAL CHARACTERIZATION", 'R');
+        } else {
+            sph.dsds[15].SetReferenceDSD("EXTERNAL_CHARACTERIZATION", asar_meta.external_characterization_file);
+        }
+        sph.dsds[16].SetReferenceDSD("EXTERNAL CALIBRATION", asar_meta.external_calibration_file);
         sph.dsds[17].SetReferenceDSD("ORBIT STATE VECTOR 1", asar_meta.orbit_dataset_name);
     }
 }
