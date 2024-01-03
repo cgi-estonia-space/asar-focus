@@ -191,7 +191,6 @@ int main(int argc, char* argv[]) {
         const int az_size = sar_meta.img.azimuth_size;
         const int rg_size = sar_meta.img.range_size;
         const auto fft_sizes = GetOptimalFFTSizes();
-        LOGD << "Starting with " << sar_meta.img.range_size << " range samples";
 
         const auto rg_plan_sz = fft_sizes.upper_bound(rg_size + sar_meta.chirp.n_samples);
         LOGD << "Range FFT padding sz = " << rg_plan_sz->first << "(2 ^ " << rg_plan_sz->second[0] << " * 3 ^ "
@@ -217,16 +216,12 @@ int main(int argc, char* argv[]) {
                                     cudaMemcpyDeviceToDevice));
         CHECK_CUDA_ERR(cudaFree(d_parsed_packets));
 
-        LOGD << "Continuing with " << img.XSize() << " range samples" << sar_meta.img.range_size;
-
         TimeStop(gpu_transfer_start, "GPU image formation");
 
         auto correction_start = TimeStart();
         RawDataCorrection(img, {sar_meta.total_raw_samples}, sar_meta.results);
         img.ZeroNaNs();
         TimeStop(correction_start, "I/Q correction");
-
-        LOGD << "After raw data correction " << img.XSize() << " range samples " << sar_meta.img.range_size;
 
         auto vr_start = TimeStart();
         // TODO - Would give exactly the same results as in EstimateProcessingVelocity()'s sub step.
@@ -258,8 +253,6 @@ int main(int argc, char* argv[]) {
         auto rc_start = TimeStart();
         RangeCompression(img, chirp, sar_meta.chirp.n_samples, d_workspace);
         TimeStop(rc_start, "Range compression");
-
-        LOGD << "After range compression " << img.XSize() << " range samples " << sar_meta.img.range_size;
 
         sar_meta.img.range_size = img.XSize();
 
