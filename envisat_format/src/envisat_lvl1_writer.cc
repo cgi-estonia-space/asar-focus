@@ -90,6 +90,15 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
         r.num_looks_range = 1;
         // r.filter_window has been prefilled.
         // r.filter_coef_range has been prefilled.
+
+        if (sar_meta.chirp.apply_window) {
+            r.filter_coef_range = sar_meta.chirp.alpha;
+            CopyStrPad(r.filter_range, "HAMMING");
+        } else {
+            r.filter_coef_range = 0.0;
+            CopyStrPad(r.filter_range, "NONE");
+        }
+
         r.look_bw_range[0] = out.downlink_header.tx_pulse_bw_value[0];
         r.tot_bw_range[0] = out.downlink_header.tx_pulse_bw_value[0];
 
@@ -104,6 +113,14 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
         az.num_look_az = 1;
         az.to_bw_az = sar_meta.pulse_repetition_frequency * sar_meta.azimuth_bandwidth_fraction;
         CopyStrPad(az.filter_az, "NONE");
+
+        if (sar_meta.chirp.apply_window) {
+            az.filter_coef_az = sar_meta.azimuth_window_alpha;
+            CopyStrPad(az.filter_az, "HAMMING");
+        } else {
+            az.filter_coef_az = 0.0;
+            CopyStrPad(az.filter_az, "NONE");
+        }
 
         // refit Vr polynomial to a Ka polynomial
         // internal Vr polynimal is fitted to range index, Envisat format uses two way slant range time from first

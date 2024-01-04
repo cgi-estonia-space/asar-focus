@@ -17,27 +17,6 @@ inline int NextPower2(int value) {
     return r;
 }
 
-// https://en.wikipedia.org/wiki/Hann_function
-inline void ApplyHanningWindow(std::vector<std::complex<float>>& data) {
-    const size_t N = data.size();
-    for (size_t i = 0; i < N; i++) {
-        size_t n = i;
-        double term = (2 * M_PI * n) / N;
-        double m = 0.5 * (1 - cos(term));
-        data[i] *= m;
-    }
-}
-
-inline void ApplyHammingWindow(std::vector<std::complex<float>>& data) {
-    const size_t N = data.size();
-    for (size_t i = 0; i < N; i++) {
-        size_t n = i;
-        double term = (2 * M_PI * n) / N;
-        double m = 0.54 - 0.46 * cos(term);
-        data[i] *= m;
-    }
-}
-
 inline void InplaceComplexToIntensity(cuComplex* data, size_t n) {
     for (size_t idx = 0; idx < n; idx++) {
         float i = data[idx].x;

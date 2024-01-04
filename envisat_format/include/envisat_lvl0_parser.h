@@ -178,4 +178,6 @@ RawSampleMeasurements ParseLevel0Packets(const std::vector<char>& file_data, siz
                                          alus::asar::specification::ProductTypes product_type, InstrumentFile& ins_file,
                                          std::vector<CommonPacketMetadata>& common_metadata);
 
+void ParseConfFile(const ConfigurationFile& con_file, SARMetadata& sar_meta);
+
 }  // namespace alus::asar::envformat

@@ -194,8 +194,7 @@ void FormatResults(DevicePaddedImage& img, char* dest_space, size_t record_heade
     envformat::ConditionResults(img, dest_space, record_header_size, calibration_constant);
 }
 
-void StorePlots(std::string output_path, std::string product_name, const SARMetadata& sar_metadata,
-                const std::vector<std::complex<float>>& chirp) {
+void StorePlots(std::string output_path, std::string product_name, const SARMetadata& sar_metadata) {
     {
         PlotArgs plot_args = {};
         plot_args.out_path = output_path + "/" + product_name + "_Vr.html";
@@ -212,21 +211,38 @@ void StorePlots(std::string output_path, std::string product_name, const SARMeta
         plot_args.out_path = output_path + "/" + product_name + "_chirp.html";
         plot_args.x_axis_title = "nth sample";
         plot_args.y_axis_title = "Amplitude";
-        plot_args.data.resize(2);
-        auto& i = plot_args.data[0];
-        auto& q = plot_args.data[1];
-        std::vector<double> n_samp;
-        int cnt = 0;
-        for (auto iq : chirp) {
-            i.y.push_back(iq.real());
-            i.x.push_back(cnt);
-            q.y.push_back(iq.imag());
-            q.x.push_back(cnt);
-            cnt++;
+        plot_args.data.resize(4);
+        {
+            auto& i = plot_args.data[0];
+            auto& q = plot_args.data[1];
+            int cnt = 0;
+            for (auto iq : sar_metadata.chirp.time_domain) {
+                i.y.push_back(iq.real());
+                i.x.push_back(cnt);
+                q.y.push_back(iq.imag());
+                q.x.push_back(cnt);
+                cnt++;
+            }
+
+            i.line_name = "I";
+            q.line_name = "Q";
         }
 
-        i.line_name = "I";
-        q.line_name = "Q";
+        {
+            auto& i = plot_args.data[2];
+            auto& q = plot_args.data[3];
+            int cnt = 0;
+            for (auto iq : sar_metadata.chirp.padded_windowed_data) {
+                i.y.push_back(iq.real());
+                i.x.push_back(cnt);
+                q.y.push_back(iq.imag());
+                q.x.push_back(cnt);
+                cnt++;
+            }
+
+            i.line_name = "I padded+scaled+windowed";
+            q.line_name = "Q padded+scaled+windowed";
+        }
         Plot(plot_args);
     }
     {

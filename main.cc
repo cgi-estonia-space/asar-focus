@@ -147,6 +147,7 @@ int main(int argc, char* argv[]) {
         alus::asar::mainflow::AssembleMetadataFrom(packets_metadata, asar_meta, sar_meta, ins_file,
                                                    compressed_measurements.max_samples,
                                                    compressed_measurements.total_samples, product_type);
+        alus::asar::envformat::ParseConfFile(conf_file, sar_meta);
         // This is open issue - what exactly constitutes to product error.
         // Currently only when ERS has missing packets base on data record no.
         if (compressed_measurements.no_of_product_errors_compensated > 0) {
@@ -230,7 +231,7 @@ int main(int argc, char* argv[]) {
         sar_meta.results.Vr_poly = EstimateProcessingVelocity(sar_meta);
         TimeStop(vr_start, "Vr estimation");
 
-        auto chirp = GenerateChirpData(sar_meta.chirp, rg_padded);
+        GenerateChirpData(sar_meta.chirp, rg_padded);
 
         auto dc_start = TimeStart();
         // Element from the back() indicates polynomial starting value.
@@ -247,7 +248,7 @@ int main(int argc, char* argv[]) {
         CudaWorkspace d_workspace(img.TotalByteSize());
 
         auto rc_start = TimeStart();
-        RangeCompression(img, chirp, sar_meta.chirp.n_samples, d_workspace);
+        RangeCompression(img, sar_meta.chirp.padded_windowed_data, sar_meta.chirp.n_samples, d_workspace);
         TimeStop(rc_start, "Range compression");
 
         sar_meta.img.range_size = img.XSize();
@@ -309,7 +310,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (args.StorePlots()) {
-            alus::asar::mainflow::StorePlots(args.GetOutputPath().data(), wif_name_base, sar_meta, chirp);
+            alus::asar::mainflow::StorePlots(args.GetOutputPath().data(), wif_name_base, sar_meta);
         }
 
         lvl1_file_handle.Write(&ims, sizeof(ims));

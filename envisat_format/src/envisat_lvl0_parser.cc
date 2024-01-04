@@ -148,4 +148,39 @@ RawSampleMeasurements ParseLevel0Packets(const std::vector<char>& file_data, siz
     }
 }
 
+void ParseConfFile(const ConfigurationFile& con_file, SARMetadata& sar_meta) {
+    {
+        const char* rg_window = reinterpret_cast<const char*>(&con_file.range_win_type_ims.window_type[0]);
+
+        if (strncmp(rg_window, "NONE", 4) == 0) {
+            sar_meta.chirp.apply_window = false;
+        } else if (strncmp(rg_window, "HAMMING", 7) == 0) {
+            sar_meta.chirp.apply_window = true;
+            // NOTE alpha does not make sense with hamming? It should be fixed 0.54?
+            sar_meta.chirp.alpha = con_file.range_win_type_ims.window_coeff;
+        } else {
+            LOGW << "Defaulting range HAMMING WINDOW unknown = "
+                 << std::string(rg_window, std::size(con_file.range_win_type_ims.window_type));
+            sar_meta.chirp.apply_window = true;
+            sar_meta.chirp.alpha = 0.75;
+        }
+    }
+
+    {
+        const char* az_window = reinterpret_cast<const char*>(&con_file.az_win_type_ims.window_type[0]);
+
+        if (strncmp(az_window, "NONE", 4) == 0) {
+            sar_meta.azimuth_window = false;
+        } else if (strncmp(az_window, "HAMMING", 7) == 0) {
+            sar_meta.azimuth_window = true;
+            sar_meta.azimuth_window_alpha = con_file.az_win_type_ims.window_coeff;
+        } else {
+            LOGW << "Defaulting azimuth HAMMING WINDOW, unknown = "
+                 << std::string(az_window, std::size(con_file.az_win_type_ims.window_type));
+            sar_meta.chirp.apply_window = true;
+            sar_meta.azimuth_window_alpha = 0.75;
+        }
+    }
+}
+
 }  // namespace alus::asar::envformat

@@ -20,6 +20,10 @@ struct ChirpInfo {
     int n_samples;
     double pulse_bandwidth;
     double Kr;  // Linear FM rate of transmitted pulse
+    bool apply_window;
+    double alpha;
+    std::vector<std::complex<float>> time_domain;
+    std::vector<std::complex<float>> padded_windowed_data;
 };
 
 struct SARResults {
@@ -42,13 +46,14 @@ struct SARMetadata {
     std::vector<OrbitStateVector> osv;
     double pulse_repetition_frequency;
     double azimuth_bandwidth_fraction;
+    double azimuth_window_alpha;
+    bool azimuth_window;
     double carrier_frequency;
     double wavelength;
     double platform_velocity;
     double range_spacing;
     double azimuth_spacing;
     double slant_range_first_sample;
-    double slatn_range_first_time;
     boost::posix_time::ptime first_line_time;
     boost::posix_time::ptime center_time;
 
