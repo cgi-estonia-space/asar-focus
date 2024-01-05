@@ -105,6 +105,7 @@ int main(int argc, char* argv[]) {
         file_time_start = TimeStart();
         alus::asar::envformat::ParseLevel0Header(l0_ds, asar_meta);
         const auto product_type = alus::asar::mainflow::TryDetermineProductType(asar_meta.product_name);
+        const auto instrument_type = alus::asar::specification::GetInstrumentFrom(product_type);
         alus::asar::mainflow::CheckAndLimitSensingStartEnd(asar_meta.sensing_start, asar_meta.sensing_stop,
                                                            args.GetProcessSensingStart(), args.GetProcessSensingEnd());
         alus::asar::mainflow::TryFetchOrbit(orbit_source, asar_meta, sar_meta);
@@ -323,9 +324,12 @@ int main(int argc, char* argv[]) {
                 "required for MDS buffer.");
         }
 
-        float tambov{120000 / 100};
-        //        const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
-        //        const auto tambov = xca.scaling_factor_im_slc_vv[swath_idx];
+        // Best guess for final scaling as can be.
+        const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
+        auto tambov = conf_file.process_gain_ims[swath_idx] / sqrt(xca.scaling_factor_im_slc_vv[swath_idx]);
+        if (instrument_type == alus::asar::specification::Instrument::SAR) {
+            tambov /= (2*4);
+        }
         auto device_mds_buf = d_workspace.GetAs<char>();
         alus::asar::mainflow::FormatResults(subsetted_raster, device_mds_buf, record_header_bytes, tambov);
         TimeStop(result_correction_start, "Image results correction");
