@@ -435,7 +435,11 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
     // Ground speed ~12% less than platform velocity. 4.2.1 from "Digital processing of SAR Data"
     // TODO should it be calculated more precisely?
     const double Vg = sar_meta.platform_velocity * 0.88;
-    sar_meta.results.Vr_poly = {0, 0, sqrt(Vg * sar_meta.platform_velocity)};
+    // TODO This is a hack, should be refactored during metadata refactoring - this function is called twice and it
+    // resets up polynomial second time
+    if (sar_meta.results.Vr_poly.empty()) {
+        sar_meta.results.Vr_poly = {0, 0, sqrt(Vg * sar_meta.platform_velocity)};
+    }
     LOGD << "platform velocity = " << sar_meta.platform_velocity << ", initial Vr = " << CalcVr(sar_meta, 0);
     sar_meta.azimuth_spacing = Vg * (1 / sar_meta.pulse_repetition_frequency);
 
