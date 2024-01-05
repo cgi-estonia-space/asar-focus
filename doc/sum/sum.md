@@ -1,79 +1,3 @@
-
-
-
-<p style="text-align: center; font-size: xx-large; font-weight: bold">ASAR-FOCUS GPU processor<br>Software User Manual</p>
-<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-<p style="text-align: center; font-weight: bold">CGI Estonia<br>Jan 8th 2024<br>Issue/Revision: 1/A</p>
-<br>
-
-<p style="text-align: center">Published (including this document) at <a href="https://github.com/cgi-estonia-space/asar-focus">Github<br>https://github.com/cgi-estonia-space/asar-focus</a></p>
-
-<div style="page-break-after: always;"></div>
-
-
-<h1 style="text-align: center;">CHANGE LOG</h1>
-
-<div align="center">
-
-| Issue/Revision | Date       | Pages | Description                        |
-|----------------|------------|-------|------------------------------------|
-| 1/A            | 08/01/2024 | All   | Initial document for version 0.2.0 |
-
-</div>
-
-<div style="page-break-after: always;"></div>
-
-<h1 style="text-align: center;">TABLE OF CONTENTS</h1>
-
-<!-- TOC -->
-* [1 Introduction](#1-introduction)
-* [2 Prerequisites](#2-prerequisites)
-  * [2.1 Common components](#21-common-components)
-    * [2.1.1 Enabling containers](#211-enabling-containers)
-    * [2.1.2 Prebuilt containers](#212-prebuilt-containers)
-  * [2.2 Runtime COTS](#22-runtime-cots)
-  * [2.3 Development COTS](#23-development-cots)
-* [3 Usage](#3-usage)
-  * [3.1 CLI arguments](#31-cli-arguments)
-  * [3.2 Input datasets](#32-input-datasets)
-  * [3.3 Auxiliary files](#33-auxiliary-files)
-<!-- TOC -->
-
-<div style="page-break-after: always;"></div>
-
-<h1 style="text-align: center;">DEFINITIONS, ACRONYMS AND ABBREVIATIONS</h1>
-
-<center>
-
-| Acronym/abbreviation | Definition                          |
-|----------------------|-------------------------------------|
-| CC                   | CUDA Compute Capability             |
-| CLI                  | Command-line interface              |
-| COTS                 | Component Off-the-Shelf             |
-| CUDA                 | Compute Unified Device Architecture |
-| GPU                  | Graphics Processing Unit            |
-| RHEL                 | Red Hat Enterprise Linux            |
-| SDK                  | Software Development Kit            |
-
-</center>
-
-<div style="page-break-after: always;"></div>
-
 # 1 Introduction
 
 Following information describes the usage of the ERS and Envisat focusser utilizing GPU. It is implemented in C/C++/CUDA
@@ -110,8 +34,8 @@ Based on target platform one can conveniently choose intended scripts. Subchapte
 ### 2.1.1 Enabling containers
 
 There are many options to choose from which are all summarized on Nvidia's official CDI page at https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/index.html.
-The scenario could vary from the type of operating system to orchestration framework used. This means there could be 
-different engines used - docker, containerd, CRI-O and podman - which all need customized setup. 
+The scenario could vary from the type of operating system to orchestration framework used. This means there could be
+different engines used - docker, containerd, CRI-O and podman - which all need customized setup.
 
 Currently utilized and tested approaches within this project are represented below:
 * [podman on Ootpa](https://github.com/cgi-estonia-space/ALUs-platform/blob/main/rhel/8/ootpa/install_container_toolkit.sh)
@@ -162,7 +86,7 @@ The developed processor called `asar_focus` is a single executable GPU ERS and E
 user interface or any other hidden requirements are present. Below will be described the arguments, formats and input
 datasets/auxiliary files. All the produced files will be written to the location specified by the `output` argument.
 
-If the program has successfully processed the product the return code of the binary execution will be **0**. Any other 
+If the program has successfully processed the product the return code of the binary execution will be **0**. Any other
 exit code means error during processing which SHALL be accompanied by the message on the console. Unsuccessful
 processing could occur due to the invalid input(s), programming error or host machine's/OS errors/congestion.
 
@@ -204,7 +128,7 @@ of processing with accompanying message on console.
 
 For debugging and research possibilities couple of 'unofficial' command line arguments are present which are given below.
 * `--plot` - create HTML files consisting graphs of the following processing properties - processing velocity,
-chirp signal, doppler centroid and scene geolocation properties on earth
+  chirp signal, doppler centroid and scene geolocation properties on earth
 * `--intensity` - create GeoTIFF files of the raw measurements, range compressed results and fully compressed intensity
 
 All the created files would be saved in the same directory as the final product given by the `output` argument. They are
@@ -239,7 +163,7 @@ DOR_VOR_AXVF-P20120424_125300_20040228_215528_20040301_002328
 
 ## 3.2 Input datasets
 
-Single level 0 **envisat format** ERS-1/2 and Envisat mission dataset is required. As of version 0.2 only imaging mode 
+Single level 0 **envisat format** ERS-1/2 and Envisat mission dataset is required. As of version 0.2 only imaging mode
 datasets are supported. The specification is given in document `PO-RS-MDA-GS-2009 4/C`.
 
 ## 3.3 Auxiliary files
@@ -255,7 +179,7 @@ and [ENVISAT aux](https://earth.esa.int/eogateway/instruments/asar/auxiliary-dat
 
 # 4 Requirements
 
-Below are specified minimum requirements for hardware. It is based on the resources needed to focus 16 seconds of 
+Below are specified minimum requirements for hardware. It is based on the resources needed to focus 16 seconds of
 level 0 imaging mode dataset. Resource like CPU is out of scope, because all modern CPUs are suitable. Disk storage
 resource is dismal, since only level 1 dataset storage is required also no intermediate files are stored
 (except for debugging features discussed in [3.1.1 Hidden CLI features](#311-hidden-cli-features)).
