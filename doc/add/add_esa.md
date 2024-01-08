@@ -172,9 +172,26 @@ asar_focus processor:
 
 ## 5.1 DevicePaddedImage
 
-## 5.2 CudaDevice
+SAR focusing requires forward and backwards Fourier transforms in range and azimuth directions, additionally the SAR datasets are quite large
 
-# 6 Feasibility and Resource Estimates
+DevicePaddedImage is the core abstraction to facilitate efficient SAR transformations by embedding extra padding areas in the right and bottom of the image. This allows inplace FFTs in both range and azimuth direction, this allievates the need for extra memory copies to fullfill FFT size requirements. Thus changing from time domain to frequency domain and back is done memory efficiently, without needlessly copying multigigabyte signal data.
+
+Additional design consideration is the fact that GPUs have less memory than CPUs, thus using this techinique allows to keep the full DSP chain on the GPU memory, avoiding costly CPU <-> GPU transfers.
+Visual representation of the memory layout.
+<pre>
+    RANGE
+   |------------------------|---------|
+ A |                        |         |
+ Z | SAR SIGNAL DATA        |  RANGE  |
+ I |                        |   FFT   |
+ M |                        | PADDING |
+ U |                        |         |
+ T |------------------------|---------|
+ H | AZIMUTH FFT PADDING    |         |
+   |------------------------|---------|
+</pre>
+
+# 6 Feasability and Resource Estimates
 
 Profiling analyze
 
