@@ -142,6 +142,54 @@ void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, envfo
     }
 }
 
+AzimuthRangeWindow CalcResultsWindow(double doppler_centroid_constant_term, size_t lines_cached_before_sensing,
+                                     size_t lines_cached_after_sensing, size_t max_aperture_pixels,
+                                     const sar::focus::RcmcParameters& rcmc_params) {
+    AzimuthRangeWindow az_rg_win{};
+
+    // Remove all cached lines in order to comply with the requested sensing start and stop times.
+    az_rg_win.lines_to_remove_before_sensing_start = lines_cached_before_sensing;
+    az_rg_win.lines_to_remove_after_sensing_stop = lines_cached_after_sensing;
+    // Determine if there are more needed to cut because the L0 does not consist enough packets to accomodate with
+    // aperture pixels.
+    if (doppler_centroid_constant_term > 0) {
+        if (lines_cached_before_sensing < max_aperture_pixels) {
+            az_rg_win.lines_to_remove_after_sensing_start = (max_aperture_pixels - lines_cached_before_sensing);
+        }
+    } else {
+        if (lines_cached_after_sensing < max_aperture_pixels) {
+            az_rg_win.lines_to_remove_before_sensing_stop = (max_aperture_pixels - lines_cached_after_sensing);
+        }
+    }
+
+    LOGD << "Doppler centroid constant term " << doppler_centroid_constant_term << " and max aperture pixels "
+         << max_aperture_pixels;
+
+    if (az_rg_win.lines_to_remove_after_sensing_start > 0) {
+        LOGI << "Need to remove " << az_rg_win.lines_to_remove_after_sensing_start << " lines after requested sensing "
+             << "start - the L0 product did not have enough packets to accommodate aperture pixel padding";
+    }
+    if (az_rg_win.lines_to_remove_before_sensing_stop > 0) {
+        LOGI << "Need to remove " << az_rg_win.lines_to_remove_before_sensing_stop << " lines before requested sensing "
+             << "stop - the L0 product did not have enough packets to accommodate aperture pixel padding";
+    }
+
+    // Based on visual inspection with different RCMC window sizes. First are "nodata" resulting in windowing.
+    // Extra two are visually meaningless focussed pixels. For Window size 16 there are up to 6 pixels nodata on near
+    // range. Adding two which have data but not focussed so good we get 8 for near range. Similar result to window
+    // size 8, which would result in 4 pixels. This is certified on ERS scene which does not have SWST change, where
+    // the "not so well focussed" pixels are not present. So the effect is purely driven by the RCMC window size and
+    // half should be deducted near and half far range.
+    const auto rcmc_window_coef_near_range = (rcmc_params.window_size / 2);
+    // For far range no meaningless focussed pixels could not be detected for scene with SWST change.
+    // The effect of the window is still half of the window size.
+    const auto rcmc_window_coef_far_range = (rcmc_params.window_size / 2);
+    az_rg_win.near_range_pixels_to_remove = rcmc_window_coef_near_range;
+    az_rg_win.far_range_pixels_to_remove = rcmc_window_coef_far_range;
+
+    return az_rg_win;
+}
+
 void FormatResults(DevicePaddedImage& img, char* dest_space, size_t record_header_size, float calibration_constant) {
     envformat::ConditionResults(img, dest_space, record_header_size, calibration_constant);
 }
@@ -206,13 +254,17 @@ void StoreIntensity(std::string output_path, std::string product_name, std::stri
 
 void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_meta, ASARMetadata& asar_meta,
                           SARMetadata& sar_meta, InstrumentFile& ins_file, size_t max_raw_samples_at_range,
-                          size_t total_raw_samples, alus::asar::specification::ProductTypes product_type) {
+                          size_t total_raw_samples, alus::asar::specification::ProductTypes product_type,
+                          size_t range_pixels_recalib) {
     uint16_t min_swst = UINT16_MAX;
     uint16_t max_swst = 0;
     uint16_t swst_changes = 0;
     uint16_t prev_swst = parsed_meta.front().swst_code;
     const auto instrument = specification::GetInstrumentFrom(product_type);
-    const int swst_multiplier{instrument == specification::Instrument::ASAR ? 1 : 4};
+    int swst_multiplier{instrument == specification::Instrument::ASAR ? 1 : 4};
+    if (range_pixels_recalib > 0) {
+        swst_multiplier = 0;
+    }
 
     sar_meta.carrier_frequency = ins_file.flp.radar_frequency;
     sar_meta.chirp.range_sampling_rate = ins_file.flp.radar_sampling_rate;
@@ -247,29 +299,38 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
     asar_meta.last_mjd = parsed_meta.back().sensing_time;
     asar_meta.last_sbt = parsed_meta.back().onboard_time;
 
-    if (instrument == specification::Instrument::ASAR) {
-        for (const auto& e : parsed_meta) {
-            if (prev_swst != e.swst_code) {
-                prev_swst = e.swst_code;
-                swst_changes++;
-            }
-            min_swst = std::min(min_swst, e.swst_code);
-            max_swst = std::max(max_swst, e.swst_code);
-        }
-    }
-
-    if (instrument == specification::Instrument::SAR) {
-        for (auto& e : parsed_meta) {
-            if (prev_swst != e.swst_code) {
-                if ((e.swst_code < 500) || (e.swst_code > 1500) || ((prev_swst - e.swst_code) % 22 != 0)) {
-                    e.swst_code = prev_swst;
-                    continue;
+    {
+        size_t packet_index{};
+        if (instrument == specification::Instrument::ASAR) {
+            for (const auto& e : parsed_meta) {
+                if (prev_swst != e.swst_code) {
+                    LOGV << "SWST change at line " << packet_index << " from " << prev_swst << " to " << e.swst_code;
+                    prev_swst = e.swst_code;
+                    swst_changes++;
                 }
-                prev_swst = e.swst_code;
-                swst_changes++;
+                min_swst = std::min(min_swst, e.swst_code);
+                max_swst = std::max(max_swst, e.swst_code);
+                packet_index++;
             }
-            min_swst = std::min(min_swst, e.swst_code);
-            max_swst = std::max(max_swst, e.swst_code);
+        }
+
+        if (instrument == specification::Instrument::SAR) {
+            for (auto& e : parsed_meta) {
+                if (prev_swst != e.swst_code) {
+                    LOGV << "SWST change at line " << packet_index << " from " << prev_swst << " to " << e.swst_code;
+                    if ((e.swst_code < 500) || (e.swst_code > 1500) || ((prev_swst - e.swst_code) % 22 != 0)) {
+                        LOGV << "Invalid SWST code " << e.swst_code << " at line " << packet_index;
+                        e.swst_code = prev_swst;
+                        packet_index++;
+                        continue;
+                    }
+                    prev_swst = e.swst_code;
+                    swst_changes++;
+                }
+                min_swst = std::min(min_swst, e.swst_code);
+                max_swst = std::max(max_swst, e.swst_code);
+                packet_index++;
+            }
         }
     }
 
@@ -322,13 +383,22 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
     asar_meta.swst_rank = n_pulses_swst;
 
     if (instrument == specification::Instrument::ASAR) {
-        // TODO Range gate bias must be included in this calculation
+        const auto delay_time = ins_file.flp.range_gate_bias;
         sar_meta.pulse_repetition_frequency = sar_meta.chirp.range_sampling_rate / parsed_meta.front().pri_code;
-        asar_meta.two_way_slant_range_time =
-            (min_swst + n_pulses_swst * parsed_meta.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate);
+        if (range_pixels_recalib == 0) {
+            asar_meta.two_way_slant_range_time =
+                ((min_swst + n_pulses_swst * parsed_meta.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate) -
+                 delay_time);
+        } else {
+            sar_meta.slant_range_first_sample = CalcR0(sar_meta, range_pixels_recalib);
+            asar_meta.two_way_slant_range_time = (sar_meta.slant_range_first_sample * 2) / c;
+        }
     }
 
     if (instrument == specification::Instrument::SAR) {
+        // if  swst_multiplier != 0 - do not have previous results
+        // else sar_meta.slant_range_first_sample = CalcR0(sar_meta, pixels cut)
+        // asar_meta.two_way_slant_range_time = (slant_range_first_sample * 2) / c
         const auto delay_time = ins_file.flp.range_gate_bias;
         // ISCE2 uses 210.943006e-9, but
         // ERS-1-Satellite-to-Ground-Segment-Interface-Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05
@@ -341,8 +411,14 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
                  << "is out of the specification (ERS-1-Satellite-to-Ground-Segment-Interface-"
                  << "Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05) range [1640, 1720] Hz" << std::endl;
         }
-        asar_meta.two_way_slant_range_time =
-            n_pulses_swst * pri + min_swst * swst_multiplier / sar_meta.chirp.range_sampling_rate - delay_time;
+
+        if (range_pixels_recalib == 0) {
+            asar_meta.two_way_slant_range_time =
+                n_pulses_swst * pri + min_swst * swst_multiplier / sar_meta.chirp.range_sampling_rate - delay_time;
+        } else {
+            sar_meta.slant_range_first_sample = CalcR0(sar_meta, range_pixels_recalib);
+            asar_meta.two_way_slant_range_time = (sar_meta.slant_range_first_sample * 2) / c;
+        }
     }
 
     LOGD << "PRF " << sar_meta.pulse_repetition_frequency << " PRI " << 1 / sar_meta.pulse_repetition_frequency;
@@ -359,7 +435,11 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
     // Ground speed ~12% less than platform velocity. 4.2.1 from "Digital processing of SAR Data"
     // TODO should it be calculated more precisely?
     const double Vg = sar_meta.platform_velocity * 0.88;
-    sar_meta.results.Vr_poly = {0, 0, sqrt(Vg * sar_meta.platform_velocity)};
+    // TODO This is a hack, should be refactored during metadata refactoring - this function is called twice and it
+    // resets up polynomial second time
+    if (sar_meta.results.Vr_poly.empty()) {
+        sar_meta.results.Vr_poly = {0, 0, sqrt(Vg * sar_meta.platform_velocity)};
+    }
     LOGD << "platform velocity = " << sar_meta.platform_velocity << ", initial Vr = " << CalcVr(sar_meta, 0);
     sar_meta.azimuth_spacing = Vg * (1 / sar_meta.pulse_repetition_frequency);
 
@@ -392,6 +472,7 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
     auto center_time = asar_meta.sensing_start + boost::posix_time::microseconds(static_cast<uint32_t>(center_s * 1e6));
 
     // TODO investigate fast time effect on geolocation
+    // Use CalcR0() to calculate new slant_range_first_sample_time.
     double slant_range_center = sar_meta.slant_range_first_sample +
                                 ((sar_meta.img.range_size - sar_meta.chirp.n_samples) / 2) * sar_meta.range_spacing;
 
@@ -459,6 +540,69 @@ void ConvertRawSampleSetsToComplex(const envformat::RawSampleMeasurements& raw_m
     } else {
         throw std::runtime_error("Unsupported product type for " + std::string(__FUNCTION__));
     }
+}
+
+void SubsetResultsAndReassembleMeta(DevicePaddedImage& azimuth_compressed_raster, AzimuthRangeWindow window,
+                                    std::vector<alus::asar::envformat::CommonPacketMetadata>& common_metadata,
+                                    ASARMetadata& asar_meta, SARMetadata& sar_meta, InstrumentFile& ins_file,
+                                    alus::asar::specification::ProductTypes product_type, CudaWorkspace& workspace,
+                                    DevicePaddedImage& subsetted_raster) {
+    const auto compressed_lines = static_cast<size_t>(azimuth_compressed_raster.YSize());
+    const auto metadata_lines = common_metadata.size();
+    if (compressed_lines != metadata_lines) {
+        throw std::runtime_error("Programming error detected. The resulting raster after azimuth compression has " +
+                                 std::to_string(compressed_lines) + " lines but metadata consists " +
+                                 std::to_string(metadata_lines) + " entries");
+    }
+
+    const auto lines_to_discard_beginning =
+        window.lines_to_remove_before_sensing_start + window.lines_to_remove_after_sensing_start;
+    const auto lines_to_discard_end =
+        window.lines_to_remove_before_sensing_stop + window.lines_to_remove_after_sensing_stop;
+    const auto source_range_pixels = azimuth_compressed_raster.XSize();
+    const auto subset_range_pixels =
+        source_range_pixels - (window.near_range_pixels_to_remove + window.far_range_pixels_to_remove);
+
+    common_metadata.erase(common_metadata.begin(), common_metadata.begin() + lines_to_discard_beginning);
+    common_metadata.resize(common_metadata.size() - lines_to_discard_end);
+    const auto subset_line_count = common_metadata.size();
+
+    if (workspace.ByteSize() < subset_line_count * subset_range_pixels * sizeof(cufftComplex)) {
+        throw std::runtime_error("Destination buffer size " + std::to_string(workspace.ByteSize()) +
+                                 " is not enough for results subsetting " + std::to_string(subset_range_pixels) + "x" +
+                                 std::to_string(subset_line_count));
+    }
+
+    [[maybe_unused]] const auto source_range_size_bytes = source_range_pixels * sizeof(cufftComplex);
+    const auto subset_range_size_bytes = subset_range_pixels * sizeof(cufftComplex);
+
+    // Strided copy of the buffer.
+    CHECK_CUDA_ERR(cudaMemcpy2D(workspace.Get(), subset_range_size_bytes,
+                                azimuth_compressed_raster.Data() +
+                                    (lines_to_discard_beginning * azimuth_compressed_raster.XStride()) +
+                                    window.near_range_pixels_to_remove,
+                                azimuth_compressed_raster.XStride() * sizeof(cufftComplex), subset_range_size_bytes,
+                                subset_line_count, cudaMemcpyDeviceToDevice));
+    subsetted_raster.InitExtPtr(subset_range_pixels, subset_line_count, subset_range_pixels, subset_line_count,
+                                workspace);
+    workspace = azimuth_compressed_raster.ReleaseMemory();
+
+    AssembleMetadataFrom(common_metadata, asar_meta, sar_meta, ins_file, subset_range_pixels,
+                         subset_range_pixels * subset_line_count, product_type, window.near_range_pixels_to_remove);
+}
+
+void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed, const sar::focus::RcmcParameters& rcmc_params) {
+    ims.main_processing_params.azimuth_processing_information.num_lines_proc = total_packets_processed;
+
+    auto& range_processing_meta = ims.main_processing_params.range_processing_information;
+    auto filter_window_meta_str = rcmc_params.window_name;
+    if (filter_window_meta_str.length() > sizeof(range_processing_meta.filter_range)) {
+        filter_window_meta_str.erase(filter_window_meta_str.end() -
+                                         (filter_window_meta_str.length() - sizeof(range_processing_meta.filter_range)),
+                                     filter_window_meta_str.end());
+    }
+    CopyStrPad(range_processing_meta.filter_range, filter_window_meta_str);
+    range_processing_meta.filter_coef_range = rcmc_params.window_coef_range;
 }
 
 }  // namespace alus::asar::mainflow

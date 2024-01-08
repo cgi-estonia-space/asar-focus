@@ -29,10 +29,9 @@
 #include "envisat_types.h"
 #include "file_async.h"
 #include "geo_tools.h"
-#include "img_output.h"
 #include "main_flow.h"
-#include "math_utils.h"
 #include "mem_alloc.h"
+#include "sar/focussing_details.h"
 #include "sar/fractional_doppler_centroid.cuh"
 #include "sar/iq_correction.cuh"
 #include "sar/processing_velocity_estimation.h"
@@ -118,10 +117,10 @@ int main(int argc, char* argv[]) {
         (void)target_product_type;
         // Get packets' sensing start/end ... from which can be decided offset in binary and windowing offset?
         const auto fetch_meta_start = TimeStart();
-        // Default request is 1000 before and after, which should be enough.
-        // It would not influence performance on GPU anyway.
-        size_t packets_before_sensing_start{0};
-        size_t packets_after_sensing_stop{packets_before_sensing_start};
+        // Default request is 3000 before and after, which should be enough, exact amount is calculated later based
+        // on the data. It would not influence performance on GPU anyway.
+        size_t packets_before_sensing_start{3000};
+        size_t packets_after_sensing_stop{3000};
         // This will make sure that sequence starts with an echo packet in case of envisat.
         const auto packets_fetch_meta =
             alus::asar::envformat::FetchMeta(l0_ds, asar_meta.sensing_start, asar_meta.sensing_stop, product_type,
@@ -165,7 +164,6 @@ int main(int argc, char* argv[]) {
 
         LOGD << "Total fetched meta for forecast - " << packets_fetch_meta.size();
         LOGD << "Total parsed L0 packet - " << sar_meta.img.azimuth_size;
-
 
         {
             const auto& orbit_l1_metadata = orbit_source.GetL1ProductMetadata();
@@ -226,6 +224,9 @@ int main(int argc, char* argv[]) {
         TimeStop(correction_start, "I/Q correction");
 
         auto vr_start = TimeStart();
+        // TODO - Would give exactly the same results as in EstimateProcessingVelocity()'s sub step.
+        // Results would change after VR_poly and doppler_centroid_poly are updated ?!
+        auto aperture_pixels = CalcAperturePixels(sar_meta);
         sar_meta.results.Vr_poly = EstimateProcessingVelocity(sar_meta);
         TimeStop(vr_start, "Vr estimation");
 
@@ -255,15 +256,13 @@ int main(int argc, char* argv[]) {
             alus::asar::mainflow::StoreIntensity(args.GetOutputPath().data(), wif_name_base, "rc", img);
         }
 
-        constexpr size_t record_header_bytes = 12 + 1 + 4;
-        const auto mds_record_size = img.XSize() * sizeof(IQ16) + record_header_bytes;
-        const auto mds_record_count = img.YSize();
-        MDS mds;
-        mds.n_records = mds_record_count;
-        mds.record_size = mds_record_size;
-        auto mds_buffer_init = std::async(std::launch::async, [&mds] {
-            mds.buf = static_cast<char*>(alus::util::Memalloc(mds.n_records * mds.record_size));
-        });
+        auto az_comp_start = TimeStart();
+        DevicePaddedImage az_compressed_image;
+        // img is unused after, everything will be traded to 'az_compressed_image'.
+        RangeDopplerAlgorithm(sar_meta, img, az_compressed_image, d_workspace);
+        const auto rcmc_parameters = alus::sar::focus::GetRcmcParameters();
+
+        az_compressed_image.ZeroFillPaddings();
 
         std::string lvl1_out_name = asar_meta.product_name;
         lvl1_out_name.at(6) = 'S';
@@ -272,13 +271,38 @@ int main(int argc, char* argv[]) {
             std::string(args.GetOutputPath()) + std::filesystem::path::preferred_separator + lvl1_out_name;
         auto lvl1_file_handle = alus::util::FileAsync(lvl1_out_full_path);
 
-        auto az_comp_start = TimeStart();
-        DevicePaddedImage out;
-        RangeDopplerAlgorithm(sar_meta, img, out, d_workspace);
+        const auto az_rg_windowing = alus::asar::mainflow::CalcResultsWindow(
+            sar_meta.results.doppler_centroid_poly.back(), packets_before_sensing_start, packets_after_sensing_stop,
+            *std::max_element(aperture_pixels.cbegin(), aperture_pixels.cend()), rcmc_parameters);
 
-        out.ZeroFillPaddings();
+        CHECK_CUDA_ERR(cudaDeviceSynchronize());  // For ZeroFillPaddings() - the kernel was left running async.
+        TimeStop(az_comp_start, "Azimuth compression");
+
+        if (args.StoreIntensity()) {
+            alus::asar::mainflow::StoreIntensity(args.GetOutputPath().data(), wif_name_base, "proc_slc",
+                                                 az_compressed_image);
+        }
+
+        auto result_file_assembly = TimeStart();
 
         EnvisatIMS ims{};
+        alus::asar::mainflow::PrefillIms(ims, packets_metadata.size(), rcmc_parameters);
+
+        DevicePaddedImage subsetted_raster;
+        alus::asar::mainflow::SubsetResultsAndReassembleMeta(az_compressed_image, az_rg_windowing, packets_metadata,
+                                                             asar_meta, sar_meta, ins_file, product_type, d_workspace,
+                                                             subsetted_raster);
+        // az_compressed_image is unused from now on.
+        constexpr size_t record_header_bytes = 12 + 1 + 4;
+        const auto mds_record_size = subsetted_raster.XSize() * sizeof(IQ16) + record_header_bytes;
+        const auto mds_record_count = subsetted_raster.YSize();
+        MDS mds;
+        mds.n_records = mds_record_count;
+        mds.record_size = mds_record_size;
+        auto mds_buffer_init = std::async(std::launch::async, [&mds] {
+            mds.buf = static_cast<char*>(alus::util::Memalloc(mds.n_records * mds.record_size));
+        });
+
         ConstructIMS(ims, sar_meta, asar_meta, mds, GetSoftwareVersion());
         if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
             throw std::runtime_error("Could not create L1 file at " + lvl1_out_full_path);
@@ -290,12 +314,7 @@ int main(int argc, char* argv[]) {
 
         lvl1_file_handle.Write(&ims, sizeof(ims));
 
-        CHECK_CUDA_ERR(cudaDeviceSynchronize());
-        TimeStop(az_comp_start, "Azimuth compression");
-
-        if (args.StoreIntensity()) {
-            alus::asar::mainflow::StoreIntensity(args.GetOutputPath().data(), wif_name_base, "slc", out);
-        }
+        TimeStop(result_file_assembly, "Creating IMS and write start, subsetting data");
 
         auto result_correction_start = TimeStart();
         if (d_workspace.ByteSize() < static_cast<size_t>(mds.record_size * mds.n_records)) {
@@ -303,11 +322,12 @@ int main(int argc, char* argv[]) {
                 "Implementation error occurred - CUDA workspace buffer shall be made larger or equal to what is "
                 "required for MDS buffer.");
         }
+
         float tambov{120000 / 100};
-//        const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
-//        const auto tambov = xca.scaling_factor_im_slc_vv[swath_idx];
+        //        const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
+        //        const auto tambov = xca.scaling_factor_im_slc_vv[swath_idx];
         auto device_mds_buf = d_workspace.GetAs<char>();
-        alus::asar::mainflow::FormatResults(out, device_mds_buf, record_header_bytes, tambov);
+        alus::asar::mainflow::FormatResults(subsetted_raster, device_mds_buf, record_header_bytes, tambov);
         TimeStop(result_correction_start, "Image results correction");
 
         auto mds_formation = TimeStart();
