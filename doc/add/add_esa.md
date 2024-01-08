@@ -264,12 +264,47 @@ developer sites, the usage of cuFFT is detailed here, because this enables the e
 
 
 
-
 # 6 Feasability and Resource Estimates
 
-Profiling analyze
+#Profiling analyze
 
-GPU and RAM memory limit based on the dataset size
+Example GPU profiling chart:
 
+##Test setup:
+RTX3060 Laptop GPU<br>
+AMD Ryzen 7 5800H CPU<br>
+Fast NVMe SSD<br>
+
+##Test data:
+
+Envisat IM(LVL0) -> Envisat IMS(LVL1) with about 16 seconds of signal data
+
+The whole chain is procced in less than 2 seconds
+
+1. File read, metadata parsing & signal data DISK -> CPU -> GPU (350 ms)
+2. Core SAR DSP chain (700 ms)
+3. Metadata assembly, file writing GPU -> CPU -> DISK (750 ms)
+
+Steps 1 & 3 are heavily dependent on the performance of the storage and can be a major bottleneck.
+
+Step 2 is mostly done the GPU and the most time-consuming steps are the FFTs calculated by cuFFT
+
+The cpu speed should not be relevant, as no major focussing steps are bottleneck by the cpu.
+
+#GPU and RAM memory limit based on the dataset size
+
+The baseline GPU memory requirement is estimated to be:
+
+total memory usage = range size * azimuth size * 8 * 1.3 * 2
+
+range size = lvl0 range size
+azimuth size = total number of processed packets
+8 => size of complex float
+1.3 => rough estimate of the paddings required for range and azimuth compression and additional metadata
+2 => memory used for FFTs and output image generation
+
+On a standard 16s IM dataset, this works out to be about 3GB of GPU memory.
+
+CPU memory usage should be roughly the input file size + output file size. Other elements take insignificant amount of memory.
 
 
