@@ -49,7 +49,13 @@
 * [4 System Design](#4-system-design)
 * [5 Component Description](#5-component-description)
   * [5.1 DevicePaddedImage](#51-devicepaddedimage)
+  * [5.2 Envisat format module](#52-envisat-format-module)
+  * [5.3 Boost log](#53-boost-log)
+  * [5.4 Boost program arguments](#54-boost-program-arguments)
+  * [5.4 cuFFT](#54-cufft)
 * [6 Feasability and Resource Estimates](#6-feasability-and-resource-estimates)
+  * [6.1 Profiling analyze](#61-profiling-analyze)
+  * [6.2 GPU and RAM memory limit based on the dataset size](#62-gpu-and-ram-memory-limit-based-on-the-dataset-size)
 <!-- TOC -->
 
 <div style="page-break-after: always;"></div>
@@ -75,8 +81,6 @@
 <div style="page-break-after: always;"></div>
 
 # 1 Introduction
-
-Based on http://microelectronics.esa.int/vhdl/pss/PSS-05-04.pdf Chapter 5
 
 # 1.1 Purpose
 
@@ -259,52 +263,54 @@ asar_focus/0.2.0
 ## 5.4 cuFFT
 
 Submodule of the umbrella CUDA SDK. While other functionality of the CUDA is rather generic and detailed on the NVIDIA
-developer sites, the usage of cuFFT is detailed here, because this enables the easier handling of the focussing pipeline.
+developer sites, the usage of cuFFT is documented here. 
 
-
+The SAR focussing pipeline uses the Fourier transforms in range and azimuth direction to generate the final focussed
+product. This library can highly perform massively parallelized FFT transforms of the whole signal data in one function
+call.
 
 
 # 6 Feasability and Resource Estimates
 
-#Profiling analyze
+## 6.1 Profiling analyze
 
-Example GPU profiling chart:
+Example GPU profiling chart is presented below
+![profiling chart](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/asar-focus_profile_add.png)
 
-##Test setup:
-RTX3060 Laptop GPU<br>
-AMD Ryzen 7 5800H CPU<br>
-Fast NVMe SSD<br>
+*Figure 6.1 - Processor profiling*
 
-##Test data:
+Test setup:
+* RTX3060 Laptop GPU<
+* AMD Ryzen 7 5800H CPU
+* Fast NVMe SSD
 
-Envisat IM(LVL0) -> Envisat IMS(LVL1) with about 16 seconds of signal data
-
-The whole chain is procced in less than 2 seconds
-
+Test data - Envisat IM -> Envisat IMS. About 16 seconds of signal data. The whole chain is processed in less than 2 seconds.
+Summary of the time spent:
 1. File read, metadata parsing & signal data DISK -> CPU -> GPU (350 ms)
 2. Core SAR DSP chain (700 ms)
-3. Metadata assembly, file writing GPU -> CPU -> DISK (750 ms)
+3. Metadata assembly, file writing GPU -> CPU -> disk (750 ms)
 
-Steps 1 & 3 are heavily dependent on the performance of the storage and can be a major bottleneck.
+Steps 1 & 3 are heavily dependent on the performance of the storage and can be a major bottleneck. Step 2 is mostly done
+on the GPU and the most time-consuming steps are the FFTs calculated by cuFFT. The CPU speed is not relevant as no
+major focussing steps are bottleneck by the CPU.
 
-Step 2 is mostly done the GPU and the most time-consuming steps are the FFTs calculated by cuFFT
+There still some optimizations that could be done:
+* Forecast level 0 dataset offsets and therefore no need to wait and read all the file
+* Deallocate GPU and RAM buffers earlier
 
-The cpu speed should not be relevant, as no major focussing steps are bottleneck by the cpu.
+With this there could be nearly 1 second processing time when the RAM disk is a source and target disk storage.
 
-#GPU and RAM memory limit based on the dataset size
+## 6.2 GPU and RAM memory limit based on the dataset size
 
-The baseline GPU memory requirement is estimated to be:
+The baseline GPU memory requirement is estimated to be:\
+`Total memory usage = Range size * Azimuth size * 8 * 1.3 * 2`
 
-total memory usage = range size * azimuth size * 8 * 1.3 * 2
+Where:
+* Range size is level 0 range size
+* Azimuth size is total number of processed packets
+* 8 is size of the complex float
+* 1.3 is rough estimate of the paddings required for range and azimuth compression and additional metadata
+* 2 is memory used for FFTs and output image generation (that includes back and forth buffer)
 
-range size = lvl0 range size
-azimuth size = total number of processed packets
-8 => size of complex float
-1.3 => rough estimate of the paddings required for range and azimuth compression and additional metadata
-2 => memory used for FFTs and output image generation
-
-On a standard 16s IM dataset, this works out to be about 3GB of GPU memory.
-
-CPU memory usage should be roughly the input file size + output file size. Other elements take insignificant amount of memory.
-
-
+On a standard 16 seconds IMS dataset, this results in about 3GB of GPU memory. CPU RAM memory usage is roughly
+the input file size plus the output file size. Other elements take insignificant amount of memory.
