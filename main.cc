@@ -105,6 +105,7 @@ int main(int argc, char* argv[]) {
         file_time_start = TimeStart();
         alus::asar::envformat::ParseLevel0Header(l0_ds, asar_meta);
         const auto product_type = alus::asar::mainflow::TryDetermineProductType(asar_meta.product_name);
+        const auto instrument_type = alus::asar::specification::GetInstrumentFrom(product_type);
         alus::asar::mainflow::CheckAndLimitSensingStartEnd(asar_meta.sensing_start, asar_meta.sensing_stop,
                                                            args.GetProcessSensingStart(), args.GetProcessSensingEnd());
         alus::asar::mainflow::TryFetchOrbit(orbit_source, asar_meta, sar_meta);
@@ -147,6 +148,7 @@ int main(int argc, char* argv[]) {
         alus::asar::mainflow::AssembleMetadataFrom(packets_metadata, asar_meta, sar_meta, ins_file,
                                                    compressed_measurements.max_samples,
                                                    compressed_measurements.total_samples, product_type);
+        alus::asar::envformat::ParseConfFile(conf_file, sar_meta, asar_meta);
         // This is open issue - what exactly constitutes to product error.
         // Currently only when ERS has missing packets base on data record no.
         if (compressed_measurements.no_of_product_errors_compensated > 0) {
@@ -230,7 +232,7 @@ int main(int argc, char* argv[]) {
         sar_meta.results.Vr_poly = EstimateProcessingVelocity(sar_meta);
         TimeStop(vr_start, "Vr estimation");
 
-        auto chirp = GenerateChirpData(sar_meta.chirp, rg_padded);
+        GenerateChirpData(sar_meta.chirp, rg_padded);
 
         auto dc_start = TimeStart();
         // Element from the back() indicates polynomial starting value.
@@ -247,7 +249,7 @@ int main(int argc, char* argv[]) {
         CudaWorkspace d_workspace(img.TotalByteSize());
 
         auto rc_start = TimeStart();
-        RangeCompression(img, chirp, sar_meta.chirp.n_samples, d_workspace);
+        RangeCompression(img, sar_meta.chirp.padded_windowed_data, sar_meta.chirp.n_samples, d_workspace);
         TimeStop(rc_start, "Range compression");
 
         sar_meta.img.range_size = img.XSize();
@@ -286,7 +288,7 @@ int main(int argc, char* argv[]) {
         auto result_file_assembly = TimeStart();
 
         EnvisatIMS ims{};
-        alus::asar::mainflow::PrefillIms(ims, packets_metadata.size(), rcmc_parameters);
+        alus::asar::mainflow::PrefillIms(ims, packets_metadata.size());
 
         DevicePaddedImage subsetted_raster;
         alus::asar::mainflow::SubsetResultsAndReassembleMeta(az_compressed_image, az_rg_windowing, packets_metadata,
@@ -309,7 +311,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (args.StorePlots()) {
-            alus::asar::mainflow::StorePlots(args.GetOutputPath().data(), wif_name_base, sar_meta, chirp);
+            alus::asar::mainflow::StorePlots(args.GetOutputPath().data(), wif_name_base, sar_meta);
         }
 
         lvl1_file_handle.Write(&ims, sizeof(ims));
@@ -323,9 +325,12 @@ int main(int argc, char* argv[]) {
                 "required for MDS buffer.");
         }
 
-        float tambov{120000 / 100};
-        //        const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
-        //        const auto tambov = xca.scaling_factor_im_slc_vv[swath_idx];
+        // Best guess for final scaling as can be.
+        const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
+        auto tambov = conf_file.process_gain_ims[swath_idx] / sqrt(xca.scaling_factor_im_slc_vv[swath_idx]);
+        if (instrument_type == alus::asar::specification::Instrument::SAR) {
+            tambov /= (2*4);
+        }
         auto device_mds_buf = d_workspace.GetAs<char>();
         alus::asar::mainflow::FormatResults(subsetted_raster, device_mds_buf, record_header_bytes, tambov);
         TimeStop(result_correction_start, "Image results correction");

@@ -970,6 +970,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
     }
 
     int swath_idx = SwathIdx(asar_meta.swath);
+    asar_meta.swath_idx = swath_idx;
     LOGD << "Swath = " << asar_meta.swath << " idx = " << swath_idx;
 
     asar_meta.swst_changes = swst_changes;

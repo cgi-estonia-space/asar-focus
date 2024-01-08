@@ -482,13 +482,13 @@ struct __attribute__((packed)) SummaryQualityADS {
     uc spare_1[7];
     fl thresh_chirp_broadening;
     fl thresh_chirp_sidelobe;
-    fl threst_chirp_islr;
+    fl thresh_chirp_islr;
     fl thresh_input_mean;
     fl exp_input_mean;
     fl thresh_input_std_dev;
     fl exp_input_std_dev;
     fl thresh_dop_cen;
-    fl threst_dop_amb;
+    fl thresh_dop_amb;
     fl thresh_output_mean;
     fl exp_output_mean;
     fl thresh_output_std_dev;
@@ -504,7 +504,8 @@ struct __attribute__((packed)) SummaryQualityADS {
     fl output_mean[2];
     fl output_std_dev[2];
     ul tot_errors;
-    uc spare_3[16];
+    uc swath_nr[3];
+    uc spare_3[13];
 
     void SetDefaults() { memset(this, 0, sizeof(*this)); }
 
@@ -512,13 +513,13 @@ struct __attribute__((packed)) SummaryQualityADS {
         zero_doppler_time = bswap(zero_doppler_time);
         thresh_chirp_broadening = bswap(thresh_chirp_broadening);
         thresh_chirp_sidelobe = bswap(thresh_chirp_sidelobe);
-        threst_chirp_islr = bswap(threst_chirp_islr);
+        thresh_chirp_islr = bswap(thresh_chirp_islr);
         thresh_input_mean = bswap(thresh_input_mean);
         exp_input_mean = bswap(exp_input_mean);
         thresh_input_std_dev = bswap(thresh_input_std_dev);
         exp_input_std_dev = bswap(exp_input_std_dev);
         thresh_dop_cen = bswap(thresh_dop_cen);
-        threst_dop_amb = bswap(threst_dop_amb);
+        thresh_dop_amb = bswap(thresh_dop_amb);
         thresh_output_mean = bswap(thresh_output_mean);
         exp_output_mean = bswap(exp_output_mean);
         thresh_output_std_dev = bswap(thresh_output_std_dev);
@@ -621,7 +622,7 @@ static_assert(sizeof(ChirpParameters) == 1483);
 
 struct TiePoints {
     ul samp_numbers[11];
-    fl slange_range_times[11];
+    fl slant_range_times[11];
     fl angles[11];
     sl lats[11];
     sl longs[11];
@@ -651,7 +652,7 @@ struct __attribute__((packed)) GeoLocationADSR {
         sub_sat_track = bswap(sub_sat_track);
 
         BSWAP_ARR(first_line_tie_points.samp_numbers);
-        BSWAP_ARR(first_line_tie_points.slange_range_times);
+        BSWAP_ARR(first_line_tie_points.slant_range_times);
         BSWAP_ARR(first_line_tie_points.angles);
         BSWAP_ARR(first_line_tie_points.lats);
         BSWAP_ARR(first_line_tie_points.longs);
@@ -659,7 +660,7 @@ struct __attribute__((packed)) GeoLocationADSR {
         last_zero_doppler_time = bswap(last_zero_doppler_time);
 
         BSWAP_ARR(last_line_tie_points.samp_numbers);
-        BSWAP_ARR(last_line_tie_points.slange_range_times);
+        BSWAP_ARR(last_line_tie_points.slant_range_times);
         BSWAP_ARR(last_line_tie_points.angles);
         BSWAP_ARR(last_line_tie_points.lats);
         BSWAP_ARR(last_line_tie_points.longs);

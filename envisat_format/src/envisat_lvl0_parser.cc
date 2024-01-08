@@ -148,4 +148,63 @@ RawSampleMeasurements ParseLevel0Packets(const std::vector<char>& file_data, siz
     }
 }
 
+void ParseConfFile(const ConfigurationFile& con_file, SARMetadata& sar_meta, ASARMetadata& asar_meta) {
+    {
+        const char* rg_window = reinterpret_cast<const char*>(&con_file.range_win_type_ims.window_type[0]);
+
+        if (strncmp(rg_window, "NONE", 4) == 0) {
+            sar_meta.chirp.apply_window = false;
+        } else if (strncmp(rg_window, "HAMMING", 7) == 0) {
+            sar_meta.chirp.apply_window = true;
+            // NOTE alpha does not make sense with hamming? It should be fixed to 0.54?
+            sar_meta.chirp.alpha = con_file.range_win_type_ims.window_coeff;
+        } else {
+            LOGW << "Defaulting range HAMMING WINDOW unknown = "
+                 << std::string(rg_window, std::size(con_file.range_win_type_ims.window_type));
+            sar_meta.chirp.apply_window = true;
+            sar_meta.chirp.alpha = 0.75;
+        }
+    }
+
+    /* TODO default to no az window for now, needs further study in range_doppler_algorithm.cu
+    {
+        const char* az_window = reinterpret_cast<const char*>(&con_file.az_win_type_ims.window_type[0]);
+
+        if (strncmp(az_window, "NONE", 4) == 0) {
+            sar_meta.azimuth_window = false;
+        } else if (strncmp(az_window, "HAMMING", 7) == 0) {
+            sar_meta.azimuth_window = true;
+            sar_meta.azimuth_window_alpha = con_file.az_win_type_ims.window_coeff;
+        } else {
+            LOGW << "Defaulting azimuth HAMMING WINDOW, unknown = "
+                 << std::string(az_window, std::size(con_file.az_win_type_ims.window_type));
+            sar_meta.chirp.apply_window = true;
+            sar_meta.azimuth_window_alpha = 0.75;
+        }
+    }
+    */
+
+    const float az_bw = con_file.tot_azimuth_bandw_ims[asar_meta.swath_idx];
+    sar_meta.azimuth_bandwidth_fraction = az_bw / sar_meta.pulse_repetition_frequency;
+
+    LOGD << "processed azimuth bandwidth " << az_bw << " Hz , fraction = " << sar_meta.azimuth_bandwidth_fraction;
+
+    auto& sq = asar_meta.summary_quality;
+    sq.thresh_chirp_broadening = con_file.thresh_chirp_broadening;
+    sq.thresh_chirp_sidelobe = con_file.thresh_chirp_sidelobe;
+    sq.thresh_chirp_islr = con_file.thresh_chirp_islr;
+    sq.thresh_input_mean = con_file.thresh_input_mean;
+    sq.exp_input_mean = con_file.input_mean;
+    sq.thresh_input_std_dev = con_file.thresh_input_std_dev;
+    sq.exp_input_std_dev = con_file.input_std_dev;
+    sq.thresh_dop_cen = con_file.thresh_dop_cen;
+    sq.thresh_dop_amb = con_file.thresh_dop_amb;
+    sq.thresh_output_mean = con_file.thresh_output_mean;
+    sq.exp_output_mean = con_file.exp_im_mean;
+    sq.thresh_output_std_dev = con_file.exp_im_std_dev;
+    sq.exp_output_std_dev = con_file.exp_im_std_dev;
+    sq.thresh_input_missing_lines = con_file.thresh_missing_lines;
+    sq.thresh_input_gaps = con_file.thresh_gaps;
+}
+
 }  // namespace alus::asar::envformat

@@ -11,8 +11,8 @@
 
 #include "checks.h"
 #include "cuda_cleanup.h"
-#include "cufft_plan.h"
 #include "cufft_checks.h"
+#include "cufft_plan.h"
 #include "focussing_details.h"
 
 #define INPLACE_AZIMUTH_FFT 0  // 0 -> transpose + range FFT + transpose, 1 -> azimuth FFT
@@ -76,10 +76,9 @@ struct KernelArgs {
     // float Vr;  // TODO(priit) float vs double
     float prf;
     float lambda;
-    // float doppler_centroid;
-    double range_spacing;
-    // float inv_range_spacing;
     float azimuth_bandwidth_fraction;
+    bool apply_az_window;
+    double range_spacing;
     double slant_range;
 
     float dc_poly[3];
@@ -283,6 +282,20 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
 
         mf_val = cuCmulf(mf_val, shift);
 
+        /* The place to do azimuth windowing, however this needs further investigation
+        if (args.apply_az_window) {
+            constexpr float alpha = 0.54f;  // hamming
+            constexpr float two_pi = 2 * M_PI;
+
+            // TODO investigate if this correct way to do frequency domain weighting, as discussed in
+            //  6.3.6 in Digital Processing of SAR Data
+            float weight = alpha - (1.0f - alpha) * cos(two_pi * (abs_freq - dc) / args.prf);
+            weight = 1.0f - weight;
+            mf_val.x *= weight;
+            mf_val.y *= weight;
+        }
+         */
+
         // application via f domain multiplication
         src_data[src_idx] = cuCmulf(src_data[src_idx], mf_val);
     }
@@ -329,7 +342,8 @@ void RangeDopplerAlgorithm(const SARMetadata& metadata, DevicePaddedImage& src_i
 
     k_args.prf = metadata.pulse_repetition_frequency;
     // k_args.doppler_centroid = metadata.results.doppler_centroid;
-    k_args.azimuth_bandwidth_fraction = 0.8; // Replace this with metadata.azimuth_bandwidth_fraction
+    k_args.azimuth_bandwidth_fraction = metadata.azimuth_bandwidth_fraction;
+    k_args.apply_az_window = metadata.azimuth_window;
 
     // double dc = CalcDopplerCentroid(metadata, metadata.img.range_size / 2);
 
@@ -390,15 +404,6 @@ namespace alus::sar::focus {
 RcmcParameters GetRcmcParameters() {
     RcmcParameters params{};
     params.window_size = N_INTERPOLATOR;
-    float win_min{std::numeric_limits<float>::max()};
-    float win_max{std::numeric_limits<float>::min()};
-    for (size_t i{}; i < (sizeof(WINDOW) / sizeof(WINDOW[0])); i++) {
-        win_min = std::min(WINDOW[i], win_min);
-        win_max = std::max(WINDOW[i], win_max);
-    }
-    params.window_coef_range = win_max - win_min;
-    params.window_name = "BLACKMAN";
-
     return params;
 }
 

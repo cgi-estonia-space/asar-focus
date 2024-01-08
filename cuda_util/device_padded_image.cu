@@ -17,13 +17,13 @@
  * with this program; if not, see http://www.gnu.org/licenses/
  */
 
-#include "device_padded_image.cuh"
 
 #include <numeric>
-
 #include <vector>
 
-#include "cuComplex.h"
+#include <cuComplex.h>
+
+#include "cuda_cleanup.h"
 
 namespace {
     __global__ void ZeroFillPaddingsKernel(cufftComplex* data, int x_size, int y_size, int x_stride, int y_stride) {
@@ -134,6 +134,112 @@ namespace {
             result[result_idx] = shared_acc[0];
         }
     }
+
+
+    __global__ void ReduceStdDevDiffSquares(const cufftComplex* src, int x_size, int y_size, int x_stride, float i_mean, float q_mean, float* i_result_arr,
+                                    float* q_result_arr) {
+        __shared__ float i_shared_acc[REDUCE_BLOCK_SIZE];
+        __shared__ float q_shared_acc[REDUCE_BLOCK_SIZE];
+
+        const int shared_idx = threadIdx.x;
+        const int result_idx = blockIdx.y;
+        const int y_start = blockIdx.y;
+        const int x_start = threadIdx.x;
+        const int y_step = gridDim.y;
+        const int x_step = blockDim.x;
+
+        double i_diff_sq_sum = 0.0;
+        double q_diff_sq_sum = 0.0;
+        for (int y = y_start; y < y_size; y += y_step) {
+            for (int x = x_start; x < x_size; x += x_step) {
+                int idx = (y * x_stride) + x;
+                auto sample = src[idx];
+                float i = sample.x;
+                float q = sample.y;
+
+                float diff_i = i - i_mean;
+                float diff_q = q - q_mean;
+
+                if (!std::isnan(i) && !std::isnan(q)) {
+                    i_diff_sq_sum += diff_i * diff_i;
+                    q_diff_sq_sum += diff_q * diff_q;
+                }
+            }
+        }
+
+        // store each thread's result in shared memory, ensure all threads reach this point
+        i_shared_acc[shared_idx] = i_diff_sq_sum;
+        q_shared_acc[shared_idx] = q_diff_sq_sum;
+        __syncthreads();
+
+        // reduce the shared memory array to the first element
+        // Reduction #3: Sequential Addressing from NVidia Optimizing Parallel Reduction
+        for (int s = REDUCE_BLOCK_SIZE / 2; s > 0; s /= 2) {
+            if (shared_idx < s) {
+                i_shared_acc[shared_idx] += i_shared_acc[shared_idx + s];
+                q_shared_acc[shared_idx] += q_shared_acc[shared_idx + s];
+            }
+            __syncthreads();
+        }
+
+        // write the final result to global memory
+        if (shared_idx == 0) {
+            i_result_arr[result_idx] = i_shared_acc[0];
+            q_result_arr[result_idx] = q_shared_acc[0];
+        }
+    }
+
+    __global__ void ReduceMean(const cufftComplex* src, int x_size, int y_size, int x_stride, float* i_result_arr,
+                                            float* q_result_arr) {
+        __shared__ float i_shared_acc[REDUCE_BLOCK_SIZE];
+        __shared__ float q_shared_acc[REDUCE_BLOCK_SIZE];
+
+        const int shared_idx = threadIdx.x;
+        const int result_idx = blockIdx.y;
+        const int y_start = blockIdx.y;
+        const int x_start = threadIdx.x;
+        const int y_step = gridDim.y;
+        const int x_step = blockDim.x;
+
+        double i_sum = 0.0;
+        double q_sum = 0.0;
+        for (int y = y_start; y < y_size; y += y_step) {
+            for (int x = x_start; x < x_size; x += x_step) {
+                int idx = (y * x_stride) + x;
+                auto sample = src[idx];
+                float i = sample.x;
+                float q = sample.y;
+
+                if (!std::isnan(i) && !std::isnan(q)) {
+                    i_sum += i;
+                    q_sum += q;
+                }
+            }
+        }
+
+        // store each thread's result in shared memory, ensure all threads reach this point
+        i_shared_acc[shared_idx] = i_sum;
+        q_shared_acc[shared_idx] = q_sum;
+        __syncthreads();
+
+        // reduce the shared memory array to the first element
+        // Reduction #3: Sequential Addressing from NVidia Optimizing Parallel Reduction
+        for (int s = REDUCE_BLOCK_SIZE / 2; s > 0; s /= 2) {
+            if (shared_idx < s) {
+                i_shared_acc[shared_idx] += i_shared_acc[shared_idx + s];
+                q_shared_acc[shared_idx] += q_shared_acc[shared_idx + s];
+            }
+            __syncthreads();
+        }
+
+        // write the final result to global memory
+        if (shared_idx == 0) {
+            i_result_arr[result_idx] = i_shared_acc[0];
+            q_result_arr[result_idx] = q_shared_acc[0];
+        }
+    }
+
+
 }  // namespace
 
 
@@ -183,11 +289,13 @@ namespace {
 
     double DevicePaddedImage::CalcTotalIntensity(size_t sm_count) {
         size_t n_blocks = sm_count;
+        dim3 grid_dim(1, n_blocks);
         float* d_block_sums;
         size_t byte_size = n_blocks * sizeof(float);
         CHECK_CUDA_ERR(cudaMalloc(&d_block_sums, byte_size));
+        CudaMallocCleanup  clean(d_block_sums);
 
-        ReduceIntensity<<<n_blocks, REDUCE_BLOCK_SIZE>>>(d_data_, x_size_, y_size_, x_stride_, d_block_sums);
+        ReduceIntensity<<<grid_dim, REDUCE_BLOCK_SIZE>>>(d_data_, x_size_, y_size_, x_stride_, d_block_sums);
         std::vector<float> h_block_sums(n_blocks);
         CHECK_CUDA_ERR(cudaMemcpy(h_block_sums.data(), d_block_sums, byte_size, cudaMemcpyDeviceToHost));
 
@@ -201,4 +309,82 @@ namespace {
 
         NaNZeroKernel<<<grid_sz, block_sz>>>(d_data_, x_stride_, y_stride_);
 
+    }
+
+    cufftComplex DevicePaddedImage::CalcStdDev(float i_mean, float q_mean, size_t total_samples)
+    {
+        size_t n_blocks = 50;
+        size_t byte_size = n_blocks * sizeof(float);
+
+
+        dim3 grid_dim(1, n_blocks);
+
+        float* i_diff_sum;
+        float* q_diff_sum;
+        CHECK_CUDA_ERR(cudaMalloc(&i_diff_sum, byte_size));
+        CudaMallocCleanup clean_i(i_diff_sum);
+
+        CHECK_CUDA_ERR(cudaMalloc(&q_diff_sum, byte_size));
+        CudaMallocCleanup clean_q(q_diff_sum);
+
+        ReduceStdDevDiffSquares<<<grid_dim, REDUCE_BLOCK_SIZE>>>(d_data_, x_size_, y_size_, x_stride_, i_mean, q_mean, i_diff_sum, q_diff_sum);
+
+        // each thread block has summed it's part of squared mean differences
+
+
+        // do the second part of reduction on cpu, beacuse this is not a speed bottleneck in the project
+        std::vector<float> h_i_sum(n_blocks);
+        CHECK_CUDA_ERR(cudaMemcpy(h_i_sum.data(), i_diff_sum, byte_size, cudaMemcpyDeviceToHost));
+        std::vector<float> h_q_sum(n_blocks);
+        CHECK_CUDA_ERR(cudaMemcpy(h_q_sum.data(), q_diff_sum, byte_size, cudaMemcpyDeviceToHost));
+
+        cufftComplex r = {};
+        r.x = std::accumulate(h_i_sum.begin(), h_i_sum.end(), 0.0);
+        r.y = std::accumulate(h_q_sum.begin(), h_q_sum.end(), 0.0);
+
+        // variance
+        r.x /= total_samples;
+        r.y /= total_samples;
+
+        // standard deviation
+        r.x = sqrt(r.x);
+        r.y = sqrt(r.y);
+
+        return r;
+    }
+
+    cufftComplex DevicePaddedImage::CalcMean(size_t total_samples)
+    {
+        size_t n_blocks = 50;
+        size_t byte_size = n_blocks * sizeof(float);
+
+        dim3 grid_dim(1, n_blocks);
+
+        float* i_sum;
+        float* q_sum;
+        CHECK_CUDA_ERR(cudaMalloc(&i_sum, byte_size));
+        CudaMallocCleanup clean_i(i_sum);
+
+        CHECK_CUDA_ERR(cudaMalloc(&q_sum, byte_size));
+        CudaMallocCleanup clean_q(q_sum);
+
+        ReduceMean<<<grid_dim, REDUCE_BLOCK_SIZE>>>(d_data_, x_size_, y_size_, x_stride_, i_sum, q_sum);
+
+        // each thread block has summed it's part of I & Q channels
+
+
+        // do the second part of reduction on cpu, beacuse this is not a speed bottleneck in the project
+        std::vector<float> h_i_sum(n_blocks);
+        CHECK_CUDA_ERR(cudaMemcpy(h_i_sum.data(), i_sum, byte_size, cudaMemcpyDeviceToHost));
+        std::vector<float> h_q_sum(n_blocks);
+        CHECK_CUDA_ERR(cudaMemcpy(h_q_sum.data(), q_sum, byte_size, cudaMemcpyDeviceToHost));
+
+        cufftComplex r = {};
+        r.x = std::accumulate(h_i_sum.begin(), h_i_sum.end(), 0.0);
+        r.y = std::accumulate(h_q_sum.begin(), h_q_sum.end(), 0.0);
+
+        r.x /= total_samples;
+        r.y /= total_samples;
+
+        return r;
     }

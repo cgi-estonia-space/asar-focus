@@ -194,8 +194,7 @@ void FormatResults(DevicePaddedImage& img, char* dest_space, size_t record_heade
     envformat::ConditionResults(img, dest_space, record_header_size, calibration_constant);
 }
 
-void StorePlots(std::string output_path, std::string product_name, const SARMetadata& sar_metadata,
-                const std::vector<std::complex<float>>& chirp) {
+void StorePlots(std::string output_path, std::string product_name, const SARMetadata& sar_metadata) {
     {
         PlotArgs plot_args = {};
         plot_args.out_path = output_path + "/" + product_name + "_Vr.html";
@@ -212,21 +211,38 @@ void StorePlots(std::string output_path, std::string product_name, const SARMeta
         plot_args.out_path = output_path + "/" + product_name + "_chirp.html";
         plot_args.x_axis_title = "nth sample";
         plot_args.y_axis_title = "Amplitude";
-        plot_args.data.resize(2);
-        auto& i = plot_args.data[0];
-        auto& q = plot_args.data[1];
-        std::vector<double> n_samp;
-        int cnt = 0;
-        for (auto iq : chirp) {
-            i.y.push_back(iq.real());
-            i.x.push_back(cnt);
-            q.y.push_back(iq.imag());
-            q.x.push_back(cnt);
-            cnt++;
+        plot_args.data.resize(4);
+        {
+            auto& i = plot_args.data[0];
+            auto& q = plot_args.data[1];
+            int cnt = 0;
+            for (auto iq : sar_metadata.chirp.time_domain) {
+                i.y.push_back(iq.real());
+                i.x.push_back(cnt);
+                q.y.push_back(iq.imag());
+                q.x.push_back(cnt);
+                cnt++;
+            }
+
+            i.line_name = "I";
+            q.line_name = "Q";
         }
 
-        i.line_name = "I";
-        q.line_name = "Q";
+        {
+            auto& i = plot_args.data[2];
+            auto& q = plot_args.data[3];
+            int cnt = 0;
+            for (auto iq : sar_metadata.chirp.padded_windowed_data) {
+                i.y.push_back(iq.real());
+                i.x.push_back(cnt);
+                q.y.push_back(iq.imag());
+                q.x.push_back(cnt);
+                cnt++;
+            }
+
+            i.line_name = "I padded+scaled+windowed";
+            q.line_name = "Q padded+scaled+windowed";
+        }
         Plot(plot_args);
     }
     {
@@ -591,18 +607,8 @@ void SubsetResultsAndReassembleMeta(DevicePaddedImage& azimuth_compressed_raster
                          subset_range_pixels * subset_line_count, product_type, window.near_range_pixels_to_remove);
 }
 
-void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed, const sar::focus::RcmcParameters& rcmc_params) {
+void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed) {
     ims.main_processing_params.azimuth_processing_information.num_lines_proc = total_packets_processed;
-
-    auto& range_processing_meta = ims.main_processing_params.range_processing_information;
-    auto filter_window_meta_str = rcmc_params.window_name;
-    if (filter_window_meta_str.length() > sizeof(range_processing_meta.filter_range)) {
-        filter_window_meta_str.erase(filter_window_meta_str.end() -
-                                         (filter_window_meta_str.length() - sizeof(range_processing_meta.filter_range)),
-                                     filter_window_meta_str.end());
-    }
-    CopyStrPad(range_processing_meta.filter_range, filter_window_meta_str);
-    range_processing_meta.filter_coef_range = rcmc_params.window_coef_range;
 }
 
 }  // namespace alus::asar::mainflow
