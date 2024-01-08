@@ -5,6 +5,10 @@ categories: [focussing, compression]
 tags: [metadata,range,azimuth,chirp,doppler,noise,scaling]
 ---
 
+
+To be defined....... check back later
+
+
 # Background
 
 # Chirp replica generation
