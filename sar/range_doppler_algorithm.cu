@@ -282,6 +282,7 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
 
         mf_val = cuCmulf(mf_val, shift);
 
+        /* The place to do azimuth windowing, however this needs further investigation
         if (args.apply_az_window) {
             constexpr float alpha = 0.54f;  // hamming
             constexpr float two_pi = 2 * M_PI;
@@ -293,6 +294,7 @@ __global__ void AzimuthReferenceMultiply(cufftComplex* src_data, int src_width, 
             mf_val.x *= weight;
             mf_val.y *= weight;
         }
+         */
 
         // application via f domain multiplication
         src_data[src_idx] = cuCmulf(src_data[src_idx], mf_val);
@@ -402,15 +404,6 @@ namespace alus::sar::focus {
 RcmcParameters GetRcmcParameters() {
     RcmcParameters params{};
     params.window_size = N_INTERPOLATOR;
-    float win_min{std::numeric_limits<float>::max()};
-    float win_max{std::numeric_limits<float>::min()};
-    for (size_t i{}; i < (sizeof(WINDOW) / sizeof(WINDOW[0])); i++) {
-        win_min = std::min(WINDOW[i], win_min);
-        win_max = std::max(WINDOW[i], win_max);
-    }
-    params.window_coef_range = win_max - win_min;
-    params.window_name = "BLACKMAN";
-
     return params;
 }
 

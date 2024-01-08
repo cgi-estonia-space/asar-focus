@@ -124,7 +124,7 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
 
         // refit Vr polynomial to a Ka polynomial
         // internal Vr polynimal is fitted to range index, Envisat format uses two way slant range time from first
-        // TODO potentially also use Ka Polynomial internally in azimuth compression?
+        // TODO range cutoff due to RCMC has a small effect on this
         std::vector<double> Ka_vec;
         std::vector<double> t_vec;
         constexpr int N = 10;
@@ -177,35 +177,50 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
     }
 }
 
-float CalcIncidenceAngle(const std::string& swath, int range_idx, int range_max) {
-    // TODO temporary hack, implement about proper incidence angle calculation from OSV and geolocation
-    float start = 19.2;
-    float end = 26.1;
-    if (swath == "IS1") {
-        start = 14.7;
-        end = 22.2;
-    } else if (swath == "IS3") {
-        start = 25.7;
-        end = 31.1;
-    } else if (swath == "IS4") {
-        start = 30.7;
-        end = 36.1;
-    } else if (swath == "IS5") {
-        start = 35.7;
-        end = 39.2;
-    } else if (swath == "IS6") {
-        start = 38.8;
-        end = 42.7;
-    } else if (swath == "IS7") {
-        start = 42.4;
-        end = 45.1;
+void FillSummaryQuality(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, SummaryQualityADS& sq) {
+    sq = {};
+    const auto& meta_sq = asar_meta.summary_quality;
+    sq.thresh_chirp_broadening = meta_sq.thresh_chirp_broadening;
+    sq.thresh_chirp_sidelobe = meta_sq.thresh_chirp_sidelobe;
+    sq.thresh_chirp_islr = meta_sq.thresh_chirp_islr;
+    sq.thresh_input_mean = meta_sq.thresh_input_mean;
+    sq.thresh_input_mean = meta_sq.thresh_input_mean;
+    sq.exp_input_mean = meta_sq.exp_input_mean;
+    sq.thresh_input_std_dev = meta_sq.thresh_input_std_dev;
+    sq.exp_input_std_dev = meta_sq.exp_input_std_dev;
+
+    sq.thresh_dop_cen = meta_sq.thresh_dop_cen;
+    sq.thresh_dop_amb = meta_sq.thresh_dop_amb;
+    sq.thresh_output_mean = meta_sq.thresh_output_mean;
+    sq.exp_output_mean = meta_sq.exp_output_mean;
+
+    sq.input_mean[0] = sar_meta.results.dc_i;
+    sq.input_mean[1] = sar_meta.results.dc_q;
+    sq.input_std_dev[0] = sar_meta.results.stddev_i;
+    sq.input_std_dev[1] = sar_meta.results.stddev_q;
+
+    CopyStr(sq.swath_nr, asar_meta.swath);
+
+    if ((fabs(sq.input_mean[0] - sq.exp_input_mean)) > sq.thresh_input_mean) {
+        sq.input_mean_flag = 1;
+    }
+    if ((fabs(sq.input_mean[1] - sq.exp_input_mean)) > sq.thresh_input_mean) {
+        sq.input_mean_flag = 1;
     }
 
-    return start + (end - start) * (static_cast<float>(range_idx) / range_max);
+    if ((fabs(sq.input_std_dev[0] - sq.exp_input_std_dev)) > sq.thresh_input_std_dev) {
+        sq.input_std_dev_flag = 1;
+    }
+    if ((fabs(sq.input_std_dev[1] - sq.exp_input_std_dev)) > sq.thresh_input_std_dev) {
+        sq.input_std_dev_flag = 1;
+    }
+
+    //TODO
+    //sq.output_mean = ...
+    //sq.output_std_dev = ...
 }
 
-void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, const ASARMetadata& asar_meta,
-                        GeoLocationADSR& geo) {
+void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, GeoLocationADSR& geo) {
     auto first = CalcAzimuthTime(sar_meta, az_idx);
     auto last = CalcAzimuthTime(sar_meta, az_last);
     const int n = std::size(geo.first_line_tie_points.lats);
@@ -213,6 +228,8 @@ void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, co
     geo.last_zero_doppler_time = PtimeToMjd(last);
     geo.line_num = az_idx;
     geo.num_lines = az_last - az_idx;
+
+    geo.sub_sat_track = 0.0;  // TODO
     const int range_size = sar_meta.img.range_size;
     for (int i = 0; i < n; i++) {
         const int range_samp = i * range_size / (n - 1);
@@ -227,8 +244,8 @@ void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, co
             auto llh = xyz2geoWGS84(xyz);
             geo.first_line_tie_points.lats[i] = llh.latitude * 1e6;
             geo.first_line_tie_points.longs[i] = llh.longitude * 1e6;
-            geo.first_line_tie_points.slange_range_times[i] = two_way_slant_time;
-            geo.first_line_tie_points.angles[i] = CalcIncidenceAngle(asar_meta.swath, range_samp, range_size);
+            geo.first_line_tie_points.slant_range_times[i] = two_way_slant_time;
+            geo.first_line_tie_points.angles[i] = CalcIncidenceAngle(xyz, {osv.x_pos, osv.y_pos, osv.z_pos});
         }
 
         {
@@ -239,8 +256,8 @@ void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, co
             auto llh = xyz2geoWGS84(xyz);
             geo.last_line_tie_points.lats[i] = llh.latitude * 1e6;
             geo.last_line_tie_points.longs[i] = llh.longitude * 1e6;
-            geo.last_line_tie_points.slange_range_times[i] = two_way_slant_time;
-            geo.last_line_tie_points.angles[i] = CalcIncidenceAngle(asar_meta.swath, range_samp, range_size);
+            geo.last_line_tie_points.slant_range_times[i] = two_way_slant_time;
+            geo.last_line_tie_points.angles[i] = CalcIncidenceAngle(xyz, {osv.x_pos, osv.y_pos, osv.z_pos});
         }
     }
 }
@@ -346,6 +363,8 @@ void ConstructIMS(EnvisatIMS& ims, const SARMetadata& sar_meta, const ASARMetada
 
         {
             size_t offset = offsetof(EnvisatIMS, summary_quality);
+            FillSummaryQuality(sar_meta, asar_meta, ims.summary_quality);
+            ims.summary_quality.BSwap();
             constexpr size_t size = sizeof(ims.summary_quality);
             static_assert(size == 170);
             sph.dsds[0].SetInternalDSD("MDS1 SQ ADS", 'A', offset, 1, size);
@@ -410,7 +429,7 @@ void ConstructIMS(EnvisatIMS& ims, const SARMetadata& sar_meta, const ASARMetada
             int step = sar_meta.img.azimuth_size / (n - 1);
             for (size_t i = 0; i < n; i++) {
                 int az_idx = i * sar_meta.img.azimuth_size / (n - 1);
-                FillGeoLocationAds(az_idx, az_idx + step - 1, sar_meta, asar_meta, ims.geolocation_grid[i]);
+                FillGeoLocationAds(az_idx, az_idx + step - 1, sar_meta, ims.geolocation_grid[i]);
                 ims.geolocation_grid[i].BSwap();
             }
             sph.dsds[8].SetInternalDSD("GEOLOCATION GRID ADS", 'A', offset, n, size);

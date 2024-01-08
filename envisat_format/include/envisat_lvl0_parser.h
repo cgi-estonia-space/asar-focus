@@ -45,6 +45,7 @@ struct ASARMetadata {
     bool product_err{false};
 
     std::string swath;
+    int swath_idx;
     std::string polarization;
 
     double two_way_slant_range_time;
@@ -119,6 +120,24 @@ struct ASARMetadata {
         std::string noise_method;
         std::string noise_ratio;
     } compression_metadata;
+
+    struct {
+        fl thresh_chirp_broadening;
+        fl thresh_chirp_sidelobe;
+        fl thresh_chirp_islr;
+        fl thresh_input_mean;
+        fl exp_input_mean;
+        fl thresh_input_std_dev;
+        fl exp_input_std_dev;
+        fl thresh_dop_cen;
+        fl thresh_dop_amb;
+        fl thresh_output_mean;
+        fl exp_output_mean;
+        fl thresh_output_std_dev;
+        fl exp_output_std_dev;
+        fl thresh_input_missing_lines;
+        fl thresh_input_gaps;
+    } summary_quality;
 };
 
 namespace alus::asar::envformat {
@@ -151,10 +170,10 @@ struct CommonPacketMetadata {
 
 struct RawSampleMeasurements {
     std::unique_ptr<uint8_t[]> raw_samples;
-    size_t single_entry_length; // Length in bytes of the maximum sample measurement record, including block id etc.
-    size_t entries_total; // How many lines in azimuth direction
-    size_t max_samples; // Maximum samples that the entries will consist. Can fluctuate.
-    size_t total_samples; // Total IQ samples collected over all of the range and azimuth directions.
+    size_t single_entry_length;  // Length in bytes of the maximum sample measurement record, including block id etc.
+    size_t entries_total;        // How many lines in azimuth direction
+    size_t max_samples;          // Maximum samples that the entries will consist. Can fluctuate.
+    size_t total_samples;        // Total IQ samples collected over all of the range and azimuth directions.
     size_t no_of_product_errors_compensated;
 };
 
@@ -178,6 +197,6 @@ RawSampleMeasurements ParseLevel0Packets(const std::vector<char>& file_data, siz
                                          alus::asar::specification::ProductTypes product_type, InstrumentFile& ins_file,
                                          std::vector<CommonPacketMetadata>& common_metadata);
 
-void ParseConfFile(const ConfigurationFile& con_file, SARMetadata& sar_meta);
+void ParseConfFile(const ConfigurationFile& con_file, SARMetadata& sar_meta, ASARMetadata& asar_meta);
 
 }  // namespace alus::asar::envformat

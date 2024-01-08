@@ -147,7 +147,7 @@ int main(int argc, char* argv[]) {
         alus::asar::mainflow::AssembleMetadataFrom(packets_metadata, asar_meta, sar_meta, ins_file,
                                                    compressed_measurements.max_samples,
                                                    compressed_measurements.total_samples, product_type);
-        alus::asar::envformat::ParseConfFile(conf_file, sar_meta);
+        alus::asar::envformat::ParseConfFile(conf_file, sar_meta, asar_meta);
         // This is open issue - what exactly constitutes to product error.
         // Currently only when ERS has missing packets base on data record no.
         if (compressed_measurements.no_of_product_errors_compensated > 0) {
@@ -287,7 +287,7 @@ int main(int argc, char* argv[]) {
         auto result_file_assembly = TimeStart();
 
         EnvisatIMS ims{};
-        alus::asar::mainflow::PrefillIms(ims, packets_metadata.size(), rcmc_parameters);
+        alus::asar::mainflow::PrefillIms(ims, packets_metadata.size());
 
         DevicePaddedImage subsetted_raster;
         alus::asar::mainflow::SubsetResultsAndReassembleMeta(az_compressed_image, az_rg_windowing, packets_metadata,

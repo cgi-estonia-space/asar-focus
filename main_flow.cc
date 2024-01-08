@@ -603,18 +603,8 @@ void SubsetResultsAndReassembleMeta(DevicePaddedImage& azimuth_compressed_raster
                          subset_range_pixels * subset_line_count, product_type, window.near_range_pixels_to_remove);
 }
 
-void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed, const sar::focus::RcmcParameters& rcmc_params) {
+void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed) {
     ims.main_processing_params.azimuth_processing_information.num_lines_proc = total_packets_processed;
-
-    auto& range_processing_meta = ims.main_processing_params.range_processing_information;
-    auto filter_window_meta_str = rcmc_params.window_name;
-    if (filter_window_meta_str.length() > sizeof(range_processing_meta.filter_range)) {
-        filter_window_meta_str.erase(filter_window_meta_str.end() -
-                                         (filter_window_meta_str.length() - sizeof(range_processing_meta.filter_range)),
-                                     filter_window_meta_str.end());
-    }
-    CopyStrPad(range_processing_meta.filter_range, filter_window_meta_str);
-    range_processing_meta.filter_coef_range = rcmc_params.window_coef_range;
 }
 
 }  // namespace alus::asar::mainflow

@@ -33,6 +33,8 @@ struct SARResults {
     double phase_error;                         // degrees
     std::vector<double> Vr_poly;                // fitted to range index
     std::vector<double> doppler_centroid_poly;  // fitted to range index
+    double stddev_i;
+    double stddev_q;
 };
 
 struct SARMetadata {

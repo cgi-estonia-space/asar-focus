@@ -84,6 +84,6 @@ void SubsetResultsAndReassembleMeta(DevicePaddedImage& azimuth_compressed_raster
                                     alus::asar::specification::ProductTypes product_type, CudaWorkspace& workspace,
                                     DevicePaddedImage& subsetted_raster);
 
-void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed, const sar::focus::RcmcParameters& rcmc_params);
+void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed);
 
 }  // namespace alus::asar::mainflow

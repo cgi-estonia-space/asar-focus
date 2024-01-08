@@ -16,8 +16,6 @@ namespace alus::sar::focus {
 
 struct RcmcParameters {
     size_t window_size;
-    double window_coef_range;
-    std::string window_name;
 };
 
 RcmcParameters GetRcmcParameters();
