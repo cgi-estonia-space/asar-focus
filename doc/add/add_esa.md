@@ -158,27 +158,39 @@ The `asar_focus` processor:
 
 # 4 System Design
 
-The Envisat format support handling and support was implemented during this project. No libraries were used to handle
-this.
+Main focus is on the efficient GPU processing pipeline where the time spent on I/O should be minimized or parallelized
+while processing calculations. Below is the general pipeline of the processor.
 
-asar_focus processor:
-* fmt -> formating of messages
-* boost_log -> system logs
-* boost_program_arguments -> CLI
-* GPU memory management and transfer -> **CUDA**
+![general processing pipeline](https://github.com/kautlenbachs/bulpp_diagrams/blob/main/asar_meta_flow.drawio.png?raw=true)
 
+*Figure 4.0 - General processing pipeline*
+
+The **measurements processing** step is generic focussing pipeline that is represented by the figure below.
+![focussing processing pipeline](https://github.com/kautlenbachs/bulpp_diagrams/blob/main/sar_focussing.drawio.png?raw=true)
+
+*Figure 4.1 - Generic focussing pipeline*
+
+Both of these figures above are tightly coupled. As can be seen on the last figure the "raw file decoding" and 
+"processed file" are the steps that are mostly presented on the first figure. Based on current profiling results dataset
+parsing and writing takes 60 and more percent of the overall end to end time, depending heavily on the storage device
+capability.
 
 # 5 Component Description
 
 ## 5.1 DevicePaddedImage
 
-SAR focusing requires forward and backwards Fourier transforms in range and azimuth directions, additionally the SAR datasets are quite large
+SAR focusing requires forward and backwards Fourier transforms in range and azimuth directions, additionally the SAR 
+datasets are quite large
 
-DevicePaddedImage is the core abstraction to facilitate efficient SAR transformations by embedding extra padding areas in the right and bottom of the image. This allows inplace FFTs in both range and azimuth direction, this allievates the need for extra memory copies to fullfill FFT size requirements. Thus changing from time domain to frequency domain and back is done memory efficiently, without needlessly copying multigigabyte signal data.
+DevicePaddedImage is the core abstraction to facilitate efficient SAR transformations by embedding extra padding areas 
+in the right and bottom of the image. This allows inplace FFTs in both range and azimuth direction, this alleviates 
+the need for extra memory copies to fulfill FFT size requirements. Thus changing from time domain to frequency domain 
+and back is done memory efficiently, without needlessly copying multi gigabyte signal data.
 
-Additional design consideration is the fact that GPUs have less memory than CPUs, thus using this techinique allows to keep the full DSP chain on the GPU memory, avoiding costly CPU <-> GPU transfers.
+Additional design consideration is the fact that GPU onboard memory is less than main board RAM, thus using this
+technique allows to keep the full DSP chain on the GPU memory, avoiding costly CPU <-> GPU transfers.
 Visual representation of the memory layout.
-<pre>
+```
     RANGE
    |------------------------|---------|
  A |                        |         |
@@ -189,7 +201,69 @@ Visual representation of the memory layout.
  T |------------------------|---------|
  H | AZIMUTH FFT PADDING    |         |
    |------------------------|---------|
-</pre>
+```
+
+## 5.2 Envisat format module
+
+The Envisat format support handling and support was implemented during this project. No libraries were used. This includes
+custom structures, little/big-endian conversions and data type handling. All the implementation is contained in 
+`envisat_format` folder of the project. It applies to both the ERS and Envisat mission datasets
+
+It contains the following sub-functionality:
+* DORIS orbit file search and parsing
+* Auxiliary files' search and parsing
+* Level 0 imaging mode dataset parsing
+* Level 1 image mode single look complex dataset structure and writing
+* GPU computation kernels to condition the measurements
+
+## 5.3 Boost log
+
+Boost library's submodule implemented in C++ to enable console log handling. This enables structured logs with timestamps
+and different log levels. 
+
+An extract of the curren log:
+```
+[2024-01-08 11:43:57.852098] [0x00007fa101e9b000] [debug]   Doppler centroid constant term -568.25 and max aperture pixels 543
+[2024-01-08 11:43:57.852121] [0x00007fa101e9b000] [info]    Need to remove 543 lines before requested sensing stop
+[2024-01-08 11:43:57.853812] [0x00007fa101e9b000] [debug]   Azimuth compression time = 536 ms
+[2024-01-08 11:43:57.854107] [0x00007fa101e9b000] [trace]   SWST change at line 19814 from 2024 to 2048
+[2024-01-08 11:43:57.854160] [0x00007fa101e9b000] [debug]   Swath = IS2 idx = 1
+```
+
+## 5.4 Boost program arguments
+
+Boost library's submodule implemented in C++. Used to facilitate command line arguments handling. All the setup, help
+messages, validation and parsing is achieved using this module.
+
+Example of the interface built using the module.
+
+```
+asar_focus/0.2.0
+  -h [ --help ]         Print help
+  -i [ --input ] arg    Level 0 ERS or ENVISAT dataset
+  --aux arg             Auxiliary files folder path
+  --orb arg             Doris Orbit file or folder path
+  -o [ --output ] arg   Destination path for focussed dataset
+  -t [ --type ] arg     Focussed product type
+  --sensing_start arg   Sensing start time in format '%Y%m%d_%H%M%S%F' e.g. 
+                        20040229_212504912000. If "sensing_stop" is not 
+                        specified, product type based sensing duration is used 
+                        or until packets last.
+  --sensing_stop arg    Sensing stop time in format '%Y%m%d_%H%M%S%F' e.g. 
+                        20040229_212504912000.  Requires "sensing_start" time 
+                        to be specified.
+  --log arg (=verbose)  Log level, one of the following - 
+                        verbose|debug|info|warning|error
+```
+
+## 5.4 cuFFT
+
+Submodule of the umbrella CUDA SDK. While other functionality of the CUDA is rather generic and detailed on the NVIDIA
+developer sites, the usage of cuFFT is detailed here, because this enables the easier handling of the focussing pipeline.
+
+
+
+
 
 # 6 Feasability and Resource Estimates
 

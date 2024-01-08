@@ -1,3 +1,52 @@
+# Release 0.2.0
+
+## Breaking changes
+
+## Known Caveats
+* Only IMS product processing
+* Not all the auxiliary files are utilized, currently processor configuration file (CON),
+  instrument characterization file (INS) and external calibration data (XCA) are in use
+* Azimuth compression windowing is yet to be done - https://github.com/cgi-estonia-space/asar-focus/issues/2
+* Processing speed (Vr) and Doppler centroid changes in azimuth direction yet to be done - https://github.com/cgi-estonia-space/asar-focus/issues/2
+* Packets' ISP sensing time handling might not be 100% correct
+  * It is observed for the reference products that it calculates new ISP sensing times based on PRI
+  * Therefore products by this processor differ in sensing start/stop and first/last line times (always inside the specified sensing filter)
+  * Best knowledge/effort basis changes has been implemented - https://github.com/cgi-estonia-space/asar-focus/issues/17 and https://github.com/cgi-estonia-space/asar-focus/issues/16
+* ERS time is not corrected according to PATM/N/C files - https://github.com/cgi-estonia-space/asar-focus/issues/15
+* Various metadata fields needs further work
+* Final results' scaling is yet to be determined, currently it is not matching exactly the reference processor
+  * With the current experience/knowledge there is a "best guess" implemented
+* See more shortcomings at https://cgi-estonia-space.github.io/asar-focus/posts/version-0-2-shortcomings/
+
+## Major Features and Improvements
+
+* Range and azimuth direction edge pixels are cut from the final result, [read more](https://cgi-estonia-space.github.io/asar-focus/posts/range-and-azimuth-window/)
+* CUDA device initialization, properties and check util
+* Storing results made faster with async IMS write and higher GPU utilization -
+  see https://github.com/cgi-estonia-space/asar-focus/pull/26 and https://cgi-estonia-space.github.io/asar-focus/posts/read-and-write-optimizations/
+* Complete refactor of parsing the input files, fetching measurements and processing - almost 3x of processing time 
+  gains - https://github.com/cgi-estonia-space/asar-focus/pull/29 See more detailed description - https://cgi-estonia-space.github.io/asar-focus/posts/read-and-write-optimizations/
+* Better handling of missing packets and various fields for handling the missing measurements etc
+* Usage of external calibration file for scaling factor guess - https://github.com/cgi-estonia-space/asar-focus/pull/34
+* Final results without artifacts and 'nodata' pixels - see https://github.com/cgi-estonia-space/asar-focus/pull/33 and https://cgi-estonia-space.github.io/asar-focus/posts/range-and-azimuth-window/
+* Hamming window applied for range compression - https://github.com/cgi-estonia-space/asar-focus/pull/34
+* More metadata fields computed/assembled
+
+## Bug Fixes and Other Changes
+* Invalid read of single additional sample of Envisat measurement fixed - https://github.com/cgi-estonia-space/asar-focus/pull/30
+* Memory leak of the compressed sample block fixed - https://cgi-estonia-space.github.io/asar-focus/posts/read-and-write-optimizations/
+* Additional output for plot (`--plot`) that enables to analyze the geolocation of the scene and basic parameters
+* Fixed azimuth direction artifacts with padded lines for compression -
+  see https://github.com/cgi-estonia-space/asar-focus/pull/33 and https://cgi-estonia-space.github.io/asar-focus/posts/range-and-azimuth-window/
+* Envisat results scene geolocation inaccuracy fixed by applying gate bias/delay in the calculation - https://github.com/cgi-estonia-space/asar-focus/pull/33
+* More modules formed as CMake targets with unit tests
+
+## Thanks to our Contributors
+
+Kajal Haria, Fabiano Costantini from Telespazio UK\
+Sabrina Pinori, Marco Galli from SERCO\
+Andrea Recchia from aresys
+
 # Release 0.1.2
 
 ## Breaking changes
