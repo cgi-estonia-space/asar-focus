@@ -715,4 +715,5 @@ void FindCONFile(std::string aux_root, boost::posix_time::ptime start, Configura
 
 namespace alus::asar::envformat::aux {
 void GetXca(std::string_view aux_root, boost::posix_time::ptime start, ExternalCalibration& xca, std::string& filename);
+void GetTimeCorrelation(std::string_view aux_root, boost::posix_time::ptime start);
 }

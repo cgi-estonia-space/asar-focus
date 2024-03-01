@@ -136,6 +136,7 @@ void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, envfo
         alus::asar::envisat_format::FindCONFile(std::string(aux_path), asar_meta.sensing_start, conf_file,
                                                 asar_meta.configuration_file);
         envformat::aux::GetXca(aux_path, asar_meta.sensing_start, xca, asar_meta.external_calibration_file);
+        envformat::aux::GetTimeCorrelation(aux_path, asar_meta.sensing_start);
     } else {
         LOGE << "Implementation error for this type of product while trying to fetch auxiliary files";
         exit(alus::asar::status::EXIT_CODE::ASSERT_FAILURE);
