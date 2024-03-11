@@ -21,6 +21,7 @@
 #include "envisat_format_kernels.h"
 #include "envisat_utils.h"
 #include "ers_env_format.h"
+#include "ers_sbt.h"
 #include "parse_util.h"
 
 #define DEBUG_PACKETS 0
@@ -90,6 +91,7 @@ constexpr auto DR_NO_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint3
 constexpr auto PACKET_COUNTER_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint8_t, 8>()};
 constexpr uint8_t SUBCOMMUTATION_COUNTER_MAX{48};
 constexpr auto IMAGE_FORMAT_COUNTER_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint32_t, 24>()};
+constexpr auto ONBOARD_TIME_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint32_t, 32>()};
 
 void InitializeDataRecordNo(const uint8_t* packet_start, uint32_t& dr_no) {
     FetchUint32(packet_start + alus::asar::envformat::ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES +
@@ -100,6 +102,10 @@ void InitializeDataRecordNo(const uint8_t* packet_start, uint32_t& dr_no) {
     } else {
         dr_no = DR_NO_MAX;
     }
+}
+
+void FetchOnboardTime(const uint8_t* packet_start, uint32_t& obt) {
+    FetchUint32(packet_start + alus::asar::envformat::ers::highrate::OBT_OFFSET_BYTES, obt);
 }
 
 void InitializeCounters(const uint8_t* packets_start, uint32_t& dr_no, uint8_t& packet_counter,
@@ -156,7 +162,7 @@ inline void FetchPriCode(const uint8_t* start_array, uint16_t& var) {
     var |= start_array[1];
 }
 
-// TODO - Use it inside the parsing or metadata calculation.
+// This is deprecated, will be removed along with the initial parsing flow.
 inline void CalculatePrf(uint16_t pri_code, double& pri, double& prf) {
     // ISCE2 uses 210.943006e-9, but
     // ERS-1-Satellite-to-Ground-Segment-Interface-Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05
@@ -171,7 +177,7 @@ inline void CalculatePrf(uint16_t pri_code, double& pri, double& prf) {
 }
 
 inline const uint8_t* FetchPacketFrom(const uint8_t* start, alus::asar::envformat::ForecastMeta& meta,
-                                      uint32_t& dr_no) {
+                                      uint32_t& dr_no, uint32_t& obt) {
     // https://earth.esa.int/eogateway/documents/20142/37627/ERS-products-specification-with-Envisat-format.pdf
     // https://asf.alaska.edu/wp-content/uploads/2019/03/ers_ceos.pdf and ER-IS-ESA-GS-0002 mixed between three.
     auto it = CopyBSwapPOD(meta.isp_sensing_time, start);
@@ -179,6 +185,7 @@ inline const uint8_t* FetchPacketFrom(const uint8_t* start, alus::asar::envforma
     uint16_t isp_length;
     it = CopyBSwapPOD(isp_length, it);
     InitializeDataRecordNo(start, dr_no);
+    FetchOnboardTime(start, obt);
 
     // ISP size - 1.
     if (isp_length != 11465) {
@@ -229,13 +236,29 @@ std::vector<ForecastMeta> FetchErsL0ImForecastMeta(const std::vector<char>& file
     size_t dr_no_total_missing{};
     uint32_t last_dr_no;
     InitializeDataRecordNo(next_packet, last_dr_no);
+    uint32_t last_obt;
+    uint32_t obt_repeat{0};
+    FetchOnboardTime(next_packet, last_obt);
 
     size_t i{};
     for (; i < mdsr.num_dsr; i++) {
         ForecastMeta current_meta;
         uint32_t dr_no;
         current_meta.packet_start_offset_bytes = next_packet - packets_start;
-        next_packet = FetchPacketFrom(next_packet, current_meta, dr_no);
+        uint32_t obt;
+        next_packet = FetchPacketFrom(next_packet, current_meta, dr_no, obt);
+        // Fetch SBT as well
+        // Check SBT rollover and calculate delta.
+        // Adjust ISP sensing.
+        const auto obt_delta = parseutil::CounterGap<uint32_t, ONBOARD_TIME_MAX>(last_obt, obt);
+        if (obt_delta == 0) {
+            obt_repeat++;
+        } else {
+            obt_repeat = 0;
+        }
+        LOGD << "ISP sensing input " << to_simple_string(MjdToPtime(current_meta.isp_sensing_time));
+        ers::AdjustIspSensingTime(current_meta.isp_sensing_time, obt, obt_repeat);
+        LOGD << "ISP sensing ADJ " << to_simple_string(MjdToPtime(current_meta.isp_sensing_time));
 
         // LOGD << i << " " << MjdToPtime(current_meta.isp_sensing_time);
 
@@ -415,7 +438,7 @@ RawSampleMeasurements ParseErsLevel0ImPackets(const std::vector<char>& file_data
          * The time relation to the echo data in the format is as following:
          * the transfer of the ICU on-board time to the auxiliary memory
          * occurs t2 before the RF transmit pulse as depicted in
-         * Fig. 4.4.2.4.6-3. The last significant bit is equal to 1/256 sec.
+         * Fig. 4.4.2.4.6-3. The least significant bit is equal to 1/256 sec.
          *
          * ER-IS-ESA-GS-0002  - pg. 4.4 - 24
          */

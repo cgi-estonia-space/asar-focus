@@ -125,6 +125,8 @@ void ParseLevel0Header(const std::vector<char>& file_data, ASARMetadata& asar_me
     asar_meta.sensing_stop = StrToPtime(mph.Get("SENSING_STOP"));
     asar_meta.acquistion_station = mph.Get("ACQUISITION_STATION");
     asar_meta.processing_station = mph.Get("PROC_CENTER");
+    asar_meta.rel_orbit = std::stoul(mph.Get("REL_ORBIT"));
+    asar_meta.abs_orbit = std::stoul(mph.Get("ABS_ORBIT"));
 }
 
 RawSampleMeasurements ParseLevel0Packets(const std::vector<char>& file_data, size_t mdsr_offset_bytes,

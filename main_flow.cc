@@ -22,9 +22,10 @@
 #include "envisat_format_kernels.h"
 #include "envisat_utils.h"
 #include "ers_aux_file.h"
+#include "ers_sbt.h"
+#include "globe_plot.h"
 #include "img_output.h"
 #include "plot.h"
-#include "globe_plot.h"
 #include "sar/iq_correction.cuh"
 #include "status_assembly.h"
 
@@ -125,7 +126,8 @@ void TryFetchOrbit(alus::dorisorbit::Parsable& orbit_source, ASARMetadata& asar_
 }
 
 void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, envformat::aux::ExternalCalibration& xca,
-                   ASARMetadata& asar_meta, specification::ProductTypes product_type, std::string_view aux_path) {
+                   std::optional<envformat::aux::Patc>& patc, ASARMetadata& asar_meta,
+                   specification::ProductTypes product_type, std::string_view aux_path) {
     if (product_type == alus::asar::specification::ProductTypes::ASA_IM0) {
         FindINSFile(std::string(aux_path), asar_meta.sensing_start, ins_file, asar_meta.instrument_file);
         FindCONFile(std::string(aux_path), asar_meta.sensing_start, conf_file, asar_meta.configuration_file);
@@ -136,7 +138,7 @@ void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, envfo
         alus::asar::envisat_format::FindCONFile(std::string(aux_path), asar_meta.sensing_start, conf_file,
                                                 asar_meta.configuration_file);
         envformat::aux::GetXca(aux_path, asar_meta.sensing_start, xca, asar_meta.external_calibration_file);
-        envformat::aux::GetTimeCorrelation(aux_path, asar_meta.sensing_start);
+        patc = envformat::aux::GetTimeCorrelation(aux_path);
     } else {
         LOGE << "Implementation error for this type of product while trying to fetch auxiliary files";
         exit(alus::asar::status::EXIT_CODE::ASSERT_FAILURE);
@@ -257,9 +259,7 @@ void StorePlots(std::string output_path, std::string product_name, const SARMeta
         PolyvalRange(sar_metadata.results.doppler_centroid_poly, 0, sar_metadata.img.range_size, line.x, line.y);
         Plot(plot_args);
     }
-    {
-        PlotGlobe(sar_metadata, output_path + "/" + product_name + "_globe.html");
-    }
+    { PlotGlobe(sar_metadata, output_path + "/" + product_name + "_globe.html"); }
 }
 
 void StoreIntensity(std::string output_path, std::string product_name, std::string postfix,
@@ -610,6 +610,34 @@ void SubsetResultsAndReassembleMeta(DevicePaddedImage& azimuth_compressed_raster
 
 void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed) {
     ims.main_processing_params.azimuth_processing_information.num_lines_proc = total_packets_processed;
+}
+
+void CheckAndRegisterPatc(const envformat::aux::Patc& patc, ASARMetadata& metadata) {
+    if (metadata.abs_orbit != patc.orbit_number) {
+        throw std::runtime_error("Given PATC orbit number '" + std::to_string(patc.orbit_number) +
+                                 "' does not align with the input product absolute orbit '" +
+                                 std::to_string(patc.orbit_number) + "'.");
+    }
+
+    size_t last_dot = metadata.product_name.find_last_of(".");
+    if (last_dot == std::string::npos) {
+        throw std::runtime_error("Input dataset product name does not have correct mission ID (dot separated) - '" +
+                                 metadata.product_name + "'.");
+    }
+
+    const auto input_ds_mission_id = metadata.product_name.substr(last_dot + 1);
+    if (input_ds_mission_id.length() != 2) {
+        throw std::runtime_error("Input dataset product name does not have correct mission ID (i.e E1 or E2) - '" +
+                                 metadata.product_name + "'.");
+    }
+
+    const auto patc_mission = std::string(patc.mission, 2);
+    if (patc_mission != input_ds_mission_id) {
+        throw std::runtime_error("Supplied PATC mission ID '" + patc_mission +
+                                 "' does not align with the input product '" + input_ds_mission_id + "'.");
+    }
+
+    envformat::ers::RegisterPatc(patc);
 }
 
 }  // namespace alus::asar::mainflow

@@ -18,17 +18,15 @@ alus::asar::envformat::aux::Patc ConstructPatc(const std::vector<char>& buffer) 
     patc.mission[1] = buffer.at(21);
     patc.orbit_number = std::stoul(std::string(buffer.data() + 30, 5));
     memcpy(&patc.epoch_1950, buffer.data() + 38, 4);
-    memcpy(&patc.microseconds, buffer.data() + 42, 4);
+    memcpy(&patc.milliseconds, buffer.data() + 42, 4);
 
     auto epoch = alus::util::date_time::YYYYMMDD("19500101");
-    std::cout << to_simple_string(epoch) << std::endl;
-    epoch += boost::posix_time::seconds(patc.epoch_1950);
-    std::cout << to_simple_string(epoch) << std::endl;
-    epoch += boost::posix_time::microseconds(patc.microseconds);
-    std::cout << to_simple_string(epoch) << std::endl;
+    epoch += boost::posix_time::time_duration(patc.epoch_1950 * 24, 0, 0, 0);
+    epoch += boost::posix_time::milliseconds(patc.milliseconds);
 
     memcpy(&patc.sbt_counter, buffer.data() + 46, 4);
     memcpy(&patc.sbt_period, buffer.data() + 50, 4);
+    std::cout << to_simple_string(epoch) << " " << patc.sbt_counter << std::endl;
 
     return patc;
 }

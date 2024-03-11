@@ -12,7 +12,6 @@
 #include "alus_log.h"
 #include "asar_aux.h"
 #include "checks.h"
-#include "ers_tim.h"
 #include "filesystem_util.h"
 #include "patc.h"
 
@@ -127,43 +126,25 @@ void GetXca(std::string_view aux_root, boost::posix_time::ptime start, ExternalC
     filename = std::filesystem::path(file_path).filename();
 }
 
-void GetTimeCorrelation(std::string_view aux_root, boost::posix_time::ptime start) {
-
-    const std::regex tim_reg{R"(.*TIM_AXNXXX.*)"};
+std::optional<Patc> GetTimeCorrelation(std::string_view aux_root) {
     const std::regex patc_reg{R"(PATC.*)"};
 
     if (!std::filesystem::exists(aux_root)) {
         throw std::runtime_error("The auxiliary folder - " + std::string(aux_root) + " - does not exist.");
     }
 
-    (void)start;
-    const auto& tims = util::filesystem::GetFileListingAt(aux_root, tim_reg);
-    for (const auto& t : tims) {
-        std::cout << t.string() << std::endl;
-    }
     const auto& patc_listing = util::filesystem::GetFileListingAt(aux_root, patc_reg);
-    for (const auto& p : patc_listing) {
-        std::cout << p.string() << std::endl;
+    if (patc_listing.size() > 1) {
+        throw std::runtime_error("Expected single PATC file in the '" + std::string(aux_root) + "'. There were " +
+                                 std::to_string(patc_listing.size()) + " found.");
     }
-
-    // WARN if no time correlation files given
 
     if (patc_listing.size() == 0) {
         LOGW << "No PATC files found at " << aux_root;
-        return;
+        return std::nullopt;
     }
 
-    // If multiple PATC determine based on time
-    const auto patc_entry = ParsePatc(patc_listing.front());
-    (void)patc_entry;
-
-    if (tims.size() == 0) {
-        LOGW << "No TIM files found at " << aux_root;
-        return;
-    }
-
-    const auto tims_entry = ParseTim(tims.front());
-    (void)tims_entry;
+    return ParsePatc(patc_listing.front());
 }
 
 }  // namespace alus::asar::envformat::aux
