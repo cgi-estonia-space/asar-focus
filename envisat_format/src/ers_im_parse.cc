@@ -237,7 +237,7 @@ std::vector<ForecastMeta> FetchErsL0ImForecastMeta(const std::vector<char>& file
     uint32_t last_dr_no;
     InitializeDataRecordNo(next_packet, last_dr_no);
     uint32_t last_obt;
-    uint32_t obt_repeat{0};
+    uint32_t sbt_repeat{0};
     FetchOnboardTime(next_packet, last_obt);
 
     size_t i{};
@@ -245,20 +245,20 @@ std::vector<ForecastMeta> FetchErsL0ImForecastMeta(const std::vector<char>& file
         ForecastMeta current_meta;
         uint32_t dr_no;
         current_meta.packet_start_offset_bytes = next_packet - packets_start;
-        uint32_t obt;
-        next_packet = FetchPacketFrom(next_packet, current_meta, dr_no, obt);
+        uint32_t sbt;
+        next_packet = FetchPacketFrom(next_packet, current_meta, dr_no, sbt);
         // Fetch SBT as well
         // Check SBT rollover and calculate delta.
         // Adjust ISP sensing.
-        const auto obt_delta = parseutil::CounterGap<uint32_t, ONBOARD_TIME_MAX>(last_obt, obt);
-        if (obt_delta == 0) {
-            obt_repeat++;
+        const auto sbt_delta = parseutil::CounterGap<uint32_t, ONBOARD_TIME_MAX>(last_obt, sbt);
+        if (sbt_delta == 0) {
+            sbt_repeat++;
         } else {
-            obt_repeat = 0;
+            sbt_repeat = 0;
         }
-        LOGD << "ISP sensing input " << to_simple_string(MjdToPtime(current_meta.isp_sensing_time));
-        ers::AdjustIspSensingTime(current_meta.isp_sensing_time, obt, obt_repeat);
-        LOGD << "ISP sensing ADJ " << to_simple_string(MjdToPtime(current_meta.isp_sensing_time));
+//        LOGD << "ISP sensing input " << to_simple_string(MjdToPtime(current_meta.isp_sensing_time));
+        ers::AdjustIspSensingTime(current_meta.isp_sensing_time, sbt, sbt_repeat);
+//        LOGD << "ISP sensing ADJ " << to_simple_string(MjdToPtime(current_meta.isp_sensing_time));
 
         // LOGD << i << " " << MjdToPtime(current_meta.isp_sensing_time);
 
@@ -384,7 +384,10 @@ RawSampleMeasurements ParseErsLevel0ImPackets(const std::vector<char>& file_data
         it = packets_start + entry.packet_start_offset_bytes;
         EchoMeta echo_meta = {};
 
+        uint32_t sbt;
+        FetchOnboardTime(it, sbt);
         it = CopyBSwapPOD(echo_meta.isp_sensing_time, it);
+        ers::AdjustIspSensingTime(echo_meta.isp_sensing_time, sbt, 0);
 
         if (echo_meta.isp_sensing_time != entry.isp_sensing_time) {
             throw std::runtime_error(fmt::format(
@@ -442,11 +445,11 @@ RawSampleMeasurements ParseErsLevel0ImPackets(const std::vector<char>& file_data
          *
          * ER-IS-ESA-GS-0002  - pg. 4.4 - 24
          */
-        echo_meta.onboard_time = 0;
-        echo_meta.onboard_time |= static_cast<uint64_t>(it[0]) << 24;
-        echo_meta.onboard_time |= static_cast<uint64_t>(it[1]) << 16;
-        echo_meta.onboard_time |= static_cast<uint64_t>(it[2]) << 8;
-        echo_meta.onboard_time |= static_cast<uint64_t>(it[3]) << 0;
+        echo_meta.onboard_time = sbt;
+//        echo_meta.onboard_time |= static_cast<uint64_t>(it[0]) << 24;
+//        echo_meta.onboard_time |= static_cast<uint64_t>(it[1]) << 16;
+//        echo_meta.onboard_time |= static_cast<uint64_t>(it[2]) << 8;
+//        echo_meta.onboard_time |= static_cast<uint64_t>(it[3]) << 0;
         it += 4;
         /*
          * This word shall define the activity task within the mode of

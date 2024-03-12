@@ -184,11 +184,6 @@ int main(int argc, char* argv[]) {
             asar_meta.orbit_metadata.state_vector_time = orbit_l1_metadata.state_vector_time;
             asar_meta.orbit_metadata.phase = orbit_l1_metadata.phase;
             asar_meta.orbit_metadata.cycle = orbit_l1_metadata.cycle;
-            if (asar_meta.abs_orbit != orbit_l1_metadata.abs_orbit) {
-                throw std::runtime_error("Absolute orbit number discrepancy, input product specified '" +
-                                         std::to_string(asar_meta.abs_orbit) + "' but orbit source has '" +
-                                         std::to_string(orbit_l1_metadata.abs_orbit) + "'.");
-            }
             asar_meta.orbit_metadata.abs_orbit = orbit_l1_metadata.abs_orbit;
             asar_meta.orbit_metadata.orbit_name = orbit_l1_metadata.orbit_name;
             asar_meta.orbit_metadata.delta_ut1 = orbit_l1_metadata.delta_ut1;

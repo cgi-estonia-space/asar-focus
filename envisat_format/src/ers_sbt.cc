@@ -35,35 +35,18 @@ void AdjustIspSensingTime(mjd& isp_sensing_time, uint32_t sbt, uint32_t sbt_repe
         return;
     }
 
-    //    const auto sensing_time = MjdToPtime(isp_sensing_time);
-    //    std::cout << to_simple_string(sensing_time) << std::endl;
-    //    std::cout << to_simple_string(patc_time_point) << std::endl;
-    //    if (sensing_time < patc_time_point) {
-    //        return;
-    //        throw std::runtime_error("Given ISP sensing time '" + to_simple_string(sensing_time) +
-    //                                 "' is ahead of the supplied PATC synchronization point - '" +
-    //                                 to_simple_string(patc_time_point) +
-    //                                 "'. Expecting synchronization point to be earlier than packet sensing times.");
-    //    }
-
     (void)sbt_repeat;
-    // Not valid, once sbt reaches max and resets this would yield incorrect values.
     boost::posix_time::ptime adjusted_ptime;
+    int64_t delta_count{};
     if (sbt < patc_cor.sbt_counter) {
-        const auto delta_count = patc_cor.sbt_counter - sbt;
-        //        throw std::runtime_error("Given PATC SBT value '" + std::to_string(patc_cor.sbt_counter) +
-        //                                 "' is greater than the dataset's packet SBT value '" + std::to_string(sbt) +
-        //                                 "'. Expecting synchronization point to be earlier than packets' SBT
-        //                                 counter.");
-        const int64_t picoseconds_elapsed = patc_cor.sbt_period * delta_count;
-        adjusted_ptime =
-            patc_time_point - boost::posix_time::microseconds(static_cast<uint32_t>(picoseconds_elapsed / 1e6));
+        delta_count = static_cast<int64_t>(sbt) - patc_cor.sbt_counter;
     } else {
-        const auto delta_count = parseutil::CounterGap<uint32_t, SBT_MAX>(patc_cor.sbt_counter, sbt);
-        const int64_t picoseconds_elapsed = patc_cor.sbt_period * delta_count;
-        adjusted_ptime =
-            patc_time_point + boost::posix_time::microseconds(static_cast<uint32_t>(picoseconds_elapsed / 1e6));
+        delta_count = parseutil::CounterGap<uint32_t, SBT_MAX>(patc_cor.sbt_counter, sbt);
     }
+    const int64_t picoseconds_diff = (patc_cor.sbt_period * 1e3) * delta_count;
+    const auto microseconds_val = static_cast<int64_t>(picoseconds_diff / 1e6);
+    adjusted_ptime = patc_time_point + boost::posix_time::microseconds(microseconds_val);
+
     isp_sensing_time = PtimeToMjd(adjusted_ptime);
 }
 
