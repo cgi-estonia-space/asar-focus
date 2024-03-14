@@ -18,8 +18,17 @@
 #include "sar/sar_metadata.h"
 
 namespace {
+template <class T>
+void append_packed_struct(std::vector<uint8_t>& buffer, const T& data) {
+    static_assert(alignof(T) == 1 && std::is_pod_v<T>);
+    auto begin = reinterpret_cast<const uint8_t*>(&data);
+    auto end = begin + sizeof(data);
+    buffer.insert(buffer.end(), begin, end);
+}
+
 void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& asar_meta,
                               MainProcessingParametersADS& out) {
+    const bool is_slc = alus::asar::specification::IsSLCProduct(asar_meta.target_product_type);
     {
         auto& gs = out.general_summary;
         gs.first_zero_doppler_time = PtimeToMjd(asar_meta.sensing_start);
@@ -27,14 +36,22 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
         memcpy(gs.swath_num, asar_meta.swath.data(), 3);
         gs.range_spacing = sar_meta.range_spacing;
         gs.azimuth_spacing = sar_meta.azimuth_spacing;
-        gs.line_time_interval = 1 / sar_meta.pulse_repetition_frequency;
+        gs.line_time_interval = sar_meta.line_time_interval;
         gs.num_output_lines = sar_meta.img.azimuth_size;
         gs.num_samples_per_line = sar_meta.img.range_size;
-        memcpy(gs.data_type, "SWORD", 5);
+        memcpy(gs.data_type, is_slc ? "SWORD" : "UWORD", 5);
         gs.num_range_lines_per_burst = 0;
         gs.time_diff_zero_doppler = 0;  // TODO azimuth cut
     }
 
+    {
+        auto& ips = out.image_processing_summary;
+        ips.dop_cen_flag = 1;
+        ips.srgr_flag = sar_meta.srgr.applied;
+        ips.look_sum_flag = !is_slc;
+        ips.detected_flag = !is_slc;
+        ips.range_spread_comp_flag = !is_slc;
+    }
     {
         auto& rd = out.raw_data_analysis[0];
         rd.calc_i_bias = sar_meta.results.dc_i;
@@ -84,7 +101,7 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
 
     {
         auto& r = out.range_processing_information;
-        r.range_ref = 8e5;  // TODO
+        r.range_ref = alus::asar::specification::REFERENCE_RANGE;
         r.range_samp_rate = sar_meta.chirp.range_sampling_rate;
         r.radar_freq = sar_meta.carrier_frequency;
         r.num_looks_range = 1;
@@ -132,7 +149,7 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
         for (int i = 0; i < N; i++) {
             int range_idx = (sar_meta.img.range_size * i) / N;
             double Vr = CalcVr(sar_meta, range_idx);
-            double R0 = CalcR0(sar_meta, range_idx);
+            double R0 = CalcSlantRange(sar_meta, range_idx);
             double Ka = -2 * (Vr * Vr) / (sar_meta.wavelength * R0);
             double two_way_slant_time = 2 * (R0 / SOL);
             Ka_vec.push_back(Ka);
@@ -215,9 +232,9 @@ void FillSummaryQuality(const SARMetadata& sar_meta, const ASARMetadata& asar_me
         sq.input_std_dev_flag = 1;
     }
 
-    //TODO
-    //sq.output_mean = ...
-    //sq.output_std_dev = ...
+    // TODO
+    // sq.output_mean = ...
+    // sq.output_std_dev = ...
 }
 
 void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, GeoLocationADSR& geo) {
@@ -233,7 +250,13 @@ void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, Ge
     const int range_size = sar_meta.img.range_size;
     for (int i = 0; i < n; i++) {
         const int range_samp = i * range_size / (n - 1);
-        double R = sar_meta.slant_range_first_sample + sar_meta.range_spacing * range_samp;
+        double R = CalcSlantRange(sar_meta, range_samp);
+        if (sar_meta.srgr.applied) {
+            const double ground_range = range_samp * sar_meta.range_spacing;
+            const double slant_from_first =
+                Polyval(sar_meta.srgr.grsr_poly.data(), sar_meta.srgr.grsr_poly.size(), ground_range);
+            R = sar_meta.slant_range_first_sample + slant_from_first;
+        }
         constexpr double c = 299792458;
         double two_way_slant_time = 2 * (R / c) * 1e9;
         {
@@ -263,16 +286,21 @@ void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, Ge
 }
 }  // namespace
 
-void ConstructIMS(EnvisatIMS& ims, const SARMetadata& sar_meta, const ASARMetadata& asar_meta, const MDS& mds,
-                  std::string_view software_ver) {
-    static_assert(__builtin_offsetof(EnvisatIMS, main_processing_params) == 7516);
+std::vector<uint8_t> ConstructEnvisatFileHeader(EnvisatSubFiles& header_files, const SARMetadata& sar_meta,
+                                                const ASARMetadata& asar_meta, const MDS& mds,
+                                                std::string_view software_ver) {
+    static_assert(__builtin_offsetof(EnvisatSubFiles, main_processing_params) == 7516);
 
     std::string out_name = asar_meta.product_name;
-    out_name.at(6) = 'S';
+    const bool is_detected = alus::asar::specification::IsDetectedProduct(asar_meta.target_product_type);
+    const bool is_slc = !is_detected;
+    out_name.at(6) = is_slc ? 'S' : 'P';
     out_name.at(8) = '1';
 
+    uint32_t file_offset = 0;
+
     {
-        auto& mph = ims.mph;
+        auto& mph = header_files.mph;
         mph.SetDefaults();
 
         mph.Set_PRODUCT(out_name);
@@ -302,14 +330,27 @@ void ConstructIMS(EnvisatIMS& ims, const SARMetadata& sar_meta, const ASARMetada
 
         // set tot size later
 
-        size_t tot = sizeof(ims);
-        tot += mds.n_records * mds.record_size;
-        mph.SetProductSizeInformation(tot, sizeof(ims.sph), 18, 6);
+        size_t tot = sizeof(header_files.mph) + sizeof(header_files.sph);
+        tot += sizeof(header_files.summary_quality);
+        tot += sizeof(header_files.dop_centroid_coeffs);
+        // TODO chirp params
+        // tot += sizeof(header_files.chirp_params);
+        tot += sizeof(header_files.geolocation_grid);
+        tot += sizeof(header_files.main_processing_params);
+        size_t n_datasets = 5;
+        if (is_detected) {
+            tot += sizeof(header_files.srgr_params);
+            n_datasets++;  // + srgr
+        }
+        tot += static_cast<size_t>(mds.n_records) * mds.record_size;
+        mph.SetProductSizeInformation(tot, sizeof(header_files.sph), 18, n_datasets);
+        file_offset += sizeof(mph);
     }
     {
-        auto& sph = ims.sph;
+        auto& sph = header_files.sph;
         sph.SetDefaults();
-        sph.SetHeader("Image Mode SLC Image", 0, 1, 1);
+
+        sph.SetHeader(is_slc ? "Image Mode SLC Image" : "Image Mode Precision Image", 0, 1, 1);
 
         sph.SetLineTimeInfo(PtimeToStr(asar_meta.first_line_time), PtimeToStr(asar_meta.last_line_time));
 
@@ -341,7 +382,8 @@ void ConstructIMS(EnvisatIMS& ims, const SARMetadata& sar_meta, const ASARMetada
             sph.SetLastPosition(xyz2geoWGS84(near), xyz2geoWGS84(mid), xyz2geoWGS84(far));
         }
 
-        sph.SetProductInfo1(asar_meta.swath, asar_meta.ascending ? "ASCENDING" : "DESCENDING", "COMPLEX", "RAN/DOP");
+        sph.SetProductInfo1(asar_meta.swath, asar_meta.ascending ? "ASCENDING" : "DESCENDING",
+                            is_slc ? "COMPLEX" : "DETECTED", "RAN/DOP");
         if (asar_meta.compression_metadata.echo_ratio.length() > 0) {
             sph.SetProductInfo2(
                 asar_meta.polarization, "",
@@ -349,96 +391,117 @@ void ConstructIMS(EnvisatIMS& ims, const SARMetadata& sar_meta, const ASARMetada
         } else {
             sph.SetProductInfo2(asar_meta.polarization, "", asar_meta.compression_metadata.echo_method);
         }
-        sph.SetProductInfo3(1, 1);
-        sph.SetProductInfo4(sar_meta.range_spacing, sar_meta.azimuth_spacing,
-                            1.0 / sar_meta.pulse_repetition_frequency);
+        sph.SetProductInfo3(is_slc ? 1 : 4, 1);
+        sph.SetProductInfo4(sar_meta.range_spacing, sar_meta.azimuth_spacing, sar_meta.line_time_interval);
 
-        if (sar_meta.img.range_size * 4 != mds.record_size - 17) {
+        const int pix_size = is_slc ? 4 : 2;
+        if (sar_meta.img.range_size * pix_size != mds.record_size - 17) {
             throw std::runtime_error(
                 "Range value for SAR metadata does not match MDS record size - this is an implementation error");
         }
-        sph.SetProductInfo5(sar_meta.img.range_size, "SWORD");
+        sph.SetProductInfo5(sar_meta.img.range_size, is_slc ? "SWORD" : "UWORD");
 
-        ims.main_processing_params.general_summary.num_samples_per_line = sar_meta.img.range_size;
+        header_files.main_processing_params.general_summary.num_samples_per_line = sar_meta.img.range_size;
+
+        file_offset += sizeof(sph);
 
         {
-            size_t offset = offsetof(EnvisatIMS, summary_quality);
-            FillSummaryQuality(sar_meta, asar_meta, ims.summary_quality);
-            ims.summary_quality.BSwap();
-            constexpr size_t size = sizeof(ims.summary_quality);
+            constexpr size_t size = sizeof(header_files.summary_quality);
             static_assert(size == 170);
-            sph.dsds[0].SetInternalDSD("MDS1 SQ ADS", 'A', offset, 1, size);
+            sph.dsds[0].SetInternalDSD("MDS1 SQ ADS", 'A', file_offset, 1, size);
+            file_offset += size;
+
+            FillSummaryQuality(sar_meta, asar_meta, header_files.summary_quality);
+            header_files.summary_quality.BSwap();
         }
 
         { sph.dsds[1].SetEmptyDSD("MDS2 SQ ADS", 'A'); }
 
         {
-            size_t offset = offsetof(EnvisatIMS, main_processing_params);
-            constexpr size_t size = sizeof(ims.main_processing_params);
+            constexpr size_t size = sizeof(header_files.main_processing_params);
             static_assert(size == 2009);
-            FillMainProcessingParams(sar_meta, asar_meta, ims.main_processing_params);
-            ims.main_processing_params.BSwap();
-            sph.dsds[2].SetInternalDSD("MAIN PROCESSING PARAMS ADS", 'A', offset, 1, size);
+            sph.dsds[2].SetInternalDSD("MAIN PROCESSING PARAMS ADS", 'A', file_offset, 1, size);
+            file_offset += size;
+
+            FillMainProcessingParams(sar_meta, asar_meta, header_files.main_processing_params);
+            header_files.main_processing_params.BSwap();
         }
 
-        /*{
-            size_t offset = offsetof(decltype(ims), main_processing_params);
-            constexpr size_t size = sizeof(ims.main_processing_params);
-            static_assert(size == 2009);
-            sph.dsds[2].SetInternalDSD("MAIN PROCESSING PARAMS ADS", 'A', offset, 1, size);
-        }*/
-
         {
-            size_t offset = offsetof(EnvisatIMS, dop_centroid_coeffs);
-            constexpr size_t size = sizeof(ims.dop_centroid_coeffs);
+            constexpr size_t size = sizeof(header_files.dop_centroid_coeffs);
             static_assert(size == 55);
+            sph.dsds[3].SetInternalDSD("DOP CENTROID COEFFS ADS", 'A', file_offset, 1, size);
+            file_offset += size;
 
             // convert DC polynomial to Envisat format
             //  polynomial internally fitted to range sample index, Envisat format uses two way slant range time,
             //  starting from first sample
             const double dt = 1 / sar_meta.chirp.range_sampling_rate;
             const auto& poly = sar_meta.results.doppler_centroid_poly;
-            ims.dop_centroid_coeffs.zero_doppler_time = PtimeToMjd(sar_meta.first_line_time);
-            ims.dop_centroid_coeffs.slant_range_time = asar_meta.two_way_slant_range_time * 1e9;
-            ims.dop_centroid_coeffs.dop_coef[0] = poly.at(2);
-            ims.dop_centroid_coeffs.dop_coef[1] = poly.at(1) / dt;
-            ims.dop_centroid_coeffs.dop_coef[2] = poly.at(0) / (dt * dt);
-            ims.dop_centroid_coeffs.BSwap();
-            sph.dsds[3].SetInternalDSD("DOP CENTROID COEFFS ADS", 'A', offset, 1, size);
+            auto& dc = header_files.dop_centroid_coeffs;
+            dc.zero_doppler_time = PtimeToMjd(sar_meta.first_line_time);
+            dc.slant_range_time = asar_meta.two_way_slant_range_time * 1e9;
+            dc.dop_coef[0] = poly.at(2);
+            dc.dop_coef[1] = poly.at(1) / dt;
+            dc.dop_coef[2] = poly.at(0) / (dt * dt);
+            dc.BSwap();
         }
 
-        sph.dsds[4].SetEmptyDSD("SR GR ADS", 'A');
+        if (is_slc) {
+            sph.dsds[4].SetEmptyDSD("SR GR ADS", 'A');
+        } else {
+            constexpr size_t size = sizeof(header_files.srgr_params);
+            static_assert(size == 55);
+            sph.dsds[4].SetInternalDSD("SR GR ADS", 'A', file_offset, 1, size);
+            file_offset += size;
+
+            auto& srgr = header_files.srgr_params;
+            srgr.zero_doppler_time = PtimeToMjd(sar_meta.first_line_time);
+            srgr.slant_range_time = asar_meta.two_way_slant_range_time * 1e9;
+            srgr.ground_range_origin = 0.0;
+            // the GR to SR polynomial in Envisat spec is real value(aka 800KM+), the sar_meta version is from 0
+            srgr.srgr_coeffs[0] = sar_meta.srgr.grsr_poly.at(4) + sar_meta.slant_range_first_sample;
+            srgr.srgr_coeffs[1] = sar_meta.srgr.grsr_poly.at(3);
+            srgr.srgr_coeffs[2] = sar_meta.srgr.grsr_poly.at(2);
+            srgr.srgr_coeffs[3] = sar_meta.srgr.grsr_poly.at(1);
+            srgr.srgr_coeffs[4] = sar_meta.srgr.grsr_poly.at(0);
+            srgr.BSwap();
+        }
 
         {
-            size_t offset = offsetof(EnvisatIMS, chirp_params);
-            constexpr size_t size = sizeof(ims.chirp_params);
+            sph.dsds[5].SetEmptyDSD("CHIRP PARAMS ADS", 'A');
+
+            /* Removed file, because it is all zeroes in the current version anyway, TODO implementation
+            constexpr size_t size = sizeof(header_files.chirp_params);
             static_assert(size == 1483);
-            sph.dsds[5].SetInternalDSD("CHIRP PARAMS ADS", 'A', offset, 1, size);
+            sph.dsds[5].SetInternalDSD("CHIRP PARAMS ADS", 'A', file_offset, 1, size);
+            file_offset += size;
+             */
         }
 
         sph.dsds[6].SetEmptyDSD("MDS1 ANTENNA ELEV PATT ADS", 'A');
         sph.dsds[7].SetEmptyDSD("MDS2 ANTENNA ELEV PATT ADS", 'A');
 
         {
-            size_t offset = offsetof(EnvisatIMS, geolocation_grid);
-            constexpr size_t size = sizeof(ims.geolocation_grid[0]);
-            size_t n = std::size(ims.geolocation_grid);
+            constexpr size_t size = sizeof(header_files.geolocation_grid[0]);
+            size_t n = std::size(header_files.geolocation_grid);
 
             static_assert(size == 521);
 
             int step = sar_meta.img.azimuth_size / (n - 1);
             for (size_t i = 0; i < n; i++) {
                 int az_idx = i * sar_meta.img.azimuth_size / (n - 1);
-                FillGeoLocationAds(az_idx, az_idx + step - 1, sar_meta, ims.geolocation_grid[i]);
-                ims.geolocation_grid[i].BSwap();
+                FillGeoLocationAds(az_idx, az_idx + step - 1, sar_meta, header_files.geolocation_grid[i]);
+                header_files.geolocation_grid[i].BSwap();
             }
-            sph.dsds[8].SetInternalDSD("GEOLOCATION GRID ADS", 'A', offset, n, size);
+            sph.dsds[8].SetInternalDSD("GEOLOCATION GRID ADS", 'A', file_offset, n, size);
+
+            file_offset += (n * size);
         }
 
         sph.dsds[9].SetEmptyDSD("MAP PROJECTION GADS", 'G');
         {
-            size_t offset = sizeof(EnvisatIMS);
-            sph.dsds[10].SetInternalDSD("MDS1", 'M', offset, mds.n_records, mds.record_size);
+            sph.dsds[10].SetInternalDSD("MDS1", 'M', file_offset, mds.n_records, mds.record_size);
             // MDS1
         }
 
@@ -454,4 +517,20 @@ void ConstructIMS(EnvisatIMS& ims, const SARMetadata& sar_meta, const ASARMetada
         sph.dsds[16].SetReferenceDSD("EXTERNAL CALIBRATION", asar_meta.external_calibration_file);
         sph.dsds[17].SetReferenceDSD("ORBIT STATE VECTOR 1", asar_meta.orbit_dataset_name);
     }
+
+    std::vector<uint8_t> out_buffer;
+    append_packed_struct(out_buffer, header_files.mph);
+    append_packed_struct(out_buffer, header_files.sph);
+    append_packed_struct(out_buffer, header_files.summary_quality);
+    append_packed_struct(out_buffer, header_files.main_processing_params);
+    append_packed_struct(out_buffer, header_files.dop_centroid_coeffs);
+    if (is_detected) {
+        append_packed_struct(out_buffer, header_files.srgr_params);
+    }
+    // TODO chirp params...
+    // append_packed_struct(out_buffer, header_files.chirp_params);
+    append_packed_struct(out_buffer, header_files.geolocation_grid);
+
+    CHECK_BOOL(out_buffer.size() == file_offset);
+    return out_buffer;
 }

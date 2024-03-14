@@ -913,6 +913,7 @@ void ParseErsLevel0ImPackets(const std::vector<char>& file_data, const DSD_lvl0&
         // note 5 in 4.4:28 specifies 210.94 ns, which draws more similar results to PF-ERS results.
         const auto pri = (echoes.front().pri_code + 2.0) * 210.94e-9;
         sar_meta.pulse_repetition_frequency = 1 / pri;
+        sar_meta.line_time_interval = 1 / sar_meta.pulse_repetition_frequency;
 
         if (sar_meta.pulse_repetition_frequency < 1640 || sar_meta.pulse_repetition_frequency > 1720) {
             LOGW << "PRF value '" << sar_meta.pulse_repetition_frequency << "'"

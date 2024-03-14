@@ -27,6 +27,18 @@ enum ProductTypes { SAR_IM0, ASA_IM0, SAR_IMS, SAR_IMP, ASA_IMS, ASA_IMP, UNIDEN
 
 enum Instrument { SAR, ASAR };
 
+constexpr double REFERENCE_RANGE = 800000;
+
+inline bool IsSLCProduct(ProductTypes product)
+{
+    return product == SAR_IMS || product == ASA_IMS;
+}
+
+inline bool IsDetectedProduct(ProductTypes product)
+{
+    return product == SAR_IMP || product == ASA_IMP;
+}
+
 constexpr std::string_view PRODUCT_NAME_SAR_IM0{"SAR_IM__0"};
 constexpr std::string_view PRODUCT_NAME_ASA_IM0{"ASA_IM__0"};
 

@@ -31,6 +31,7 @@
 struct ASARMetadata {
     std::string lvl0_file_name;
     std::string product_name;
+    alus::asar::specification::ProductTypes target_product_type;
     std::string instrument_file;
     std::string configuration_file;
     std::string external_calibration_file;

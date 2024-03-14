@@ -47,6 +47,7 @@ struct SARMetadata {
     double orbit_interval;
     std::vector<OrbitStateVector> osv;
     double pulse_repetition_frequency;
+    double line_time_interval;
     double azimuth_bandwidth_fraction;
     double azimuth_window_alpha;
     bool azimuth_window;
@@ -58,6 +59,10 @@ struct SARMetadata {
     double slant_range_first_sample;
     boost::posix_time::ptime first_line_time;
     boost::posix_time::ptime center_time;
+    struct {
+        bool applied;
+        std::vector<double> grsr_poly;
+    } srgr;
 
     GeoPos3D center_point;
     size_t total_raw_samples;
@@ -66,11 +71,11 @@ struct SARMetadata {
 };
 
 inline boost::posix_time::ptime CalcAzimuthTime(const SARMetadata& meta, int azimuth_idx) {
-    uint32_t us = (1 / meta.pulse_repetition_frequency) * azimuth_idx * 1e6;
+    uint32_t us = meta.line_time_interval * azimuth_idx * 1e6;
     return meta.first_line_time + boost::posix_time::microseconds(us);
 }
 
-inline double CalcR0(const SARMetadata& metadata, int range_pixel) {
+inline double CalcSlantRange(const SARMetadata& metadata, int range_pixel) {
     return metadata.slant_range_first_sample + range_pixel * metadata.range_spacing;
 }
 
@@ -88,7 +93,7 @@ inline double CalcDopplerCentroid(const SARMetadata& metadata, int range_pixel) 
 inline double CalcKa(const SARMetadata& metadata, int range_pixel) {
     constexpr double SOL = 299792458;
     const double Vr = CalcVr(metadata, range_pixel);
-    const double R0 = CalcR0(metadata, range_pixel);
+    const double R0 = CalcSlantRange(metadata, range_pixel);
     return (2 * metadata.carrier_frequency * Vr * Vr) / (SOL * R0);
 }
 

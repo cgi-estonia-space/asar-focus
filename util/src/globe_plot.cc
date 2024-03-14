@@ -375,13 +375,12 @@ OrbitStateVector InterpolateOrbitCopy(const std::vector<OrbitStateVector>& osv, 
 // the HTML_TEMPLATE variable contains the necessary user interface code
 // C++ code inserts SAR metadata as javascript variables
 void PlotGlobe(const SARMetadata& sar_meta, const std::string& path) {
-    double slant_range_first = CalcR0(sar_meta, 0);
-    double slant_range_last = CalcR0(sar_meta, sar_meta.img.range_size - 1);
+    double slant_range_first = CalcSlantRange(sar_meta, 0);
+    double slant_range_last = CalcSlantRange(sar_meta, sar_meta.img.range_size - 1);
     int rg_size = sar_meta.img.range_size;
     int az_size = sar_meta.img.azimuth_size;
     auto start_time = CalcAzimuthTime(sar_meta, 0);
     auto last_line_time = CalcAzimuthTime(sar_meta, az_size - 1);
-    CalcR0(sar_meta, 0);
     GeoPosLLH ul_llh;
     GeoPosLLH ur_llh;
     GeoPosLLH ll_llh;

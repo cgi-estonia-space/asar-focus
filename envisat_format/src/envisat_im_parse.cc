@@ -307,7 +307,7 @@ std::vector<ForecastMeta> FetchEnvisatL0ImForecastMeta(const std::vector<char>& 
         current_meta.packet_start_offset_bytes = next_packet - packets_start;
         next_packet = FetchPacketFrom(next_packet, current_meta, echo, cal);
 
-        //LOGD << i << " " << MjdToPtime(current_meta.isp_sensing_time);
+        // LOGD << i << " " << MjdToPtime(current_meta.isp_sensing_time);
 
         if (forecast_meta.size() == 0 && !echo) {
             continue;
@@ -334,15 +334,15 @@ std::vector<ForecastMeta> FetchEnvisatL0ImForecastMeta(const std::vector<char>& 
         forecast_meta.push_back(current_meta);
     }
 
-    //std::ofstream debug_stream("/tmp/fetch_meta.debug.csv");
-//    for (size_t j{}; j < 10; j++) {
-//        LOGD << j << " " << MjdToPtime(forecast_meta.at(j).isp_sensing_time);
-//    }
-//
-//    LOGD << "FROM the back";
-//    for (size_t j{forecast_meta.size() - 10}; j < forecast_meta.size(); j++) {
-//        LOGD << j << " " << MjdToPtime(forecast_meta.at(j).isp_sensing_time);
-//    }
+    // std::ofstream debug_stream("/tmp/fetch_meta.debug.csv");
+    //    for (size_t j{}; j < 10; j++) {
+    //        LOGD << j << " " << MjdToPtime(forecast_meta.at(j).isp_sensing_time);
+    //    }
+    //
+    //    LOGD << "FROM the back";
+    //    for (size_t j{forecast_meta.size() - 10}; j < forecast_meta.size(); j++) {
+    //        LOGD << j << " " << MjdToPtime(forecast_meta.at(j).isp_sensing_time);
+    //    }
 
     if (packets_before_requested_start > packets_before_start) {
         forecast_meta.erase(forecast_meta.begin(),
@@ -1011,6 +1011,7 @@ void ParseEnvisatLevel0ImPackets(const std::vector<char>& file_data, const DSD_l
 
     // TODO Range gate bias must be included in this calculation
     sar_meta.pulse_repetition_frequency = sar_meta.chirp.range_sampling_rate / echoes.front().pri_code;
+    sar_meta.line_time_interval = 1 / sar_meta.pulse_repetition_frequency;
     asar_meta.two_way_slant_range_time =
         (min_swst + n_pulses_swst * echoes.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate);
 

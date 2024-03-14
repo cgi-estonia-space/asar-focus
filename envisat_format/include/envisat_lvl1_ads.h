@@ -668,3 +668,25 @@ struct __attribute__((packed)) GeoLocationADSR {
 };
 
 static_assert(sizeof(GeoLocationADSR) == 521);
+
+
+struct __attribute__((packed)) SrGrADSR {
+    mjd zero_doppler_time;
+    uc attach_flag;
+    fl slant_range_time;
+    fl ground_range_origin;
+    fl srgr_coeffs[5]; //NB! weird naming, named SRGR... but polynomial is for converting GR to SR
+    uc spare_2[14];
+
+    void SetDefaults() { memset(this, 0, sizeof(*this)); }
+
+    void BSwap() {
+        zero_doppler_time = bswap(zero_doppler_time);
+
+        slant_range_time = bswap(slant_range_time);
+        ground_range_origin = bswap(ground_range_origin);
+        BSWAP_ARR(srgr_coeffs);
+    }
+};
+
+static_assert(sizeof(SrGrADSR) == 55);
