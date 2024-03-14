@@ -441,7 +441,7 @@ void PlotGlobe(const SARMetadata& sar_meta, const std::string& path) {
         auto t = osv.time;
         auto time_str = to_iso_extended_string(t);
         if ((t.time_of_day().total_microseconds() % 1000000) == 0) {
-            time_str += ".000000";  // boost does not add milliseconds, if it is 0
+            time_str += ".000000";  // boost does not add microseconds, if it is 0
         }
         s += fmt::format("{{\n\"time\": \"{}\",\n", time_str);
         s += fmt::format("\"pos\": [{}, {}, {}],\n", osv.x_pos, osv.y_pos, osv.z_pos);

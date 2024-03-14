@@ -91,7 +91,7 @@ constexpr auto DR_NO_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint3
 constexpr auto PACKET_COUNTER_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint8_t, 8>()};
 constexpr uint8_t SUBCOMMUTATION_COUNTER_MAX{48};
 constexpr auto IMAGE_FORMAT_COUNTER_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint32_t, 24>()};
-constexpr auto ONBOARD_TIME_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint32_t, 32>()};
+constexpr auto SBT_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint32_t, 32>()};
 
 void InitializeDataRecordNo(const uint8_t* packet_start, uint32_t& dr_no) {
     FetchUint32(packet_start + alus::asar::envformat::ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES +
@@ -104,8 +104,8 @@ void InitializeDataRecordNo(const uint8_t* packet_start, uint32_t& dr_no) {
     }
 }
 
-void FetchOnboardTime(const uint8_t* packet_start, uint32_t& obt) {
-    FetchUint32(packet_start + alus::asar::envformat::ers::highrate::OBT_OFFSET_BYTES, obt);
+void FetchSatelliteBinaryTime(const uint8_t* packet_start, uint32_t& sbt) {
+    FetchUint32(packet_start + alus::asar::envformat::ers::highrate::SBT_OFFSET_BYTES, sbt);
 }
 
 void InitializeCounters(const uint8_t* packets_start, uint32_t& dr_no, uint8_t& packet_counter,
@@ -177,7 +177,7 @@ inline void CalculatePrf(uint16_t pri_code, double& pri, double& prf) {
 }
 
 inline const uint8_t* FetchPacketFrom(const uint8_t* start, alus::asar::envformat::ForecastMeta& meta,
-                                      uint32_t& dr_no, uint32_t& obt) {
+                                      uint32_t& dr_no, uint32_t& sbt) {
     // https://earth.esa.int/eogateway/documents/20142/37627/ERS-products-specification-with-Envisat-format.pdf
     // https://asf.alaska.edu/wp-content/uploads/2019/03/ers_ceos.pdf and ER-IS-ESA-GS-0002 mixed between three.
     auto it = CopyBSwapPOD(meta.isp_sensing_time, start);
@@ -185,7 +185,7 @@ inline const uint8_t* FetchPacketFrom(const uint8_t* start, alus::asar::envforma
     uint16_t isp_length;
     it = CopyBSwapPOD(isp_length, it);
     InitializeDataRecordNo(start, dr_no);
-    FetchOnboardTime(start, obt);
+    FetchSatelliteBinaryTime(start, sbt);
 
     // ISP size - 1.
     if (isp_length != 11465) {
@@ -236,9 +236,9 @@ std::vector<ForecastMeta> FetchErsL0ImForecastMeta(const std::vector<char>& file
     size_t dr_no_total_missing{};
     uint32_t last_dr_no;
     InitializeDataRecordNo(next_packet, last_dr_no);
-    uint32_t last_obt;
+    uint32_t last_sbt;
     uint32_t sbt_repeat{0};
-    FetchOnboardTime(next_packet, last_obt);
+    FetchSatelliteBinaryTime(next_packet, last_sbt);
 
     size_t i{};
     for (; i < mdsr.num_dsr; i++) {
@@ -247,20 +247,13 @@ std::vector<ForecastMeta> FetchErsL0ImForecastMeta(const std::vector<char>& file
         current_meta.packet_start_offset_bytes = next_packet - packets_start;
         uint32_t sbt;
         next_packet = FetchPacketFrom(next_packet, current_meta, dr_no, sbt);
-        // Fetch SBT as well
-        // Check SBT rollover and calculate delta.
-        // Adjust ISP sensing.
-        const auto sbt_delta = parseutil::CounterGap<uint32_t, ONBOARD_TIME_MAX>(last_obt, sbt);
+        const auto sbt_delta = parseutil::CounterGap<uint32_t, SBT_MAX>(last_sbt, sbt);
         if (sbt_delta == 0) {
             sbt_repeat++;
         } else {
             sbt_repeat = 0;
         }
-//        LOGD << "ISP sensing input " << to_simple_string(MjdToPtime(current_meta.isp_sensing_time));
         ers::AdjustIspSensingTime(current_meta.isp_sensing_time, sbt, sbt_repeat);
-//        LOGD << "ISP sensing ADJ " << to_simple_string(MjdToPtime(current_meta.isp_sensing_time));
-
-        // LOGD << i << " " << MjdToPtime(current_meta.isp_sensing_time);
 
         const auto dr_no_gap = parseutil::CounterGap<uint32_t, DR_NO_MAX>(last_dr_no, dr_no);
         // When gap is 0, this is not handled - could be massive rollover or duplicate or the first packet.
@@ -385,8 +378,12 @@ RawSampleMeasurements ParseErsLevel0ImPackets(const std::vector<char>& file_data
         EchoMeta echo_meta = {};
 
         uint32_t sbt;
-        FetchOnboardTime(it, sbt);
+        FetchSatelliteBinaryTime(it, sbt);
         it = CopyBSwapPOD(echo_meta.isp_sensing_time, it);
+        // sbt_repeat is not handled, because no mechanism could be developed.
+        // SBT stays constant for some period of packets due to being updated after every 4th PRI.
+        // When dividing SBT update time period with PRI no sensible period did develop between packets,
+        // hence this is not used right now. There would be minimal range lines skipped/included due to this anyway.
         ers::AdjustIspSensingTime(echo_meta.isp_sensing_time, sbt, 0);
 
         if (echo_meta.isp_sensing_time != entry.isp_sensing_time) {

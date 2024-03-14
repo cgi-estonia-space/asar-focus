@@ -2,10 +2,6 @@
 
 #include "patc.h"
 
-#include <boost/date_time/posix_time/posix_time.hpp>
-
-#include "bswap_util.h"
-#include "date_time_util.h"
 #include "filesystem_util.h"
 
 namespace {
@@ -20,13 +16,8 @@ alus::asar::envformat::aux::Patc ConstructPatc(const std::vector<char>& buffer) 
     memcpy(&patc.epoch_1950, buffer.data() + 38, 4);
     memcpy(&patc.milliseconds, buffer.data() + 42, 4);
 
-    auto epoch = alus::util::date_time::YYYYMMDD("19500101");
-    epoch += boost::posix_time::time_duration(patc.epoch_1950 * 24, 0, 0, 0);
-    epoch += boost::posix_time::milliseconds(patc.milliseconds);
-
     memcpy(&patc.sbt_counter, buffer.data() + 46, 4);
     memcpy(&patc.sbt_period, buffer.data() + 50, 4);
-    std::cout << to_simple_string(epoch) << " " << patc.sbt_counter << std::endl;
 
     return patc;
 }

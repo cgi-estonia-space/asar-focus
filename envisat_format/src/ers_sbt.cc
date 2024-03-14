@@ -30,12 +30,11 @@ void RegisterPatc(const aux::Patc& patc) {
     patc_cor_set = true;
 }
 
-void AdjustIspSensingTime(mjd& isp_sensing_time, uint32_t sbt, uint32_t sbt_repeat) {
+void AdjustIspSensingTime(mjd& isp_sensing_time, uint32_t sbt, uint32_t) {
     if (!patc_cor_set) {
         return;
     }
 
-    (void)sbt_repeat;
     boost::posix_time::ptime adjusted_ptime;
     int64_t delta_count{};
     if (sbt < patc_cor.sbt_counter) {

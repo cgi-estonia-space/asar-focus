@@ -48,7 +48,7 @@ void ExceptionMessagePrint(const T& e) {
     LOGE << "Exiting.";
 }
 
-std::string GetSoftwareVersion() { return "asar_focus/" + std::string(VERSION_STRING); }
+std::string GetSoftwareVersion() { return "asar_gpu/" + std::string(VERSION_STRING); }
 
 auto TimeStart() { return std::chrono::steady_clock::now(); }
 
