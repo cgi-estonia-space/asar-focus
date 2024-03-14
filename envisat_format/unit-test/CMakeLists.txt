@@ -4,6 +4,7 @@ list(APPEND ENVISAT_FORMAT_UNIT_TEST_SOURCES
         ${CMAKE_CURRENT_LIST_DIR}/envisat_types_test.cc
         ${CMAKE_CURRENT_LIST_DIR}/envisat_parse_util_test.cc
         ${CMAKE_CURRENT_LIST_DIR}/envisat_utils_test.cc
+        ${CMAKE_CURRENT_LIST_DIR}/ers_sbt_test.cc
         ${CMAKE_CURRENT_LIST_DIR}/parse_util_test.cc
 )
 

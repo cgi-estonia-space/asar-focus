@@ -176,8 +176,8 @@ inline void CalculatePrf(uint16_t pri_code, double& pri, double& prf) {
     }
 }
 
-inline const uint8_t* FetchPacketFrom(const uint8_t* start, alus::asar::envformat::ForecastMeta& meta,
-                                      uint32_t& dr_no, uint32_t& sbt) {
+inline const uint8_t* FetchPacketFrom(const uint8_t* start, alus::asar::envformat::ForecastMeta& meta, uint32_t& dr_no,
+                                      uint32_t& sbt) {
     // https://earth.esa.int/eogateway/documents/20142/37627/ERS-products-specification-with-Envisat-format.pdf
     // https://asf.alaska.edu/wp-content/uploads/2019/03/ers_ceos.pdf and ER-IS-ESA-GS-0002 mixed between three.
     auto it = CopyBSwapPOD(meta.isp_sensing_time, start);
@@ -253,7 +253,8 @@ std::vector<ForecastMeta> FetchErsL0ImForecastMeta(const std::vector<char>& file
         } else {
             sbt_repeat = 0;
         }
-        ers::AdjustIspSensingTime(current_meta.isp_sensing_time, sbt, sbt_repeat);
+        bool overflow = (sbt < last_sbt ? true : false);
+        ers::AdjustIspSensingTime(current_meta.isp_sensing_time, sbt, sbt_repeat, overflow);
 
         const auto dr_no_gap = parseutil::CounterGap<uint32_t, DR_NO_MAX>(last_dr_no, dr_no);
         // When gap is 0, this is not handled - could be massive rollover or duplicate or the first packet.
@@ -330,8 +331,8 @@ std::vector<ForecastMeta> FetchErsL0ImForecastMeta(const std::vector<char>& file
     packets_before_start = packets_before_requested_start;
     packets_after_stop = packets_after_requested_stop;
 
-    LOGD << "Data record number discontinuities/total missing - " << dr_no_oos << "/"
-         << dr_no_total_missing << " these were inserted as to be parsed/duplicated during prefetch";
+    LOGD << "Data record number discontinuities/total missing - " << dr_no_oos << "/" << dr_no_total_missing
+         << " these were inserted as to be parsed/duplicated during prefetch";
 
     return forecast_meta;
 }
@@ -366,6 +367,8 @@ RawSampleMeasurements ParseErsLevel0ImPackets(const std::vector<char>& file_data
     uint8_t last_subcommutation_counter{};
     uint32_t last_image_format_counter{};
     InitializeCounters(it, last_dr_no, last_packet_counter, last_subcommutation_counter, last_image_format_counter);
+    uint32_t last_sbt{};
+    FetchSatelliteBinaryTime(it, last_sbt);
 #if HANDLE_DIAGNOSTICS
     PacketParseDiagnostics diagnostics{};
 #endif
@@ -380,11 +383,13 @@ RawSampleMeasurements ParseErsLevel0ImPackets(const std::vector<char>& file_data
         uint32_t sbt;
         FetchSatelliteBinaryTime(it, sbt);
         it = CopyBSwapPOD(echo_meta.isp_sensing_time, it);
+        bool overflow = (sbt < last_sbt ? true : false);
         // sbt_repeat is not handled, because no mechanism could be developed.
         // SBT stays constant for some period of packets due to being updated after every 4th PRI.
         // When dividing SBT update time period with PRI no sensible period did develop between packets,
         // hence this is not used right now. There would be minimal range lines skipped/included due to this anyway.
-        ers::AdjustIspSensingTime(echo_meta.isp_sensing_time, sbt, 0);
+        ers::AdjustIspSensingTime(echo_meta.isp_sensing_time, sbt, 0, overflow);
+        last_sbt = sbt;
 
         if (echo_meta.isp_sensing_time != entry.isp_sensing_time) {
             throw std::runtime_error(fmt::format(
@@ -443,10 +448,10 @@ RawSampleMeasurements ParseErsLevel0ImPackets(const std::vector<char>& file_data
          * ER-IS-ESA-GS-0002  - pg. 4.4 - 24
          */
         echo_meta.onboard_time = sbt;
-//        echo_meta.onboard_time |= static_cast<uint64_t>(it[0]) << 24;
-//        echo_meta.onboard_time |= static_cast<uint64_t>(it[1]) << 16;
-//        echo_meta.onboard_time |= static_cast<uint64_t>(it[2]) << 8;
-//        echo_meta.onboard_time |= static_cast<uint64_t>(it[3]) << 0;
+        //        echo_meta.onboard_time |= static_cast<uint64_t>(it[0]) << 24;
+        //        echo_meta.onboard_time |= static_cast<uint64_t>(it[1]) << 16;
+        //        echo_meta.onboard_time |= static_cast<uint64_t>(it[2]) << 8;
+        //        echo_meta.onboard_time |= static_cast<uint64_t>(it[3]) << 0;
         it += 4;
         /*
          * This word shall define the activity task within the mode of
