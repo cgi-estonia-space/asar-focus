@@ -11,8 +11,11 @@
 #pragma once
 
 #include <filesystem>
+#include <regex>
 #include <vector>
 
 namespace alus::util::filesystem {
     std::vector<std::filesystem::path> GetFileListingRecursively(std::filesystem::path path);
+    std::vector<std::filesystem::path> GetFileListingAt(std::filesystem::path path, const std::regex& e);
+    std::vector<char> ReadAsBuffer(const std::filesystem::path& loc);
 }

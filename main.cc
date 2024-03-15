@@ -48,7 +48,7 @@ void ExceptionMessagePrint(const T& e) {
     LOGE << "Exiting.";
 }
 
-std::string GetSoftwareVersion() { return "asar_focus/" + std::string(VERSION_STRING); }
+std::string GetSoftwareVersion() { return "asar_gpu/" + std::string(VERSION_STRING); }
 
 auto TimeStart() { return std::chrono::steady_clock::now(); }
 
@@ -111,8 +111,13 @@ int main(int argc, char* argv[]) {
         alus::asar::mainflow::TryFetchOrbit(orbit_source, asar_meta, sar_meta);
         InstrumentFile ins_file{};
         ConfigurationFile conf_file{};
+        std::optional<alus::asar::envformat::aux::Patc> patc_handle{std::nullopt};
         alus::asar::envformat::aux::ExternalCalibration xca;
-        alus::asar::mainflow::FetchAuxFiles(ins_file, conf_file, xca, asar_meta, product_type, args.GetAuxPath());
+        alus::asar::mainflow::FetchAuxFiles(ins_file, conf_file, xca, patc_handle, asar_meta, product_type,
+                                            args.GetAuxPath());
+        if (patc_handle.has_value()) {
+            alus::asar::mainflow::CheckAndRegisterPatc(patc_handle.value(), asar_meta);
+        }
         const auto target_product_type =
             alus::asar::specification::TryDetermineTargetProductFrom(product_type, args.GetFocussedProductType());
         (void)target_product_type;
@@ -329,7 +334,7 @@ int main(int argc, char* argv[]) {
         const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
         auto tambov = conf_file.process_gain_ims[swath_idx] / sqrt(xca.scaling_factor_im_slc_vv[swath_idx]);
         if (instrument_type == alus::asar::specification::Instrument::SAR) {
-            tambov /= (2*4);
+            tambov /= (2 * 4);
         }
         auto device_mds_buf = d_workspace.GetAs<char>();
         alus::asar::mainflow::FormatResults(subsetted_raster, device_mds_buf, record_header_bytes, tambov);
@@ -349,8 +354,6 @@ int main(int argc, char* argv[]) {
 
         CHECK_CUDA_ERR(cudaMemcpy(mds.buf, device_mds_buf, mds.n_records * mds.record_size, cudaMemcpyDeviceToHost));
         TimeStop(mds_formation, "MDS Host buffer transfer");
-
-
 
         auto file_write = TimeStart();
         if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {

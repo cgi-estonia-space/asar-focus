@@ -23,6 +23,7 @@
 #include "envisat_lvl0_parser.h"
 #include "envisat_lvl1_writer.h"
 #include "envisat_types.h"
+#include "patc.h"
 #include "sar/focussing_details.h"
 #include "sar/sar_metadata.h"
 
@@ -37,7 +38,8 @@ specification::ProductTypes TryDetermineProductType(std::string_view product_nam
 void TryFetchOrbit(alus::dorisorbit::Parsable& orbit_source, ASARMetadata& asar_meta, SARMetadata& sar_meta);
 
 void FetchAuxFiles(InstrumentFile& ins_file, ConfigurationFile& conf_file, envformat::aux::ExternalCalibration& xca,
-                   ASARMetadata& asar_meta, specification::ProductTypes product_type, std::string_view aux_path);
+                   std::optional<envformat::aux::Patc>& patc, ASARMetadata& asar_meta,
+                   specification::ProductTypes product_type, std::string_view aux_path);
 
 struct AzimuthRangeWindow {
     size_t near_range_pixels_to_remove;
@@ -85,5 +87,7 @@ void SubsetResultsAndReassembleMeta(DevicePaddedImage& azimuth_compressed_raster
                                     DevicePaddedImage& subsetted_raster);
 
 void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed);
+
+void CheckAndRegisterPatc(const envformat::aux::Patc& patc, ASARMetadata& metadata);
 
 }  // namespace alus::asar::mainflow

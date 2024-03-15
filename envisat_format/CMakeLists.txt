@@ -11,8 +11,10 @@ list(APPEND ENVISAT_FORMAT_SOURCES
         ${CMAKE_CURRENT_LIST_DIR}/src/envisat_lvl0_parser.cc
         ${CMAKE_CURRENT_LIST_DIR}/src/envisat_lvl1_writer.cc
         ${CMAKE_CURRENT_LIST_DIR}/src/envisat_parse_util.cu
-        ${CMAKE_CURRENT_LIST_DIR}/src/ers_im_parse.cc
         ${CMAKE_CURRENT_LIST_DIR}/src/ers_aux_file.cc
+        ${CMAKE_CURRENT_LIST_DIR}/src/ers_im_parse.cc
+        ${CMAKE_CURRENT_LIST_DIR}/src/ers_sbt.cc
+        ${CMAKE_CURRENT_LIST_DIR}/src/patc.cc
 )
 
 add_library(envisat-format-static STATIC ${ENVISAT_FORMAT_SOURCES})

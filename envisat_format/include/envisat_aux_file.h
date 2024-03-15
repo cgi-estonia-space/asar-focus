@@ -10,12 +10,14 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <string_view>
 
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include "bswap_util.h"
 #include "envisat_aux_xca.h"
+#include "patc.h"
 
 /**
  * Parser for ASA_CON and ASA_INS files, auxiliary files used for metadata extractions
@@ -715,4 +717,5 @@ void FindCONFile(std::string aux_root, boost::posix_time::ptime start, Configura
 
 namespace alus::asar::envformat::aux {
 void GetXca(std::string_view aux_root, boost::posix_time::ptime start, ExternalCalibration& xca, std::string& filename);
+std::optional<Patc> GetTimeCorrelation(std::string_view aux_root);
 }

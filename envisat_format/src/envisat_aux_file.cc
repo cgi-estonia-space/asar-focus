@@ -12,6 +12,8 @@
 #include "alus_log.h"
 #include "asar_aux.h"
 #include "checks.h"
+#include "filesystem_util.h"
+#include "patc.h"
 
 namespace {
 std::string DetermineFilePath(std::string aux_root, boost::posix_time::ptime start, alus::asar::aux::Type t) {
@@ -123,4 +125,26 @@ void GetXca(std::string_view aux_root, boost::posix_time::ptime start, ExternalC
 
     filename = std::filesystem::path(file_path).filename();
 }
+
+std::optional<Patc> GetTimeCorrelation(std::string_view aux_root) {
+    const std::regex patc_reg{R"(PATC.*)"};
+
+    if (!std::filesystem::exists(aux_root)) {
+        throw std::runtime_error("The auxiliary folder - " + std::string(aux_root) + " - does not exist.");
+    }
+
+    const auto patc_listing = util::filesystem::GetFileListingAt(aux_root, patc_reg);
+    if (patc_listing.size() > 1) {
+        throw std::runtime_error("Expected single PATC file in the '" + std::string(aux_root) + "'. There were " +
+                                 std::to_string(patc_listing.size()) + " found.");
+    }
+
+    if (patc_listing.size() == 0) {
+        LOGW << "No PATC files found at " << aux_root;
+        return std::nullopt;
+    }
+
+    return ParsePatc(patc_listing.front());
+}
+
 }  // namespace alus::asar::envformat::aux

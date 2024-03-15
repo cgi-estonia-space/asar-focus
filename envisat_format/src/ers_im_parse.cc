@@ -21,6 +21,7 @@
 #include "envisat_format_kernels.h"
 #include "envisat_utils.h"
 #include "ers_env_format.h"
+#include "ers_sbt.h"
 #include "parse_util.h"
 
 #define DEBUG_PACKETS 0
@@ -90,6 +91,7 @@ constexpr auto DR_NO_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint3
 constexpr auto PACKET_COUNTER_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint8_t, 8>()};
 constexpr uint8_t SUBCOMMUTATION_COUNTER_MAX{48};
 constexpr auto IMAGE_FORMAT_COUNTER_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint32_t, 24>()};
+constexpr auto SBT_MAX{alus::asar::envformat::parseutil::MaxValueForBits<uint32_t, 32>()};
 
 void InitializeDataRecordNo(const uint8_t* packet_start, uint32_t& dr_no) {
     FetchUint32(packet_start + alus::asar::envformat::ers::highrate::PROCESSOR_ANNOTATION_ISP_SIZE_BYTES +
@@ -100,6 +102,19 @@ void InitializeDataRecordNo(const uint8_t* packet_start, uint32_t& dr_no) {
     } else {
         dr_no = DR_NO_MAX;
     }
+}
+
+void FetchSatelliteBinaryTime(const uint8_t* packet_start, uint32_t& sbt) {
+    /*
+         * The update of that binary counter shall occur every 4th PRI.
+         * The time relation to the echo data in the format is as following:
+         * the transfer of the ICU on-board time to the auxiliary memory
+         * occurs t2 before the RF transmit pulse as depicted in
+         * Fig. 4.4.2.4.6-3. The least significant bit is equal to 1/256 sec.
+         *
+         * ER-IS-ESA-GS-0002  - pg. 4.4 - 24
+     */
+    FetchUint32(packet_start + alus::asar::envformat::ers::highrate::SBT_OFFSET_BYTES, sbt);
 }
 
 void InitializeCounters(const uint8_t* packets_start, uint32_t& dr_no, uint8_t& packet_counter,
@@ -156,7 +171,7 @@ inline void FetchPriCode(const uint8_t* start_array, uint16_t& var) {
     var |= start_array[1];
 }
 
-// TODO - Use it inside the parsing or metadata calculation.
+// This is deprecated, will be removed along with the initial parsing flow.
 inline void CalculatePrf(uint16_t pri_code, double& pri, double& prf) {
     // ISCE2 uses 210.943006e-9, but
     // ERS-1-Satellite-to-Ground-Segment-Interface-Specification_01.09.1993_v2D_ER-IS-ESA-GS-0001_EECF05
@@ -170,8 +185,8 @@ inline void CalculatePrf(uint16_t pri_code, double& pri, double& prf) {
     }
 }
 
-inline const uint8_t* FetchPacketFrom(const uint8_t* start, alus::asar::envformat::ForecastMeta& meta,
-                                      uint32_t& dr_no) {
+inline const uint8_t* FetchPacketFrom(const uint8_t* start, alus::asar::envformat::ForecastMeta& meta, uint32_t& dr_no,
+                                      uint32_t& sbt) {
     // https://earth.esa.int/eogateway/documents/20142/37627/ERS-products-specification-with-Envisat-format.pdf
     // https://asf.alaska.edu/wp-content/uploads/2019/03/ers_ceos.pdf and ER-IS-ESA-GS-0002 mixed between three.
     auto it = CopyBSwapPOD(meta.isp_sensing_time, start);
@@ -179,6 +194,7 @@ inline const uint8_t* FetchPacketFrom(const uint8_t* start, alus::asar::envforma
     uint16_t isp_length;
     it = CopyBSwapPOD(isp_length, it);
     InitializeDataRecordNo(start, dr_no);
+    FetchSatelliteBinaryTime(start, sbt);
 
     // ISP size - 1.
     if (isp_length != 11465) {
@@ -229,15 +245,25 @@ std::vector<ForecastMeta> FetchErsL0ImForecastMeta(const std::vector<char>& file
     size_t dr_no_total_missing{};
     uint32_t last_dr_no;
     InitializeDataRecordNo(next_packet, last_dr_no);
+    uint32_t last_sbt;
+    uint32_t sbt_repeat{0};
+    FetchSatelliteBinaryTime(next_packet, last_sbt);
 
     size_t i{};
     for (; i < mdsr.num_dsr; i++) {
         ForecastMeta current_meta;
         uint32_t dr_no;
         current_meta.packet_start_offset_bytes = next_packet - packets_start;
-        next_packet = FetchPacketFrom(next_packet, current_meta, dr_no);
-
-        // LOGD << i << " " << MjdToPtime(current_meta.isp_sensing_time);
+        uint32_t sbt;
+        next_packet = FetchPacketFrom(next_packet, current_meta, dr_no, sbt);
+        const auto sbt_delta = parseutil::CounterGap<uint32_t, SBT_MAX>(last_sbt, sbt);
+        if (sbt_delta == 0) {
+            sbt_repeat++;
+        } else {
+            sbt_repeat = 0;
+        }
+        bool overflow = (sbt < last_sbt ? true : false);
+        ers::AdjustIspSensingTime(current_meta.isp_sensing_time, sbt, sbt_repeat, overflow);
 
         const auto dr_no_gap = parseutil::CounterGap<uint32_t, DR_NO_MAX>(last_dr_no, dr_no);
         // When gap is 0, this is not handled - could be massive rollover or duplicate or the first packet.
@@ -314,8 +340,8 @@ std::vector<ForecastMeta> FetchErsL0ImForecastMeta(const std::vector<char>& file
     packets_before_start = packets_before_requested_start;
     packets_after_stop = packets_after_requested_stop;
 
-    LOGD << "Data record number discontinuities/total missing - " << dr_no_oos << "/"
-         << dr_no_total_missing << " these were inserted as to be parsed/duplicated during prefetch";
+    LOGD << "Data record number discontinuities/total missing - " << dr_no_oos << "/" << dr_no_total_missing
+         << " these were inserted as to be parsed/duplicated during prefetch";
 
     return forecast_meta;
 }
@@ -350,6 +376,8 @@ RawSampleMeasurements ParseErsLevel0ImPackets(const std::vector<char>& file_data
     uint8_t last_subcommutation_counter{};
     uint32_t last_image_format_counter{};
     InitializeCounters(it, last_dr_no, last_packet_counter, last_subcommutation_counter, last_image_format_counter);
+    uint32_t last_sbt{};
+    FetchSatelliteBinaryTime(it, last_sbt);
 #if HANDLE_DIAGNOSTICS
     PacketParseDiagnostics diagnostics{};
 #endif
@@ -361,7 +389,16 @@ RawSampleMeasurements ParseErsLevel0ImPackets(const std::vector<char>& file_data
         it = packets_start + entry.packet_start_offset_bytes;
         EchoMeta echo_meta = {};
 
+        uint32_t sbt;
+        FetchSatelliteBinaryTime(it, sbt);
         it = CopyBSwapPOD(echo_meta.isp_sensing_time, it);
+        bool overflow = (sbt < last_sbt ? true : false);
+        // sbt_repeat is not handled, because no mechanism could be developed.
+        // SBT stays constant for some period of packets due to being updated after every 4th PRI.
+        // When dividing SBT update time period with PRI no sensible period did develop between packets,
+        // hence this is not used right now. There would be minimal range lines skipped/included due to this anyway.
+        ers::AdjustIspSensingTime(echo_meta.isp_sensing_time, sbt, 0, overflow);
+        last_sbt = sbt;
 
         if (echo_meta.isp_sensing_time != entry.isp_sensing_time) {
             throw std::runtime_error(fmt::format(
@@ -415,15 +452,11 @@ RawSampleMeasurements ParseErsLevel0ImPackets(const std::vector<char>& file_data
          * The time relation to the echo data in the format is as following:
          * the transfer of the ICU on-board time to the auxiliary memory
          * occurs t2 before the RF transmit pulse as depicted in
-         * Fig. 4.4.2.4.6-3. The last significant bit is equal to 1/256 sec.
+         * Fig. 4.4.2.4.6-3. The least significant bit is equal to 1/256 sec.
          *
          * ER-IS-ESA-GS-0002  - pg. 4.4 - 24
          */
-        echo_meta.onboard_time = 0;
-        echo_meta.onboard_time |= static_cast<uint64_t>(it[0]) << 24;
-        echo_meta.onboard_time |= static_cast<uint64_t>(it[1]) << 16;
-        echo_meta.onboard_time |= static_cast<uint64_t>(it[2]) << 8;
-        echo_meta.onboard_time |= static_cast<uint64_t>(it[3]) << 0;
+        echo_meta.onboard_time = sbt;
         it += 4;
         /*
          * This word shall define the activity task within the mode of

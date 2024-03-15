@@ -38,6 +38,8 @@ struct ASARMetadata {
     std::string orbit_dataset_name;
     std::string acquistion_station;
     std::string processing_station;
+    uint32_t rel_orbit;
+    uint32_t abs_orbit;
     boost::posix_time::ptime sensing_start;
     boost::posix_time::ptime sensing_stop;
     boost::posix_time::ptime first_line_time;

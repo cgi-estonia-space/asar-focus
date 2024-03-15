@@ -22,6 +22,7 @@ constexpr size_t FEP_ANNOTATION_SIZE_BYTES{20};
 constexpr size_t MDSR_ISP_SIZE_BYTES{11466};  // Adding ISP sensing (12) and FEP annotations (20) one gets sum above.
 constexpr size_t DATA_RECORD_NUMBER_SIZE_BYTES{4};
 constexpr size_t IDHT_HEADER_SIZE_BYTES{10};
+constexpr size_t SBT_OFFSET_BYTES{PROCESSOR_ANNOTATION_ISP_SIZE_BYTES + FEP_ANNOTATION_SIZE_BYTES + 16};
 constexpr size_t AUXILIARY_REPLICA_CALIBRATION_SIZE_BYTES{220};
 constexpr size_t MEASUREMENT_DATA_SIZE_BYTES{11232};
 constexpr size_t MEASUREMENT_DATA_SAMPLE_COUNT{5616};
