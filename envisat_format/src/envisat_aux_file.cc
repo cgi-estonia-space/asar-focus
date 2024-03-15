@@ -133,7 +133,7 @@ std::optional<Patc> GetTimeCorrelation(std::string_view aux_root) {
         throw std::runtime_error("The auxiliary folder - " + std::string(aux_root) + " - does not exist.");
     }
 
-    const auto& patc_listing = util::filesystem::GetFileListingAt(aux_root, patc_reg);
+    const auto patc_listing = util::filesystem::GetFileListingAt(aux_root, patc_reg);
     if (patc_listing.size() > 1) {
         throw std::runtime_error("Expected single PATC file in the '" + std::string(aux_root) + "'. There were " +
                                  std::to_string(patc_listing.size()) + " found.");

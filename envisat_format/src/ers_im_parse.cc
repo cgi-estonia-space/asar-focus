@@ -105,6 +105,15 @@ void InitializeDataRecordNo(const uint8_t* packet_start, uint32_t& dr_no) {
 }
 
 void FetchSatelliteBinaryTime(const uint8_t* packet_start, uint32_t& sbt) {
+    /*
+         * The update of that binary counter shall occur every 4th PRI.
+         * The time relation to the echo data in the format is as following:
+         * the transfer of the ICU on-board time to the auxiliary memory
+         * occurs t2 before the RF transmit pulse as depicted in
+         * Fig. 4.4.2.4.6-3. The least significant bit is equal to 1/256 sec.
+         *
+         * ER-IS-ESA-GS-0002  - pg. 4.4 - 24
+     */
     FetchUint32(packet_start + alus::asar::envformat::ers::highrate::SBT_OFFSET_BYTES, sbt);
 }
 
@@ -448,10 +457,6 @@ RawSampleMeasurements ParseErsLevel0ImPackets(const std::vector<char>& file_data
          * ER-IS-ESA-GS-0002  - pg. 4.4 - 24
          */
         echo_meta.onboard_time = sbt;
-        //        echo_meta.onboard_time |= static_cast<uint64_t>(it[0]) << 24;
-        //        echo_meta.onboard_time |= static_cast<uint64_t>(it[1]) << 16;
-        //        echo_meta.onboard_time |= static_cast<uint64_t>(it[2]) << 8;
-        //        echo_meta.onboard_time |= static_cast<uint64_t>(it[3]) << 0;
         it += 4;
         /*
          * This word shall define the activity task within the mode of

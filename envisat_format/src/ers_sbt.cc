@@ -62,7 +62,7 @@ void AdjustIspSensingTime(mjd& isp_sensing_time, uint32_t sbt, uint32_t, bool ov
         delta_count = parseutil::CounterGap<uint32_t, SBT_MAX>(patc_cor.sbt_counter, sbt);
     }
     const int64_t nanoseconds_diff = static_cast<int64_t>(patc_cor.sbt_period) * delta_count;
-    const auto microseconds_val = static_cast<int64_t>(nanoseconds_diff / 1e3);
+    const auto microseconds_val = static_cast<int64_t>(nanoseconds_diff / 1000);
     adjusted_ptime = patc_time_point + boost::posix_time::microseconds(microseconds_val);
 
     isp_sensing_time = PtimeToMjd(adjusted_ptime);

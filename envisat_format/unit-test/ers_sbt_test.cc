@@ -33,7 +33,7 @@ TEST(ErsSbt, WhenEpochIsNegativeRegisterPatcThrows) {
 
 TEST(ErsSbt, WhenEpochIsEarlierThan1990RegisterPatcThrows) {
     Patc p{};
-    p.epoch_1950 = 14974;
+    p.epoch_1950 = 14974; // Difference of days between 1950 Jan 1st and 1990 Dec 31st.
     EXPECT_THROW(RegisterPatc(p), std::runtime_error);
 }
 
