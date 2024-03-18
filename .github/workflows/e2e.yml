@@ -96,9 +96,7 @@ jobs:
     name: Stop GPU instance
     runs-on: ubuntu-latest
     needs: [start-gpu-instance, end-to-end-testing]
-    if: |
-      always() &&
-      needs.start-gpu-instance.result == 'success'
+    if: needs.start-gpu-instance.result == 'success'
     steps:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
