@@ -33,6 +33,10 @@ __global__ void SrGrInterpolation(const float* data_in, KernelArgs args, float* 
     const int x = threadIdx.x + blockDim.x * blockIdx.x;
     const int y = threadIdx.y + blockDim.y * blockIdx.y;
 
+    if (x >= args.out_x_size || y >= args.y_size) {
+        return;
+    }
+
     const int out_idx = y * args.out_x_size + x;
 
     const float ground_distance = x * args.ground_spacing;
@@ -80,7 +84,7 @@ void SlantRangeToGroundRangeInterpolation(SARMetadata& sar_meta, const float* d_
     std::vector<double> grsr_poly = Polyfit(ground_distances, slant_ranges, 4);
 
     std::string coeff_str = "[";
-    for(const auto& e : grsr_poly) {
+    for (const auto& e : grsr_poly) {
         coeff_str += fmt::format("{} ", e);
     }
     coeff_str += " ]";
