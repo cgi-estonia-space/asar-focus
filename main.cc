@@ -352,7 +352,7 @@ int main(int argc, char* argv[]) {
             lvl1_file_handle.WriteSync(mds.buf, mds.n_records * mds.record_size);
             LOGI << "IMP done @ " << lvl1_out_full_path;
         }
-        if (alus::asar::specification::IsSLCProduct(asar_meta.target_product_type)) {
+        else if (alus::asar::specification::IsSLCProduct(asar_meta.target_product_type)) {
             // az_compressed_image is unused from now on.
             constexpr size_t record_header_bytes = 12 + 1 + 4;
             const auto mds_record_size = subsetted_raster.XSize() * sizeof(IQ16) + record_header_bytes;
@@ -415,6 +415,7 @@ int main(int argc, char* argv[]) {
             lvl1_file_handle.WriteSync(mds.buf, mds.n_records * mds.record_size);
             TimeStop(file_write, "LVL1 file write");
         } else {
+            throw std::runtime_error("Unknown/unsupported output product type");
         }
     } catch (const boost::program_options::error& e) {
         ExceptionMessagePrint(e);

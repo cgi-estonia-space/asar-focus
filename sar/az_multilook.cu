@@ -1,8 +1,10 @@
 #include "az_multilook.cuh"
 
-#include "alus_log.h"
 #include "checks.h"
 
+// TODO implement frequency domain multilooking? Is is better
+
+// Implements sliding window azimuth time domain multilooking and azimuth resampling in one step
 __global__ void TimeDomainAzimuthLook(const cufftComplex* data_in, int x_size, int in_y_size, int out_y_size,
                                       float resample_ratio, float* data_out) {
     const int x = threadIdx.x + blockDim.x * blockIdx.x;
