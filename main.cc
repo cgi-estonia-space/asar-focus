@@ -121,8 +121,6 @@ int main(int argc, char* argv[]) {
         if (patc_handle.has_value()) {
             alus::asar::mainflow::CheckAndRegisterPatc(patc_handle.value(), asar_meta);
         }
-        alus::asar::mainflow::FetchAuxFiles(ins_file, conf_file, xca, patc_handle, asar_meta, product_type,
-                                            args.GetAuxPath());
         asar_meta.target_product_type =
             alus::asar::specification::TryDetermineTargetProductFrom(product_type, args.GetFocussedProductType());
         // Get packets' sensing start/end ... from which can be decided offset in binary and windowing offset?
