@@ -72,11 +72,17 @@ ProductTypes TryDetermineTargetProductFrom(ProductTypes in_product, std::string_
         if (boost::iequals(user_defined_target_type, "IMS")) {
             return ProductTypes::SAR_IMS;
         }
+        if (boost::iequals(user_defined_target_type, "IMP")) {
+            return ProductTypes::SAR_IMP;
+        }
     }
 
     if (in_product == ProductTypes::ASA_IM0) {
         if (boost::iequals(user_defined_target_type, "IMS")) {
             return ProductTypes::ASA_IMS;
+        }
+        if (boost::iequals(user_defined_target_type, "IMP")) {
+            return ProductTypes::ASA_IMP;
         }
     }
 

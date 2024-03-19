@@ -15,7 +15,10 @@
 namespace alus::asar::envformat {
 
 // dest_buffer must be on device and have enough capacity to accommodate original image (complex float) without padding.
-void ConditionResults(DevicePaddedImage& img, char* dest_space, size_t record_header_size, float calibration_constant);
+void ConditionResultsSLC(DevicePaddedImage& img, char* dest_space, size_t record_header_size,
+                         float calibration_constant);
+void ConditionResultsDetected(const float* d_img, char* d_dest_space, int range_size, int azimuth_size,
+                              size_t record_header_size, float calibration_constant);
 
 void ConvertErsImSamplesToComplex(const uint8_t* samples, size_t sample_count_per_range, size_t packets,
                                   const uint16_t* swst_codes, uint16_t min_swst, cufftComplex* gpu_buffer,

@@ -25,6 +25,13 @@ constexpr double EP2 = E2 / (1 - E2);
 constexpr double DTOR = M_PI / 180.0;
 constexpr double RTOD = 180 / M_PI;
 
+inline double Distance(GeoPos3D xyz1, GeoPos3D xyz2) {
+    double dx = xyz1.x - xyz2.x;
+    double dy = xyz1.y - xyz2.y;
+    double dz = xyz1.z - xyz2.z;
+    return sqrt(dx * dx + dy * dy + dz * dz);
+}
+
 inline GeoPos3D Geo2xyzWgs84(double latitude, double longitude, double altitude) {
     double const lat = latitude * DTOR;
     double const lon = longitude * DTOR;

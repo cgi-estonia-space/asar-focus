@@ -121,7 +121,7 @@ asar_focus/0.2.0
                         verbose|debug|info|warning|error
 ```
 
-As of release version 0.2 only single `type` is supported which is `IMS`. Any other value would result in termination
+As of release version 0.3 `type` supports `IMS` or `IMP`. Any other value would result in termination
 of processing with accompanying message on console.
 
 ### 3.1.1 Hidden CLI features
@@ -163,16 +163,17 @@ DOR_VOR_AXVF-P20120424_125300_20040228_215528_20040301_002328
 
 ## 3.2 Input datasets
 
-Single level 0 **envisat format** ERS-1/2 and Envisat mission dataset is required. As of version 0.2 only imaging mode
+Single level 0 **envisat format** ERS-1/2 and Envisat mission dataset is required. As of version 0.3 only imaging mode
 datasets are supported. The specification is given in document `PO-RS-MDA-GS-2009 4/C`.
 
 ## 3.3 Auxiliary files
 
-As of version 0.2 the following auxiliary files are used:
+As of version 0.3 the following auxiliary files are used:
 * DORIS orbit files in envisat format, see [DOR_VOR_AX](https://earth.esa.int/eogateway/catalog/envisat-doris-precise-orbit-state-vectors-dor-vor_ax-)
 * Processor configuration file (ASA_CON_AX/ER_CON_AX)
 * Instrument characterization file (AUX_INS_AX/ER_INS_AX)
 * External calibration data (ASA_XCA_AX/ER_XCA)
+* PATC for ERS onboard time corrections
 
 For auxiliary file access and documentation please visit [ERS aux](https://earth.esa.int/eogateway/instruments/sar-ers/auxiliary-data)
 and [ENVISAT aux](https://earth.esa.int/eogateway/instruments/asar/auxiliary-data) pages at ESA.

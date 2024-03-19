@@ -18,7 +18,7 @@
 
 #include "envisat_lvl0_parser.h"
 
-struct __attribute__((packed)) EnvisatIMS {
+struct __attribute__((packed)) EnvisatSubFiles {
     Lvl1MPH mph;
     Lvl1SPH sph;
     SummaryQualityADS summary_quality;
@@ -26,6 +26,7 @@ struct __attribute__((packed)) EnvisatIMS {
     DopplerCentroidParameters dop_centroid_coeffs;
     ChirpParameters chirp_params;
     GeoLocationADSR geolocation_grid[12];
+    SrGrADSR srgr_params;
 };
 
 struct MDS {
@@ -39,5 +40,5 @@ struct MDS {
     MDS& operator=(const MDS&) = delete;
 };
 
-void ConstructIMS(EnvisatIMS& ims, const SARMetadata& sar_meta, const ASARMetadata& asar_meta, const MDS& mds,
+std::vector<uint8_t> ConstructEnvisatFileHeader(EnvisatSubFiles& ims, const SARMetadata& sar_meta, const ASARMetadata& asar_meta, const MDS& mds,
                   std::string_view software_ver);

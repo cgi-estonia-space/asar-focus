@@ -30,9 +30,10 @@
 
 <div align="center">
 
-| Issue/Revision | Date       | Pages | Description                        |
-|----------------|------------|-------|------------------------------------|
-| 1/A            | 08/01/2024 | All   | Initial document for version 0.2.0 |
+| Issue/Revision | Date       | Pages/Paragraphs | Description                         |
+|----------------|------------|------------------|-------------------------------------|
+| 1/A            | 08/01/2024 | All              | Initial document for version 0.2.0  |
+| 1/B            | 19/03/2024 | 1.2, 5.2         | Version 0.3.0 supports IMP and PATC |
 
 </div>
 
@@ -104,7 +105,6 @@ The project could be run on other Linux distributions as well, with possible twe
 Current state of the focusser will be able to focus ERS-1/2 and Envisat's synthetic aperture radar (SAR) instrument's 
 data for the imaging mode (IM) datasets only. It lacks some functionality in order to match the baseline PF-ASAR
 processor functionality:
-* PATC/PATN support for ERS time synchronization is missing
 * Sections of metadata is not appropriately formed (enough for products to be further processed in ESA SNAP)
 * Focussing quality is not matched (visually good, but histograms of focussed I/Q raster are not so well-formed)
 
@@ -217,7 +217,7 @@ It contains the following sub-functionality:
 * DORIS orbit file search and parsing
 * Auxiliary files' search and parsing
 * Level 0 imaging mode dataset parsing
-* Level 1 image mode single look complex dataset structure and writing
+* Level 1 image mode single look complex and ground range precision datasets structure and writing
 * GPU computation kernels to condition the measurements
 
 ## 5.3 Boost log
@@ -280,7 +280,7 @@ Example GPU profiling chart is presented below
 *Figure 6.1 - Processor profiling*
 
 Test setup:
-* RTX3060 Laptop GPU<
+* RTX3060 Laptop GPU
 * AMD Ryzen 7 5800H CPU
 * Fast NVMe SSD
 

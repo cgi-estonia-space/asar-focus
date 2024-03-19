@@ -9,6 +9,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(SAR_SOURCES
+        sar/az_multilook.cuh
+        sar/az_multilook.cu
         sar/fractional_doppler_centroid.cu
         sar/fractional_doppler_centroid.cuh
         sar/iq_correction.cu
@@ -21,9 +23,13 @@ set(SAR_SOURCES
         sar/range_compression.cuh
         sar/range_doppler_algorithm.cu
         sar/range_doppler_algorithm.cuh
+        sar/range_spreading_loss.cuh
+        sar/range_spreading_loss.cu
         sar/sar_chirp.h
         sar/sar_chirp.cpp
         sar/sar_metadata.h
+        sar/srgr.cuh
+        sar/srgr.cu
 )
 
 set(SOURCES

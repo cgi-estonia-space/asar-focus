@@ -18,7 +18,7 @@
 
 namespace alus::asar::envformat {
 
-__global__ void CalibrateClampToBigEndian(cufftComplex* data, int x_size_stride, int x_size, int y_size,
+__global__ void CalibrateClampToBigEndian(const cufftComplex* data, int x_size_stride, int x_size, int y_size,
                                           char* dest_space, int record_header_size, float calibration_constant) {
     const int x = threadIdx.x + blockIdx.x * blockDim.x;
     const int y = threadIdx.y + blockIdx.y * blockDim.y;
@@ -54,7 +54,37 @@ __global__ void CalibrateClampToBigEndian(cufftComplex* data, int x_size_stride,
     }
 }
 
-void ConditionResults(DevicePaddedImage& img, char* dest_space, size_t record_header_size, float calibration_constant) {
+__global__ void CalibrateClampToBigEndianDetected(const float* data, int x_size, int y_size, char* dest_space,
+                                                  int record_header_size, float calibration_constant) {
+    const int x = threadIdx.x + blockIdx.x * blockDim.x;
+    const int y = threadIdx.y + blockIdx.y * blockDim.y;
+
+    const int src_idx = (y * x_size) + x;
+    const int mds_x_size = x_size * sizeof(uint16_t) + record_header_size;
+
+    if (x < x_size && y < y_size) {
+        auto pix = data[src_idx];
+        float val = pix * calibration_constant;
+        val = 10 * log10f(val);  // is IMP log scaled? S1 GRD is? TODO investigate
+        const uint16_t result = static_cast<uint16_t>(std::min<float>(val, UINT16_MAX));
+
+        // |HEADER...|packet data....................................|
+        // |HEADER...|packet data....................................|
+        // ...
+        const int dest_idx = (y * mds_x_size) + record_header_size + (x * sizeof(uint16_t));
+        if (x == 0) {
+            for (int i{record_header_size}; i >= 0; i--) {
+                dest_space[dest_idx - i] = 0x00;
+            }
+        }
+
+        dest_space[dest_idx] = static_cast<char>(result & 0x00FF);
+        dest_space[dest_idx + 1] = static_cast<char>((result >> 8) & 0x00FF);
+    }
+}
+
+void ConditionResultsSLC(DevicePaddedImage& img, char* dest_space, size_t record_header_size,
+                         float calibration_constant) {
     const auto x_size_stride = img.XStride();  // Need to count for FFT padding when rows are concerned
     const auto x_size = img.XSize();
     const auto y_size = img.YSize();  // No need to calculate on Y padded FFT data
@@ -62,6 +92,16 @@ void ConditionResults(DevicePaddedImage& img, char* dest_space, size_t record_he
     dim3 grid_sz((x_size_stride + 15) / 16, (y_size + 15) / 16);
     CalibrateClampToBigEndian<<<grid_sz, block_sz>>>(img.Data(), x_size_stride, x_size, y_size, dest_space,
                                                      record_header_size, calibration_constant);
+    CHECK_CUDA_ERR(cudaDeviceSynchronize());
+    CHECK_CUDA_ERR(cudaGetLastError());
+}
+
+void ConditionResultsDetected(const float* d_img, char* d_dest_space, int range_size, int azimuth_size,
+                              size_t record_header_size, float calibration_constant) {
+    dim3 block_sz(16, 16);
+    dim3 grid_sz((range_size + 15) / 16, (azimuth_size + 15) / 16);
+    CalibrateClampToBigEndianDetected<<<grid_sz, block_sz>>>(d_img, range_size, azimuth_size, d_dest_space,
+                                                             record_header_size, calibration_constant);
     CHECK_CUDA_ERR(cudaDeviceSynchronize());
     CHECK_CUDA_ERR(cudaGetLastError());
 }

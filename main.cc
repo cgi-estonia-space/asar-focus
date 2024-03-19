@@ -31,13 +31,16 @@
 #include "geo_tools.h"
 #include "main_flow.h"
 #include "mem_alloc.h"
+#include "sar/az_multilook.cuh"
 #include "sar/focussing_details.h"
 #include "sar/fractional_doppler_centroid.cuh"
 #include "sar/iq_correction.cuh"
 #include "sar/processing_velocity_estimation.h"
 #include "sar/range_compression.cuh"
 #include "sar/range_doppler_algorithm.cuh"
+#include "sar/range_spreading_loss.cuh"
 #include "sar/sar_chirp.h"
+#include "sar/srgr.cuh"
 
 namespace {
 
@@ -118,9 +121,8 @@ int main(int argc, char* argv[]) {
         if (patc_handle.has_value()) {
             alus::asar::mainflow::CheckAndRegisterPatc(patc_handle.value(), asar_meta);
         }
-        const auto target_product_type =
+        asar_meta.target_product_type =
             alus::asar::specification::TryDetermineTargetProductFrom(product_type, args.GetFocussedProductType());
-        (void)target_product_type;
         // Get packets' sensing start/end ... from which can be decided offset in binary and windowing offset?
         const auto fetch_meta_start = TimeStart();
         // Default request is 3000 before and after, which should be enough, exact amount is calculated later based
@@ -272,7 +274,7 @@ int main(int argc, char* argv[]) {
         az_compressed_image.ZeroFillPaddings();
 
         std::string lvl1_out_name = asar_meta.product_name;
-        lvl1_out_name.at(6) = 'S';
+        lvl1_out_name.at(6) = alus::asar::specification::IsSLCProduct(asar_meta.target_product_type) ? 'S' : 'P';
         lvl1_out_name.at(8) = '1';
         const std::string lvl1_out_full_path =
             std::string(args.GetOutputPath()) + std::filesystem::path::preferred_separator + lvl1_out_name;
@@ -292,76 +294,129 @@ int main(int argc, char* argv[]) {
 
         auto result_file_assembly = TimeStart();
 
-        EnvisatIMS ims{};
-        alus::asar::mainflow::PrefillIms(ims, packets_metadata.size());
+        EnvisatSubFiles envisat_headers{};
+        alus::asar::mainflow::PrefillIms(envisat_headers, packets_metadata.size());
 
         DevicePaddedImage subsetted_raster;
         alus::asar::mainflow::SubsetResultsAndReassembleMeta(az_compressed_image, az_rg_windowing, packets_metadata,
                                                              asar_meta, sar_meta, ins_file, product_type, d_workspace,
                                                              subsetted_raster);
-        // az_compressed_image is unused from now on.
-        constexpr size_t record_header_bytes = 12 + 1 + 4;
-        const auto mds_record_size = subsetted_raster.XSize() * sizeof(IQ16) + record_header_bytes;
-        const auto mds_record_count = subsetted_raster.YSize();
-        MDS mds;
-        mds.n_records = mds_record_count;
-        mds.record_size = mds_record_size;
-        auto mds_buffer_init = std::async(std::launch::async, [&mds] {
-            mds.buf = static_cast<char*>(alus::util::Memalloc(mds.n_records * mds.record_size));
-        });
-
-        ConstructIMS(ims, sar_meta, asar_meta, mds, GetSoftwareVersion());
-        if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
-            throw std::runtime_error("Could not create L1 file at " + lvl1_out_full_path);
-        }
 
         if (args.StorePlots()) {
             alus::asar::mainflow::StorePlots(args.GetOutputPath().data(), wif_name_base, sar_meta);
         }
 
-        lvl1_file_handle.Write(&ims, sizeof(ims));
+        if (alus::asar::specification::IsDetectedProduct(asar_meta.target_product_type)) {
+            AzimuthMultiLook(subsetted_raster, d_workspace, sar_meta);
 
-        TimeStop(result_file_assembly, "Creating IMS and write start, subsetting data");
+            RangeSpreadingLossCorrection(d_workspace.GetAs<float>(), sar_meta.img.range_size, sar_meta.img.azimuth_size,
+                                         {sar_meta.slant_range_first_sample, sar_meta.range_spacing,
+                                          alus::asar::specification::REFERENCE_RANGE});
+            auto srgr_dest = subsetted_raster.ReleaseMemory();
+            SlantRangeToGroundRangeInterpolation(sar_meta, d_workspace.GetAs<float>(), srgr_dest.GetAs<float>());
 
-        auto result_correction_start = TimeStart();
-        if (d_workspace.ByteSize() < static_cast<size_t>(mds.record_size * mds.n_records)) {
-            throw std::logic_error(
-                "Implementation error occurred - CUDA workspace buffer shall be made larger or equal to what is "
-                "required for MDS buffer.");
+            auto format_result_workspace = std::move(d_workspace);
+            constexpr size_t record_header_bytes = 12 + 1 + 4;
+            const auto mds_record_size = sar_meta.img.range_size * sizeof(uint16_t) + record_header_bytes;
+            const auto mds_record_count = sar_meta.img.azimuth_size;
+            MDS mds;
+            mds.n_records = mds_record_count;
+            mds.record_size = mds_record_size;
+            mds.buf = new char[mds.n_records * mds.record_size];
+            const std::vector<uint8_t> output_header =
+                ConstructEnvisatFileHeader(envisat_headers, sar_meta, asar_meta, mds, GetSoftwareVersion());
+            if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
+                throw std::runtime_error("Could not create L1 file at " + lvl1_out_full_path);
+            }
+
+            lvl1_file_handle.Write(output_header.data(), output_header.size());
+            if (format_result_workspace.ByteSize() < static_cast<size_t>(mds.record_size * mds.n_records)) {
+                throw std::logic_error(
+                    "Implementation error occurred - CUDA workspace buffer shall be made larger or equal to what is "
+                    "required for MDS buffer.");
+            }
+            const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
+            auto tambov = conf_file.process_gain_imp[swath_idx] / sqrt(xca.scaling_factor_im_precision_vv[swath_idx]);
+            LOGI << "IMP tambov = " << tambov;
+            auto device_mds_buf = format_result_workspace.GetAs<char>();
+            const float* d_deteced_img = srgr_dest.GetAs<float>();
+
+            alus::asar::mainflow::FormatResultsDetected(d_deteced_img, device_mds_buf, sar_meta.img.range_size,
+                                                        sar_meta.img.azimuth_size, record_header_bytes, tambov);
+            CHECK_CUDA_ERR(
+                cudaMemcpy(mds.buf, device_mds_buf, mds.n_records * mds.record_size, cudaMemcpyDeviceToHost));
+            if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
+                throw std::runtime_error("Writing headers and DSDs of Level 1 product at " + lvl1_out_full_path +
+                                         " did not finish in 10 seconds. Check platform for the performance issues.");
+            }
+            lvl1_file_handle.WriteSync(mds.buf, mds.n_records * mds.record_size);
+            LOGI << "IMP done @ " << lvl1_out_full_path;
         }
+        else if (alus::asar::specification::IsSLCProduct(asar_meta.target_product_type)) {
+            // az_compressed_image is unused from now on.
+            constexpr size_t record_header_bytes = 12 + 1 + 4;
+            const auto mds_record_size = subsetted_raster.XSize() * sizeof(IQ16) + record_header_bytes;
+            const auto mds_record_count = subsetted_raster.YSize();
+            MDS mds;
+            mds.n_records = mds_record_count;
+            mds.record_size = mds_record_size;
+            auto mds_buffer_init = std::async(std::launch::async, [&mds] {
+                mds.buf = static_cast<char*>(alus::util::Memalloc(mds.n_records * mds.record_size));
+            });
 
-        // Best guess for final scaling as can be.
-        const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
-        auto tambov = conf_file.process_gain_ims[swath_idx] / sqrt(xca.scaling_factor_im_slc_vv[swath_idx]);
-        if (instrument_type == alus::asar::specification::Instrument::SAR) {
-            tambov /= (2 * 4);
+            const std::vector<uint8_t> output_header =
+                ConstructEnvisatFileHeader(envisat_headers, sar_meta, asar_meta, mds, GetSoftwareVersion());
+            if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
+                throw std::runtime_error("Could not create L1 file at " + lvl1_out_full_path);
+            }
+
+            lvl1_file_handle.Write(output_header.data(), output_header.size());
+
+            TimeStop(result_file_assembly, "Creating IMS and write start, subsetting data");
+
+            auto result_correction_start = TimeStart();
+            if (d_workspace.ByteSize() < static_cast<size_t>(mds.record_size * mds.n_records)) {
+                throw std::logic_error(
+                    "Implementation error occurred - CUDA workspace buffer shall be made larger or equal to what is "
+                    "required for MDS buffer.");
+            }
+
+            // Best guess for final scaling as can be.
+            const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
+            auto tambov = conf_file.process_gain_ims[swath_idx] / sqrt(xca.scaling_factor_im_slc_vv[swath_idx]);
+            if (instrument_type == alus::asar::specification::Instrument::SAR) {
+                tambov /= (2 * 4);
+            }
+            auto device_mds_buf = d_workspace.GetAs<char>();
+            alus::asar::mainflow::FormatResultsSLC(subsetted_raster, device_mds_buf, record_header_bytes, tambov);
+            TimeStop(result_correction_start, "Image results correction");
+
+            auto mds_formation = TimeStart();
+
+            if (!mds_buffer_init.valid()) {
+                throw std::runtime_error("MDS output buffer initialization went into invalid state");
+            }
+            const auto mds_buffer_init_result = mds_buffer_init.wait_for(std::chrono::seconds(10));
+            if (mds_buffer_init_result != std::future_status::ready) {
+                throw std::runtime_error(
+                    "Initializing MDS buffer failed. Please check the platform. The timeout 10 seconds was reached.");
+            }
+            mds_buffer_init.get();
+
+            CHECK_CUDA_ERR(
+                cudaMemcpy(mds.buf, device_mds_buf, mds.n_records * mds.record_size, cudaMemcpyDeviceToHost));
+            TimeStop(mds_formation, "MDS Host buffer transfer");
+
+            auto file_write = TimeStart();
+            if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
+                throw std::runtime_error("Writing headers and DSDs of Level 1 product at " + lvl1_out_full_path +
+                                         " did not finish in 10 seconds. Check platform for the performance issues.");
+            }
+            lvl1_file_handle.WriteSync(mds.buf, mds.n_records * mds.record_size);
+            TimeStop(file_write, "LVL1 file write");
+        } else {
+            throw std::runtime_error("Unknown/unsupported output product type");
         }
-        auto device_mds_buf = d_workspace.GetAs<char>();
-        alus::asar::mainflow::FormatResults(subsetted_raster, device_mds_buf, record_header_bytes, tambov);
-        TimeStop(result_correction_start, "Image results correction");
-
-        auto mds_formation = TimeStart();
-
-        if (!mds_buffer_init.valid()) {
-            throw std::runtime_error("MDS output buffer initialization went into invalid state");
-        }
-        const auto mds_buffer_init_result = mds_buffer_init.wait_for(std::chrono::seconds(10));
-        if (mds_buffer_init_result != std::future_status::ready) {
-            throw std::runtime_error(
-                "Initializing MDS buffer failed. Please check the platform. The timeout 10 seconds was reached.");
-        }
-        mds_buffer_init.get();
-
-        CHECK_CUDA_ERR(cudaMemcpy(mds.buf, device_mds_buf, mds.n_records * mds.record_size, cudaMemcpyDeviceToHost));
-        TimeStop(mds_formation, "MDS Host buffer transfer");
-
-        auto file_write = TimeStart();
-        if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
-            throw std::runtime_error("Writing headers and DSDs of Level 1 product at " + lvl1_out_full_path +
-                                     " did not finish in 10 seconds. Check platform for the performance issues.");
-        }
-        lvl1_file_handle.WriteSync(mds.buf, mds.n_records * mds.record_size);
-        TimeStop(file_write, "LVL1 file write");
     } catch (const boost::program_options::error& e) {
         ExceptionMessagePrint(e);
         std::cout << args_help << std::endl;
@@ -370,7 +425,7 @@ int main(int argc, char* argv[]) {
         ExceptionMessagePrint(e);
         exit(2);
     } catch (...) {
-        LOGE << "Unknown exception occured";
+        LOGE << "Unknown exception occurred";
         LOGE << "Exiting";
         exit(2);
     }

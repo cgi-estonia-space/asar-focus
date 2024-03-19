@@ -30,9 +30,10 @@
 
 <div align="center">
 
-| Issue/Revision | Date       | Pages | Description                        |
-|----------------|------------|-------|------------------------------------|
-| 1/A            | 08/01/2024 | All   | Initial document for version 0.2.0 |
+| Issue/Revision | Date       | Pages/Paragraphs | Description                         |
+|----------------|------------|------------------|-------------------------------------|
+| 1/A            | 08/01/2024 | All              | Initial document for version 0.2.0  |
+| 1/B            | 19/03/2024 | 3.1, 3.2, 3.3    | Version 0.3.0 supports IMP and PATC |
 
 </div>
 
@@ -74,6 +75,7 @@
 
 <div style="page-break-after: always;"></div>
 
+
 # 1 Introduction
 
 Following information describes the usage of the ERS and Envisat focusser utilizing GPU. It is implemented in C/C++/CUDA
@@ -110,8 +112,8 @@ Based on target platform one can conveniently choose intended scripts. Subchapte
 ### 2.1.1 Enabling containers
 
 There are many options to choose from which are all summarized on Nvidia's official CDI page at https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/index.html.
-The scenario could vary from the type of operating system to orchestration framework used. This means there could be 
-different engines used - docker, containerd, CRI-O and podman - which all need customized setup. 
+The scenario could vary from the type of operating system to orchestration framework used. This means there could be
+different engines used - docker, containerd, CRI-O and podman - which all need customized setup.
 
 Currently utilized and tested approaches within this project are represented below:
 * [podman on Ootpa](https://github.com/cgi-estonia-space/ALUs-platform/blob/main/rhel/8/ootpa/install_container_toolkit.sh)
@@ -162,7 +164,7 @@ The developed processor called `asar_focus` is a single executable GPU ERS and E
 user interface or any other hidden requirements are present. Below will be described the arguments, formats and input
 datasets/auxiliary files. All the produced files will be written to the location specified by the `output` argument.
 
-If the program has successfully processed the product the return code of the binary execution will be **0**. Any other 
+If the program has successfully processed the product the return code of the binary execution will be **0**. Any other
 exit code means error during processing which SHALL be accompanied by the message on the console. Unsuccessful
 processing could occur due to the invalid input(s), programming error or host machine's/OS errors/congestion.
 
@@ -197,14 +199,14 @@ asar_focus/0.2.0
                         verbose|debug|info|warning|error
 ```
 
-As of release version 0.2 only single `type` is supported which is `IMS`. Any other value would result in termination
+As of release version 0.3 `type` supports `IMS` or `IMP`. Any other value would result in termination
 of processing with accompanying message on console.
 
 ### 3.1.1 Hidden CLI features
 
 For debugging and research possibilities couple of 'unofficial' command line arguments are present which are given below.
 * `--plot` - create HTML files consisting graphs of the following processing properties - processing velocity,
-chirp signal, doppler centroid and scene geolocation properties on earth
+  chirp signal, doppler centroid and scene geolocation properties on earth
 * `--intensity` - create GeoTIFF files of the raw measurements, range compressed results and fully compressed intensity
 
 All the created files would be saved in the same directory as the final product given by the `output` argument. They are
@@ -239,23 +241,24 @@ DOR_VOR_AXVF-P20120424_125300_20040228_215528_20040301_002328
 
 ## 3.2 Input datasets
 
-Single level 0 **envisat format** ERS-1/2 and Envisat mission dataset is required. As of version 0.2 only imaging mode 
+Single level 0 **envisat format** ERS-1/2 and Envisat mission dataset is required. As of version 0.3 only imaging mode
 datasets are supported. The specification is given in document `PO-RS-MDA-GS-2009 4/C`.
 
 ## 3.3 Auxiliary files
 
-As of version 0.2 the following auxiliary files are used:
+As of version 0.3 the following auxiliary files are used:
 * DORIS orbit files in envisat format, see [DOR_VOR_AX](https://earth.esa.int/eogateway/catalog/envisat-doris-precise-orbit-state-vectors-dor-vor_ax-)
 * Processor configuration file (ASA_CON_AX/ER_CON_AX)
 * Instrument characterization file (AUX_INS_AX/ER_INS_AX)
 * External calibration data (ASA_XCA_AX/ER_XCA)
+* PATC for ERS onboard time corrections
 
 For auxiliary file access and documentation please visit [ERS aux](https://earth.esa.int/eogateway/instruments/sar-ers/auxiliary-data)
 and [ENVISAT aux](https://earth.esa.int/eogateway/instruments/asar/auxiliary-data) pages at ESA.
 
 # 4 Requirements
 
-Below are specified minimum requirements for hardware. It is based on the resources needed to focus 16 seconds of 
+Below are specified minimum requirements for hardware. It is based on the resources needed to focus 16 seconds of
 level 0 imaging mode dataset. Resource like CPU is out of scope, because all modern CPUs are suitable. Disk storage
 resource is dismal, since only level 1 dataset storage is required also no intermediate files are stored
 (except for debugging features discussed in [3.1.1 Hidden CLI features](#311-hidden-cli-features)).

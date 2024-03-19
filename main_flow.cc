@@ -193,8 +193,14 @@ AzimuthRangeWindow CalcResultsWindow(double doppler_centroid_constant_term, size
     return az_rg_win;
 }
 
-void FormatResults(DevicePaddedImage& img, char* dest_space, size_t record_header_size, float calibration_constant) {
-    envformat::ConditionResults(img, dest_space, record_header_size, calibration_constant);
+void FormatResultsSLC(DevicePaddedImage& img, char* dest_space, size_t record_header_size, float calibration_constant) {
+    envformat::ConditionResultsSLC(img, dest_space, record_header_size, calibration_constant);
+}
+
+void FormatResultsDetected(const float* d_img, char* dest_space, int range_size, int azimuth_size,
+                           size_t record_header_size, float calibration_constant) {
+    envformat::ConditionResultsDetected(d_img, dest_space, range_size, azimuth_size, record_header_size,
+                                        calibration_constant);
 }
 
 void StorePlots(std::string output_path, std::string product_name, const SARMetadata& sar_metadata) {
@@ -402,12 +408,13 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
     if (instrument == specification::Instrument::ASAR) {
         const auto delay_time = ins_file.flp.range_gate_bias;
         sar_meta.pulse_repetition_frequency = sar_meta.chirp.range_sampling_rate / parsed_meta.front().pri_code;
+        sar_meta.line_time_interval = 1 / sar_meta.pulse_repetition_frequency;
         if (range_pixels_recalib == 0) {
             asar_meta.two_way_slant_range_time =
                 ((min_swst + n_pulses_swst * parsed_meta.front().pri_code) * (1 / sar_meta.chirp.range_sampling_rate) -
                  delay_time);
         } else {
-            sar_meta.slant_range_first_sample = CalcR0(sar_meta, range_pixels_recalib);
+            sar_meta.slant_range_first_sample = CalcSlantRange(sar_meta, range_pixels_recalib);
             asar_meta.two_way_slant_range_time = (sar_meta.slant_range_first_sample * 2) / c;
         }
     }
@@ -422,7 +429,7 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
         // note 5 in 4.4:28 specifies 210.94 ns, which draws more similar results to PF-ERS results.
         const auto pri = (parsed_meta.front().pri_code + 2.0) * 210.94e-9;
         sar_meta.pulse_repetition_frequency = 1 / pri;
-
+        sar_meta.line_time_interval = 1 / sar_meta.pulse_repetition_frequency;
         if (sar_meta.pulse_repetition_frequency < 1640 || sar_meta.pulse_repetition_frequency > 1720) {
             LOGW << "PRF value '" << sar_meta.pulse_repetition_frequency << "'"
                  << "is out of the specification (ERS-1-Satellite-to-Ground-Segment-Interface-"
@@ -433,7 +440,7 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
             asar_meta.two_way_slant_range_time =
                 n_pulses_swst * pri + min_swst * swst_multiplier / sar_meta.chirp.range_sampling_rate - delay_time;
         } else {
-            sar_meta.slant_range_first_sample = CalcR0(sar_meta, range_pixels_recalib);
+            sar_meta.slant_range_first_sample = CalcSlantRange(sar_meta, range_pixels_recalib);
             asar_meta.two_way_slant_range_time = (sar_meta.slant_range_first_sample * 2) / c;
         }
     }
@@ -450,7 +457,7 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
 
     sar_meta.platform_velocity = CalcVelocity(sar_meta.osv[sar_meta.osv.size() / 2]);
     // Ground speed ~12% less than platform velocity. 4.2.1 from "Digital processing of SAR Data"
-    // TODO should it be calculated more precisely?
+    // TODO should it be calculated more precisely -> calculate actual platform elevation?
     const double Vg = sar_meta.platform_velocity * 0.88;
     // TODO This is a hack, should be refactored during metadata refactoring - this function is called twice and it
     // resets up polynomial second time
@@ -458,7 +465,6 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
         sar_meta.results.Vr_poly = {0, 0, sqrt(Vg * sar_meta.platform_velocity)};
     }
     LOGD << "platform velocity = " << sar_meta.platform_velocity << ", initial Vr = " << CalcVr(sar_meta, 0);
-    sar_meta.azimuth_spacing = Vg * (1 / sar_meta.pulse_repetition_frequency);
 
     sar_meta.img.range_size = range_samples;
     sar_meta.img.azimuth_size = parsed_meta.size();
@@ -484,21 +490,31 @@ void AssembleMetadataFrom(std::vector<envformat::CommonPacketMetadata>& parsed_m
     LOGD << fmt::format("guess = {} {}", init_guess_lat, init_guess_lon);
 
     auto init_xyz = Geo2xyzWgs84(init_guess_lat, init_guess_lon, 0);
-
-    double center_s = (1 / sar_meta.pulse_repetition_frequency) * sar_meta.img.azimuth_size / 2;
-    auto center_time = asar_meta.sensing_start + boost::posix_time::microseconds(static_cast<uint32_t>(center_s * 1e6));
-
-    // TODO investigate fast time effect on geolocation
-    // Use CalcR0() to calculate new slant_range_first_sample_time.
-    double slant_range_center = sar_meta.slant_range_first_sample +
-                                ((sar_meta.img.range_size - sar_meta.chirp.n_samples) / 2) * sar_meta.range_spacing;
-
-    auto osv = InterpolateOrbit(sar_meta.osv, center_time);
-
-    sar_meta.center_point = RangeDopplerGeoLocate({osv.x_vel, osv.y_vel, osv.z_vel}, {osv.x_pos, osv.y_pos, osv.z_pos},
-                                                  init_xyz, slant_range_center);
-    sar_meta.center_time = center_time;
     sar_meta.first_line_time = asar_meta.sensing_start;
+    const int center_az_idx = sar_meta.img.azimuth_size / 2;
+
+    const double slant_range_center =
+        sar_meta.slant_range_first_sample +
+        ((sar_meta.img.range_size - sar_meta.chirp.n_samples) / 2) * sar_meta.range_spacing;
+    const auto center_time = CalcAzimuthTime(sar_meta, center_az_idx);
+
+    {
+        auto osv = InterpolateOrbit(sar_meta.osv, center_time);
+        sar_meta.center_point = RangeDopplerGeoLocate({osv.x_vel, osv.y_vel, osv.z_vel},
+                                                      {osv.x_pos, osv.y_pos, osv.z_pos}, init_xyz, slant_range_center);
+    }
+
+    {
+
+        auto next_line_time = CalcAzimuthTime(sar_meta, center_az_idx + 1);
+        auto osv = InterpolateOrbit(sar_meta.osv, next_line_time);
+        auto next_xyz = RangeDopplerGeoLocate({osv.x_vel, osv.y_vel, osv.z_vel}, {osv.x_pos, osv.y_pos, osv.z_pos},
+                                              sar_meta.center_point, slant_range_center);
+        sar_meta.azimuth_spacing = Distance(sar_meta.center_point, next_xyz);
+    }
+
+    LOGI << "range/azimuth spacing = (" << sar_meta.azimuth_spacing << ", " << sar_meta.range_spacing << ")";
+
     sar_meta.azimuth_bandwidth_fraction = 0.8f;
     auto llh = xyz2geoWGS84(sar_meta.center_point);
     LOGD << "center point = " << llh.latitude << " " << llh.longitude;
@@ -608,7 +624,7 @@ void SubsetResultsAndReassembleMeta(DevicePaddedImage& azimuth_compressed_raster
                          subset_range_pixels * subset_line_count, product_type, window.near_range_pixels_to_remove);
 }
 
-void PrefillIms(EnvisatIMS& ims, size_t total_packets_processed) {
+void PrefillIms(EnvisatSubFiles& ims, size_t total_packets_processed) {
     ims.main_processing_params.azimuth_processing_information.num_lines_proc = total_packets_processed;
 }
 

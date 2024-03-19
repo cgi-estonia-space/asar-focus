@@ -1,3 +1,34 @@
+# Release 0.3.0
+
+## Breaking changes
+
+## Known Caveats
+* Only IMS and IMP product processing
+* Azimuth compression windowing is yet to be done - https://github.com/cgi-estonia-space/asar-focus/issues/2
+* Processing speed (Vr) and Doppler centroid changes in azimuth direction yet to be done - https://github.com/cgi-estonia-space/asar-focus/issues/2
+* Packets' ISP sensing time handling might not be 100% correct
+  * It is observed for the reference products that it calculates new ISP sensing times based on PRI
+  * Therefore products by this processor differ in sensing start/stop and first/last line times (always inside the specified sensing filter)
+  * Best knowledge/effort basis changes has been implemented - https://github.com/cgi-estonia-space/asar-focus/issues/17 and https://github.com/cgi-estonia-space/asar-focus/issues/16
+* Various metadata fields needs further work (Some were adressed during this release)
+* Final results' scaling is yet to be determined, currently it is not matching exactly the reference processor
+  * With the current experience/knowledge there is a "best guess" implemented
+
+## Major Features and Improvements
+* ERS time is corrected according to PATC files - https://github.com/cgi-estonia-space/asar-focus/issues/15
+* IMP mode support along with metadata enhancements - https://github.com/cgi-estonia-space/asar-focus/issues/4
+  * Ground detected metadata created
+  * azimuth spacing, chirp ADS corrected
+
+## Bug Fixes and Other Changes
+* `SOFTWARE_VER` in the dataset changed to `asar_gpu/M.m.p`
+
+## Thanks to our Contributors
+
+Kajal Haria, Fabiano Costantini from Telespazio UK\
+Sabrina Pinori, Marco Galli from SERCO\
+Andrea Recchia from aresys
+
 # Release 0.2.0
 
 ## Breaking changes
