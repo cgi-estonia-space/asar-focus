@@ -98,8 +98,7 @@ inline __device__ __host__ double getDopplerFrequency(Vec3d earthPoint, Vec3d se
 
 inline __device__ double GetEarthPointZeroDopplerTimeImpl(double first_line_utc, double line_time_interval,
                                                           double wavelength, Vec3d earth_point, int n_azimuth,
-                                                          const Vec3d* sensor_position, const Vec3d* sensor_velocity,
-                                                          bool ) {
+                                                          const Vec3d* sensor_position, const Vec3d* sensor_velocity) {
     // binary search is used in finding the zero doppler time
     int lower_bound = 0;
     int upper_bound = n_azimuth - 1;
@@ -141,26 +140,10 @@ inline __device__ double GetEarthPointZeroDopplerTimeImpl(double first_line_utc,
     return first_line_utc + y0 * line_time_interval;
 }
 
-inline __device__ __host__ Vec3d GetPosition(double time, OrbitStateVectorCalc* vectors, int n_osv, bool ) {
-    const int nv{8};
-    const int vectorsSize = n_osv;
-    // TODO: This should be done once.
-    const double dt =
-        (vectors[vectorsSize - 1].time_point - vectors[0].time_point) / static_cast<double>(vectorsSize - 1);
+inline __device__ __host__ Vec3d GetPosition(double time, OrbitStateVectorCalc* vectors, int n_osv) {
 
-    int i0;
-    int iN;
-    if (vectorsSize <= nv) {
-        i0 = 0;
-        iN = static_cast<int>(vectorsSize - 1);
-    } else {
-        i0 = std::max((int)((time - vectors[0].time_point) / dt) - nv / 2 + 1, 0);
-        iN = std::min(i0 + nv - 1, vectorsSize - 1);
-        i0 = (iN < vectorsSize - 1 ? i0 : iN - nv + 1);
-    }
-
-    // i0 = 0;
-    // iN = n_osv;
+    int i0 = 0;
+    int iN = n_osv - 1;
     Vec3d result{0, 0, 0};
     for (int i = 0; i <= n_osv; ++i) {
         auto const orbI = vectors[i];
@@ -179,7 +162,7 @@ inline __device__ __host__ Vec3d GetPosition(double time, OrbitStateVectorCalc* 
     return result;
 }
 
-__device__ float GetAltitude(double latitude, double longitude, DEM dem, bool) {
+__device__ float GetAltitude(double latitude, double longitude, DEM dem) {
     const double dem_spacing = 5 / 6000.0;
     if (latitude < dem.y_orig - 5.0 || latitude > dem.y_orig) {
         return NAN;
@@ -209,12 +192,6 @@ __global__ void TerrainCorrectionKernel(float* out, int out_x_size, int out_y_si
         return;
     }
 
-    bool debug = false;
-
-    if (x == out_x_size / 2 && y == out_y_size / 2) {
-        debug = true;
-    }
-
     const int out_idx = x + y * out_x_size;
 
     // const int data_idx = y * range_stride + x;
@@ -225,8 +202,7 @@ __global__ void TerrainCorrectionKernel(float* out, int out_x_size, int out_y_si
 
     // elevation
 
-    float altitude = GetAltitude(lat, lon, args.dem, debug);
-
+    float altitude = GetAltitude(lat, lon, args.dem);
     if (std::isnan(altitude)) {
         out[out_idx] = 0.0f;
         return;
@@ -240,20 +216,20 @@ __global__ void TerrainCorrectionKernel(float* out, int out_x_size, int out_y_si
 
     double az_time =
         GetEarthPointZeroDopplerTimeImpl(args.first_line_utc, args.line_time_interval, args.wavelength, earth_point,
-                                         in_az_size, args.sensor_position, args.sensor_velocity, debug);
+                                         in_az_size, args.sensor_position, args.sensor_velocity);
     // azimuth idx
     double az_idx = (az_time - args.first_line_utc) / args.line_time_interval;
-
 
     if (std::isnan(az_idx) || az_idx < 0.0 || az_idx >= in_az_size) {
         out[out_idx] = 0.0f;
         return;
     }
 
+
     // slant range
 
 
-    Vec3d sat_pos = GetPosition(az_time, args.osv, args.n_osv, debug);
+    Vec3d sat_pos = GetPosition(az_time, args.osv, args.n_osv);
 
 
     // range idx
@@ -262,7 +238,6 @@ __global__ void TerrainCorrectionKernel(float* out, int out_x_size, int out_y_si
     double dz = earth_point.z - sat_pos.z;
     double slant_range = sqrt(dx * dx + dy * dy + dz * dz);
     double rg_idx = (slant_range - args.slant_range_first_sample) / args.range_spacing;
-
 
     if (rg_idx >= in_range_sz || rg_idx < 0.0) {
         out[out_idx] = 0.0f;
@@ -296,7 +271,7 @@ TCResult RDTerrainCorrection(const DevicePaddedImage& d_img, DEM dem, const SARM
     std::vector<OrbitStateVectorCalc> h_osv(sar_meta.osv.size());
 
     for (size_t i = 0; i < h_osv.size(); i++) {
-        h_osv[i].time_point = (sar_meta.osv[i].time - sar_meta.osv.front().time).total_microseconds() * 1e-6;
+        h_osv[i].time_point = (sar_meta.osv[i].time - sar_meta.first_line_time).total_microseconds() * 1e-6;
         h_osv[i].x_pos = sar_meta.osv[i].x_pos;
         h_osv[i].y_pos = sar_meta.osv[i].y_pos;
         h_osv[i].z_pos = sar_meta.osv[i].z_pos;
@@ -331,7 +306,7 @@ TCResult RDTerrainCorrection(const DevicePaddedImage& d_img, DEM dem, const SARM
     (void)d_img;
 
     args.line_time_interval = 1 / sar_meta.pulse_repetition_frequency;
-    args.first_line_utc = (sar_meta.first_line_time - sar_meta.osv.front().time).total_microseconds() * 1e-6;
+    args.first_line_utc = 0;
     args.wavelength = sar_meta.wavelength;
     args.slant_range_first_sample = sar_meta.slant_range_first_sample;
     args.range_spacing = sar_meta.range_spacing;
