@@ -30,6 +30,8 @@ set(SAR_SOURCES
         sar/sar_metadata.h
         sar/srgr.cuh
         sar/srgr.cu
+	sar/terrain_correction.cu
+        sar/terrain_correction.cuh
 )
 
 set(SOURCES
