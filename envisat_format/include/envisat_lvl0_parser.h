@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include <cstdint>
 #include <map>
 #include <string_view>
 #include <variant>
@@ -39,6 +40,7 @@ struct ASARMetadata {
     std::string orbit_dataset_name;
     std::string acquistion_station;
     std::string processing_station;
+    char phase;
     uint32_t rel_orbit;
     uint32_t abs_orbit;
     boost::posix_time::ptime sensing_start;

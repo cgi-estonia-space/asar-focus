@@ -184,9 +184,14 @@ int main(int argc, char* argv[]) {
             asar_meta.orbit_metadata.y_velocity = orbit_l1_metadata.y_velocity;
             asar_meta.orbit_metadata.z_velocity = orbit_l1_metadata.z_velocity;
             asar_meta.orbit_metadata.state_vector_time = orbit_l1_metadata.state_vector_time;
-            asar_meta.orbit_metadata.phase = orbit_l1_metadata.phase;
+            // Not correctly specified in the Doris Orbit -> transfer from L0 metadata.
+            asar_meta.orbit_metadata.phase = asar_meta.phase;
             asar_meta.orbit_metadata.cycle = orbit_l1_metadata.cycle;
-            asar_meta.orbit_metadata.abs_orbit = orbit_l1_metadata.abs_orbit;
+            // Not specified in the Doris Orbit (value +00000) -> transfer from L0 metadata.
+            asar_meta.orbit_metadata.rel_orbit = asar_meta.rel_orbit;
+            // Could be not correctly specified in the transformed Doris Orbit files,
+            // especially ERS ones -> transfer from L0 metadata.
+            asar_meta.orbit_metadata.abs_orbit = asar_meta.abs_orbit;
             asar_meta.orbit_metadata.orbit_name = orbit_l1_metadata.orbit_name;
             asar_meta.orbit_metadata.delta_ut1 = orbit_l1_metadata.delta_ut1;
             asar_meta.orbit_dataset_name = orbit_l1_metadata.orbit_name;

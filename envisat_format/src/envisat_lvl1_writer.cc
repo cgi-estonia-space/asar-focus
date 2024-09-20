@@ -506,7 +506,7 @@ std::vector<uint8_t> ConstructEnvisatFileHeader(EnvisatSubFiles& header_files, c
         }
 
         sph.dsds[11].SetEmptyDSD("MDS2", 'M');
-        sph.dsds[12].SetReferenceDSD("LEVEL 0 PRODUCT", asar_meta.lvl0_file_name);
+        sph.dsds[12].SetReferenceDSD("LEVEL 0 PRODUCT", asar_meta.product_name);
         sph.dsds[13].SetReferenceDSD("ASAR PROCESSOR CONFIG", asar_meta.configuration_file);
         sph.dsds[14].SetReferenceDSD("INSTRUMENT CHARACTERIZATION", asar_meta.instrument_file);
         if (asar_meta.external_characterization_file.empty()) {
