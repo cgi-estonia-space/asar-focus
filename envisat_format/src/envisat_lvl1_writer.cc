@@ -320,12 +320,10 @@ std::vector<uint8_t> ConstructEnvisatFileHeader(EnvisatSubFiles& header_files, c
         mph.SetDataAcqusitionProcessingInfo(asar_meta.acquistion_station, asar_meta.processing_station, PtimeToStr(now),
                                             std::string(software_ver));
 
-        mph.Set_SBT_Defaults();
-
         mph.SetSensingStartStop(PtimeToStr(asar_meta.sensing_start), PtimeToStr(asar_meta.sensing_stop));
         mph.SetOrbitInfo(asar_meta);
-        mph.Set_SBT_Defaults();
-        mph.Set_LEAP_Defaults();
+        mph.SetSbt(asar_meta);
+        mph.SetLeap(asar_meta);
         mph.Set_PRODUCT_ERR(asar_meta.product_err ? '1' : '0');
 
         // set tot size later
@@ -506,7 +504,7 @@ std::vector<uint8_t> ConstructEnvisatFileHeader(EnvisatSubFiles& header_files, c
         }
 
         sph.dsds[11].SetEmptyDSD("MDS2", 'M');
-        sph.dsds[12].SetReferenceDSD("LEVEL 0 PRODUCT", asar_meta.lvl0_file_name);
+        sph.dsds[12].SetReferenceDSD("LEVEL 0 PRODUCT", asar_meta.product_name);
         sph.dsds[13].SetReferenceDSD("ASAR PROCESSOR CONFIG", asar_meta.configuration_file);
         sph.dsds[14].SetReferenceDSD("INSTRUMENT CHARACTERIZATION", asar_meta.instrument_file);
         if (asar_meta.external_characterization_file.empty()) {

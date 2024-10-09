@@ -40,7 +40,7 @@ template <size_t N>
 void CopyStr(uc (&arr)[N], const std::string& s) {
     if (N != s.size()) {
         throw std::runtime_error("Invalid ENVISAT string format supplied for input '" + s + "' shall be " +
-                                 std::to_string(N) + " characters long");
+                                 std::to_string(N) + " characters long, actual " + std::to_string(s.size()));
     }
     memcpy(&arr[0], s.data(), N);
 }
@@ -71,9 +71,9 @@ inline std::string ToAs(int val) {
     return buf;
 }
 
-inline std::string ToAl(int val) {
+inline std::string ToAl(int64_t val) {
     char buf[20];
-    snprintf(buf, 20, "%+011d", val);  // Sign specifier counts as additional integer part count.
+    snprintf(buf, 20, "%+011ld", val);  // Sign specifier counts as additional integer part count.
     return buf;
 }
 
@@ -128,7 +128,7 @@ void SetAs(uc (&arr)[N], const char* keyword, int val, const char* unit = "") {
 }
 
 template <size_t N>
-void SetAl(uc (&arr)[N], const char* keyword, int val, const char* unit = "") {
+void SetAl(uc (&arr)[N], const char* keyword, int64_t val, const char* unit = "") {
     std::string buf = keyword;
     buf += "=";
     buf += ToAl(val);
