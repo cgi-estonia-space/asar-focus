@@ -128,6 +128,14 @@ void ParseLevel0Header(const std::vector<char>& file_data, ASARMetadata& asar_me
     asar_meta.rel_orbit = std::stoul(mph.Get("REL_ORBIT"));
     asar_meta.abs_orbit = std::stoul(mph.Get("ABS_ORBIT"));
     asar_meta.phase = mph.Get("PHASE").front();
+    asar_meta.cycle = std::stol(mph.Get("CYCLE"));
+    asar_meta.utc_sbt_time = StrToPtime(mph.Get("UTC_SBT_TIME"));
+    asar_meta.sat_binary_time = std::stoll(mph.Get("SAT_BINARY_TIME"));
+    asar_meta.clock_step = std::stoll(mph.Get("CLOCK_STEP"));
+    asar_meta.leap_utc = StrToPtime(mph.Get("LEAP_UTC"));
+    asar_meta.leap_sign = std::stol(mph.Get("LEAP_SIGN"));
+    asar_meta.leap_err = mph.Get("LEAP_ERR").front();
+    asar_meta.product_err = mph.Get("PRODUCT_ERR").front() == '0' ? false : true;
 }
 
 RawSampleMeasurements ParseLevel0Packets(const std::vector<char>& file_data, size_t mdsr_offset_bytes,

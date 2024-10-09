@@ -320,12 +320,10 @@ std::vector<uint8_t> ConstructEnvisatFileHeader(EnvisatSubFiles& header_files, c
         mph.SetDataAcqusitionProcessingInfo(asar_meta.acquistion_station, asar_meta.processing_station, PtimeToStr(now),
                                             std::string(software_ver));
 
-        mph.Set_SBT_Defaults();
-
         mph.SetSensingStartStop(PtimeToStr(asar_meta.sensing_start), PtimeToStr(asar_meta.sensing_stop));
         mph.SetOrbitInfo(asar_meta);
-        mph.Set_SBT_Defaults();
-        mph.Set_LEAP_Defaults();
+        mph.SetSbt(asar_meta);
+        mph.SetLeap(asar_meta);
         mph.Set_PRODUCT_ERR(asar_meta.product_err ? '1' : '0');
 
         // set tot size later

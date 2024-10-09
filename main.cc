@@ -156,8 +156,8 @@ int main(int argc, char* argv[]) {
                                                    compressed_measurements.max_samples,
                                                    compressed_measurements.total_samples, product_type);
         alus::asar::envformat::ParseConfFile(conf_file, sar_meta, asar_meta);
-        // This is open issue - what exactly constitutes to product error.
-        // Currently only when ERS has missing packets base on data record no.
+        // This is originally fetched from L0 "PRODUCT_ERR" field - but the conditions when to set it are unknown.
+        // It would be overwritten in case of ERS missing packets, nothing implemented for ENVISAT.
         if (compressed_measurements.no_of_product_errors_compensated > 0) {
             asar_meta.product_err = true;
         }
@@ -186,7 +186,8 @@ int main(int argc, char* argv[]) {
             asar_meta.orbit_metadata.state_vector_time = orbit_l1_metadata.state_vector_time;
             // Not correctly specified in the Doris Orbit -> transfer from L0 metadata.
             asar_meta.orbit_metadata.phase = asar_meta.phase;
-            asar_meta.orbit_metadata.cycle = orbit_l1_metadata.cycle;
+            // Not correctly specified in the Doris Orbit -> transfer from L0 metadata.
+            asar_meta.orbit_metadata.cycle = asar_meta.cycle;
             // Not specified in the Doris Orbit (value +00000) -> transfer from L0 metadata.
             asar_meta.orbit_metadata.rel_orbit = asar_meta.rel_orbit;
             // Could be not correctly specified in the transformed Doris Orbit files,
