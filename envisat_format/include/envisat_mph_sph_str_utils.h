@@ -71,13 +71,7 @@ inline std::string ToAs(int val) {
     return buf;
 }
 
-inline std::string ToAl(int val) {
-    char buf[20];
-    snprintf(buf, 20, "%+011d", val);  // Sign specifier counts as additional integer part count.
-    return buf;
-}
-
-inline std::string ToAl64(int64_t val) {
+inline std::string ToAl(int64_t val) {
     char buf[20];
     snprintf(buf, 20, "%+011ld", val);  // Sign specifier counts as additional integer part count.
     return buf;
@@ -134,20 +128,10 @@ void SetAs(uc (&arr)[N], const char* keyword, int val, const char* unit = "") {
 }
 
 template <size_t N>
-void SetAl(uc (&arr)[N], const char* keyword, int val, const char* unit = "") {
+void SetAl(uc (&arr)[N], const char* keyword, int64_t val, const char* unit = "") {
     std::string buf = keyword;
     buf += "=";
     buf += ToAl(val);
-    buf += unit;
-    buf += '\n';
-    CopyStr(arr, buf);
-}
-
-template <size_t N>
-void SetAl64(uc (&arr)[N], const char* keyword, int64_t val, const char* unit = "") {
-    std::string buf = keyword;
-    buf += "=";
-    buf += ToAl64(val);
     buf += unit;
     buf += '\n';
     CopyStr(arr, buf);

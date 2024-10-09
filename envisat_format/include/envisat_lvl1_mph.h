@@ -114,8 +114,8 @@ struct Lvl1MPH {
 
     void SetSbt(const ASARMetadata& md) {
         SetStr(utc_sbt_time, "UTC_SBT_TIME", PtimeToStr(md.utc_sbt_time));
-        SetAl64(sat_binary_time, "SAT_BINARY_TIME", md.sat_binary_time);
-        SetAl64(clock_step, "CLOCK_STEP", md.clock_step, "<ps>");
+        SetAl(sat_binary_time, "SAT_BINARY_TIME", md.sat_binary_time);
+        SetAl(clock_step, "CLOCK_STEP", md.clock_step, "<ps>");
     }
 
     void SetLeap(const ASARMetadata& md) {
