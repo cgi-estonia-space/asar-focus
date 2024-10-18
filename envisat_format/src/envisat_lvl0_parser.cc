@@ -212,10 +212,11 @@ void ParseConfFile(const ConfigurationFile& con_file, SARMetadata& sar_meta, ASA
     sq.thresh_dop_amb = con_file.thresh_dop_amb;
     sq.thresh_output_mean = con_file.thresh_output_mean;
     sq.exp_output_mean = con_file.exp_im_mean;
-    sq.thresh_output_std_dev = con_file.exp_im_std_dev;
+    sq.thresh_output_std_dev = con_file.thresh_output_std_dev;
     sq.exp_output_std_dev = con_file.exp_im_std_dev;
     sq.thresh_input_missing_lines = con_file.thresh_missing_lines;
     sq.thresh_input_gaps = con_file.thresh_gaps;
+    sq.lines_per_gaps = con_file.lines_per_gap;
 }
 
 }  // namespace alus::asar::envformat

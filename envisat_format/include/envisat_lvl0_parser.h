@@ -151,6 +151,7 @@ struct ASARMetadata {
         fl exp_output_std_dev;
         fl thresh_input_missing_lines;
         fl thresh_input_gaps;
+        ul lines_per_gaps;
     } summary_quality;
 };
 

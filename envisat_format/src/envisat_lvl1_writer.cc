@@ -197,6 +197,7 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
 void FillSummaryQuality(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, SummaryQualityADS& sq) {
     sq = {};
     const auto& meta_sq = asar_meta.summary_quality;
+    sq.zero_doppler_time = PtimeToMjd(sar_meta.first_line_time);
     sq.thresh_chirp_broadening = meta_sq.thresh_chirp_broadening;
     sq.thresh_chirp_sidelobe = meta_sq.thresh_chirp_sidelobe;
     sq.thresh_chirp_islr = meta_sq.thresh_chirp_islr;
@@ -210,11 +211,21 @@ void FillSummaryQuality(const SARMetadata& sar_meta, const ASARMetadata& asar_me
     sq.thresh_dop_amb = meta_sq.thresh_dop_amb;
     sq.thresh_output_mean = meta_sq.thresh_output_mean;
     sq.exp_output_mean = meta_sq.exp_output_mean;
+    sq.thresh_output_std_dev = meta_sq.thresh_output_std_dev;
+    sq.exp_output_std_dev = meta_sq.exp_output_std_dev;
+    sq.thresh_input_missing_lines = meta_sq.thresh_input_missing_lines;
+    sq.thresh_input_gaps = meta_sq.thresh_input_gaps;
+    sq.lines_per_gap = meta_sq.lines_per_gaps;
 
     sq.input_mean[0] = sar_meta.results.dc_i;
     sq.input_mean[1] = sar_meta.results.dc_q;
     sq.input_std_dev[0] = sar_meta.results.stddev_i;
     sq.input_std_dev[1] = sar_meta.results.stddev_q;
+
+    sq.output_mean[0] = 1;
+    sq.output_mean[1] = 2;
+    sq.output_std_dev[0] = 3;
+    sq.output_std_dev[1] = 4;
 
     CopyStr(sq.swath_nr, asar_meta.swath);
 
