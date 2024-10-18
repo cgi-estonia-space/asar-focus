@@ -197,6 +197,7 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
 void FillSummaryQuality(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, SummaryQualityADS& sq) {
     sq = {};
     const auto& meta_sq = asar_meta.summary_quality;
+    sq.zero_doppler_time = PtimeToMjd(sar_meta.first_line_time);
     sq.thresh_chirp_broadening = meta_sq.thresh_chirp_broadening;
     sq.thresh_chirp_sidelobe = meta_sq.thresh_chirp_sidelobe;
     sq.thresh_chirp_islr = meta_sq.thresh_chirp_islr;
@@ -210,11 +211,21 @@ void FillSummaryQuality(const SARMetadata& sar_meta, const ASARMetadata& asar_me
     sq.thresh_dop_amb = meta_sq.thresh_dop_amb;
     sq.thresh_output_mean = meta_sq.thresh_output_mean;
     sq.exp_output_mean = meta_sq.exp_output_mean;
+    sq.thresh_output_std_dev = meta_sq.thresh_output_std_dev;
+    sq.exp_output_std_dev = meta_sq.exp_output_std_dev;
+    sq.thresh_input_missing_lines = meta_sq.thresh_input_missing_lines;
+    sq.thresh_input_gaps = meta_sq.thresh_input_gaps;
+    sq.lines_per_gap = meta_sq.lines_per_gaps;
 
     sq.input_mean[0] = sar_meta.results.dc_i;
     sq.input_mean[1] = sar_meta.results.dc_q;
     sq.input_std_dev[0] = sar_meta.results.stddev_i;
     sq.input_std_dev[1] = sar_meta.results.stddev_q;
+
+    sq.output_mean[0] = 1;
+    sq.output_mean[1] = 2;
+    sq.output_std_dev[0] = 3;
+    sq.output_std_dev[1] = 4;
 
     CopyStr(sq.swath_nr, asar_meta.swath);
 
@@ -320,12 +331,10 @@ std::vector<uint8_t> ConstructEnvisatFileHeader(EnvisatSubFiles& header_files, c
         mph.SetDataAcqusitionProcessingInfo(asar_meta.acquistion_station, asar_meta.processing_station, PtimeToStr(now),
                                             std::string(software_ver));
 
-        mph.Set_SBT_Defaults();
-
         mph.SetSensingStartStop(PtimeToStr(asar_meta.sensing_start), PtimeToStr(asar_meta.sensing_stop));
         mph.SetOrbitInfo(asar_meta);
-        mph.Set_SBT_Defaults();
-        mph.Set_LEAP_Defaults();
+        mph.SetSbt(asar_meta);
+        mph.SetLeap(asar_meta);
         mph.Set_PRODUCT_ERR(asar_meta.product_err ? '1' : '0');
 
         // set tot size later
@@ -506,7 +515,7 @@ std::vector<uint8_t> ConstructEnvisatFileHeader(EnvisatSubFiles& header_files, c
         }
 
         sph.dsds[11].SetEmptyDSD("MDS2", 'M');
-        sph.dsds[12].SetReferenceDSD("LEVEL 0 PRODUCT", asar_meta.lvl0_file_name);
+        sph.dsds[12].SetReferenceDSD("LEVEL 0 PRODUCT", asar_meta.product_name);
         sph.dsds[13].SetReferenceDSD("ASAR PROCESSOR CONFIG", asar_meta.configuration_file);
         sph.dsds[14].SetReferenceDSD("INSTRUMENT CHARACTERIZATION", asar_meta.instrument_file);
         if (asar_meta.external_characterization_file.empty()) {

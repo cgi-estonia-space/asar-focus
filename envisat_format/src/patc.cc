@@ -2,6 +2,8 @@
 
 #include "patc.h"
 
+#include <cstring>
+
 #include "filesystem_util.h"
 
 namespace {
