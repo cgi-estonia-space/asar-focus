@@ -298,8 +298,6 @@ int main(int argc, char* argv[]) {
                                                  az_compressed_image);
         }
 
-        auto result_file_assembly = TimeStart();
-
         EnvisatSubFiles envisat_headers{};
         alus::asar::mainflow::PrefillIms(envisat_headers, packets_metadata.size());
 
@@ -320,6 +318,13 @@ int main(int argc, char* argv[]) {
                                           alus::asar::specification::REFERENCE_RANGE});
             auto srgr_dest = subsetted_raster.ReleaseMemory();
             SlantRangeToGroundRangeInterpolation(sar_meta, d_workspace.GetAs<float>(), srgr_dest.GetAs<float>());
+            DevicePaddedImage stats_image;
+            stats_image.InitExtPtr(sar_meta.img.range_size, sar_meta.img.azimuth_size, sar_meta.img.range_size,
+                                   sar_meta.img.azimuth_size, srgr_dest);
+            auto results_stats = TimeStart();
+            const auto stats = alus::asar::mainflow::CalculateStatisticsImaged(stats_image);
+            srgr_dest = stats_image.ReleaseMemory();
+            TimeStop(results_stats, "Calculated mean and std dev of the final cut area with amplitude values.");
 
             auto format_result_workspace = std::move(d_workspace);
             constexpr size_t record_header_bytes = 12 + 1 + 4;
@@ -330,7 +335,7 @@ int main(int argc, char* argv[]) {
             mds.record_size = mds_record_size;
             mds.buf = new char[mds.n_records * mds.record_size];
             const std::vector<uint8_t> output_header =
-                ConstructEnvisatFileHeader(envisat_headers, sar_meta, asar_meta, mds, GetSoftwareVersion());
+                ConstructEnvisatFileHeader(envisat_headers, sar_meta, asar_meta, mds, stats, GetSoftwareVersion());
             if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
                 throw std::runtime_error("Could not create L1 file at " + lvl1_out_full_path);
             }
@@ -357,8 +362,12 @@ int main(int argc, char* argv[]) {
             }
             lvl1_file_handle.WriteSync(mds.buf, mds.n_records * mds.record_size);
             LOGI << "IMP done @ " << lvl1_out_full_path;
-        }
-        else if (alus::asar::specification::IsSLCProduct(asar_meta.target_product_type)) {
+        } else if (alus::asar::specification::IsSLCProduct(asar_meta.target_product_type)) {
+            auto results_stats = TimeStart();
+            const auto stats = alus::asar::mainflow::CalculateStatistics(subsetted_raster);
+            TimeStop(results_stats, "Calculated mean and std dev of the final cut area with pure I/Q values.");
+
+            auto result_file_assembly = TimeStart();
             // az_compressed_image is unused from now on.
             constexpr size_t record_header_bytes = 12 + 1 + 4;
             const auto mds_record_size = subsetted_raster.XSize() * sizeof(IQ16) + record_header_bytes;
@@ -371,7 +380,7 @@ int main(int argc, char* argv[]) {
             });
 
             const std::vector<uint8_t> output_header =
-                ConstructEnvisatFileHeader(envisat_headers, sar_meta, asar_meta, mds, GetSoftwareVersion());
+                ConstructEnvisatFileHeader(envisat_headers, sar_meta, asar_meta, mds, stats, GetSoftwareVersion());
             if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
                 throw std::runtime_error("Could not create L1 file at " + lvl1_out_full_path);
             }

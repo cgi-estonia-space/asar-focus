@@ -194,7 +194,8 @@ void FillMainProcessingParams(const SARMetadata& sar_meta, const ASARMetadata& a
     }
 }
 
-void FillSummaryQuality(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, SummaryQualityADS& sq) {
+void FillSummaryQuality(const SARMetadata& sar_meta, const ASARMetadata& asar_meta, std::array<double, 4> statistics,
+                        SummaryQualityADS& sq) {
     sq = {};
     const auto& meta_sq = asar_meta.summary_quality;
     sq.zero_doppler_time = PtimeToMjd(sar_meta.first_line_time);
@@ -222,10 +223,10 @@ void FillSummaryQuality(const SARMetadata& sar_meta, const ASARMetadata& asar_me
     sq.input_std_dev[0] = sar_meta.results.stddev_i;
     sq.input_std_dev[1] = sar_meta.results.stddev_q;
 
-    sq.output_mean[0] = 1;
-    sq.output_mean[1] = 2;
-    sq.output_std_dev[0] = 3;
-    sq.output_std_dev[1] = 4;
+    sq.output_mean[0] = statistics.at(0);
+    sq.output_mean[1] = statistics.at(1);
+    sq.output_std_dev[0] = statistics.at(2);
+    sq.output_std_dev[1] = statistics.at(3);
 
     CopyStr(sq.swath_nr, asar_meta.swath);
 
@@ -299,7 +300,7 @@ void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, Ge
 
 std::vector<uint8_t> ConstructEnvisatFileHeader(EnvisatSubFiles& header_files, const SARMetadata& sar_meta,
                                                 const ASARMetadata& asar_meta, const MDS& mds,
-                                                std::string_view software_ver) {
+                                                std::array<double, 4> statistics, std::string_view software_ver) {
     static_assert(__builtin_offsetof(EnvisatSubFiles, main_processing_params) == 7516);
 
     std::string out_name = asar_meta.product_name;
@@ -420,7 +421,7 @@ std::vector<uint8_t> ConstructEnvisatFileHeader(EnvisatSubFiles& header_files, c
             sph.dsds[0].SetInternalDSD("MDS1 SQ ADS", 'A', file_offset, 1, size);
             file_offset += size;
 
-            FillSummaryQuality(sar_meta, asar_meta, header_files.summary_quality);
+            FillSummaryQuality(sar_meta, asar_meta, statistics, header_files.summary_quality);
             header_files.summary_quality.BSwap();
         }
 
