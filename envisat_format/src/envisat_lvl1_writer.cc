@@ -233,20 +233,38 @@ void FillSummaryQuality(const SARMetadata& sar_meta, const ASARMetadata& asar_me
     if ((fabs(sq.input_mean[0] - sq.exp_input_mean)) > sq.thresh_input_mean) {
         sq.input_mean_flag = 1;
     }
-    if ((fabs(sq.input_mean[1] - sq.exp_input_mean)) > sq.thresh_input_mean) {
-        sq.input_mean_flag = 1;
+    if (IsSLCProduct(asar_meta.target_product_type)) {
+        if ((fabs(sq.input_mean[1] - sq.exp_input_mean)) > sq.thresh_input_mean) {
+            sq.input_mean_flag = 1;
+        }
     }
 
     if ((fabs(sq.input_std_dev[0] - sq.exp_input_std_dev)) > sq.thresh_input_std_dev) {
         sq.input_std_dev_flag = 1;
     }
-    if ((fabs(sq.input_std_dev[1] - sq.exp_input_std_dev)) > sq.thresh_input_std_dev) {
-        sq.input_std_dev_flag = 1;
+    if (IsSLCProduct(asar_meta.target_product_type)) {
+        if ((fabs(sq.input_std_dev[1] - sq.exp_input_std_dev)) > sq.thresh_input_std_dev) {
+            sq.input_std_dev_flag = 1;
+        }
     }
 
-    // TODO
-    // sq.output_mean = ...
-    // sq.output_std_dev = ...
+    if ((fabs(sq.output_mean[0] - sq.exp_output_mean)) > sq.thresh_output_mean) {
+        sq.output_mean_flag = 1;
+    }
+    if (IsSLCProduct(asar_meta.target_product_type)) {
+        if ((fabs(sq.output_mean[1] - sq.exp_output_mean)) > sq.thresh_output_mean) {
+            sq.output_mean_flag = 1;
+        }
+    }
+
+    if ((fabs(sq.output_std_dev[0] - sq.exp_output_std_dev)) > sq.thresh_output_std_dev) {
+        sq.output_std_dev_flag = 1;
+    }
+    if (IsSLCProduct(asar_meta.target_product_type)) {
+        if ((fabs(sq.output_std_dev[1] - sq.exp_output_std_dev)) > sq.thresh_output_std_dev) {
+            sq.output_std_dev_flag = 1;
+        }
+    }
 }
 
 void FillGeoLocationAds(int az_idx, int az_last, const SARMetadata& sar_meta, GeoLocationADSR& geo) {

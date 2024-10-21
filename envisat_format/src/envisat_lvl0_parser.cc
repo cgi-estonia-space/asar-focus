@@ -195,6 +195,7 @@ void ParseConfFile(const ConfigurationFile& con_file, SARMetadata& sar_meta, ASA
     }
     */
 
+    // TODO - Per product type?
     const float az_bw = con_file.tot_azimuth_bandw_ims[asar_meta.swath_idx];
     sar_meta.azimuth_bandwidth_fraction = az_bw / sar_meta.pulse_repetition_frequency;
 
@@ -211,9 +212,17 @@ void ParseConfFile(const ConfigurationFile& con_file, SARMetadata& sar_meta, ASA
     sq.thresh_dop_cen = con_file.thresh_dop_cen;
     sq.thresh_dop_amb = con_file.thresh_dop_amb;
     sq.thresh_output_mean = con_file.thresh_output_mean;
-    sq.exp_output_mean = con_file.exp_im_mean;
+    if (asar_meta.target_product_type == specification::ProductTypes::ASA_IMS) {
+        sq.exp_output_mean = con_file.exp_im_mean;
+    } else if (asar_meta.target_product_type == specification::ProductTypes::ASA_IMP) {
+        sq.exp_output_mean = con_file.exp_imp_mean;
+    }
     sq.thresh_output_std_dev = con_file.thresh_output_std_dev;
-    sq.exp_output_std_dev = con_file.exp_im_std_dev;
+    if (asar_meta.target_product_type == specification::ProductTypes::ASA_IMS) {
+        sq.exp_output_std_dev = con_file.exp_im_std_dev;
+    } else if (asar_meta.target_product_type == specification::ProductTypes::ASA_IMP) {
+        sq.exp_output_std_dev = con_file.exp_imp_std_dev;
+    }
     sq.thresh_input_missing_lines = con_file.thresh_missing_lines;
     sq.thresh_input_gaps = con_file.thresh_gaps;
     sq.lines_per_gaps = con_file.lines_per_gap;
