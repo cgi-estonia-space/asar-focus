@@ -34,6 +34,7 @@
 |----------------|------------|------------------|-------------------------------------|
 | 1/A            | 08/01/2024 | All              | Initial document for version 0.2.0  |
 | 1/B            | 19/03/2024 | 3.1, 3.2, 3.3    | Version 0.3.0 supports IMP and PATC |
+| 1/C            | 22/10/2024 | 3.x              | Development 101 with CMake          |
 
 </div>
 
@@ -50,9 +51,13 @@
   * [2.2 Runtime COTS](#22-runtime-cots)
   * [2.3 Development COTS](#23-development-cots)
 * [3 Usage](#3-usage)
-  * [3.1 CLI arguments](#31-cli-arguments)
-  * [3.2 Input datasets](#32-input-datasets)
-  * [3.3 Auxiliary files](#33-auxiliary-files)
+  * [3.1 Development](#31-development)
+  * [3.2 CLI arguments](#32-cli-arguments)
+    * [3.2.1 Hidden CLI features](#321-hidden-cli-features)
+    * [3.2.2 Examples](#322-examples)
+  * [3.3 Input datasets](#33-input-datasets)
+  * [3.4 Auxiliary files](#34-auxiliary-files)
+* [4 Requirements](#4-requirements)
 <!-- TOC -->
 
 <div style="page-break-after: always;"></div>
@@ -98,7 +103,7 @@ version 8 (codename Ootpa). There are 2 set of requirements lists - for developm
 Common components are NVIDIA GPU driver and CUDA SDK components that should be installed on the processing environment
 for both scenarios.
 
-The list of packages and installation scripts are available at [ALUS-platform Github repo](https://github.com/cgi-estonia-space/ALUs-platform).
+The list of packages and installation scripts are available at [ALUS-platform GitHub repo](https://github.com/cgi-estonia-space/ALUs-platform).
 Based on target platform one can conveniently choose intended scripts. Subchapters consist summary of those.
 
 ## 2.1 Common components
@@ -115,7 +120,7 @@ There are many options to choose from which are all summarized on Nvidia's offic
 The scenario could vary from the type of operating system to orchestration framework used. This means there could be
 different engines used - docker, containerd, CRI-O and podman - which all need customized setup.
 
-Currently utilized and tested approaches within this project are represented below:
+Currently, utilized and tested approaches within this project are represented below:
 * [podman on Ootpa](https://github.com/cgi-estonia-space/ALUs-platform/blob/main/rhel/8/ootpa/install_container_toolkit.sh)
 * [docker on Jammy](https://github.com/cgi-estonia-space/ALUs-platform/blob/main/ubuntu/22_04/jammy-aws/install_nvidia_container_base.sh)
 
@@ -172,7 +177,22 @@ There is no distinction between ERS and ENVISAT instrument datasets. When there 
 present for given instrument then this is reported. Same goes for datasets - the processor makes decisions
 based on the given input arguments.
 
-## 3.1 CLI arguments
+## 3.1 Development
+
+The project can be built using CMake. The arguments are:\
+`cmake -B <build files dir> <CMakeLists.txt location>` e.g. `cmake -B build .`\
+Next run `make` inside the build directory.
+
+Additionally one can open the `CMakeLists.txt` file with an editor/IDE that support CMake (e.g. CLion).
+
+The build script supports two options:
+* Specify CUDA architecture target(s) for the binary - `CMAKE_CUDA_ARCHITECTURES` or environment variable `CUDAARCHS`
+* Build tests - `ALUS_ENABLE_TEST`
+
+For example:\
+`cmake -B my_build_dir -DCMAKE_CUDA_ARCHITECTURES=75 -DALUS_ENABLE_TESTS=ON asar-focus/`
+
+## 3.2 CLI arguments
 
 All the processing input is given by the program arguments. No environment variables or configuration files are used.
 Somewhat exceptions are mission and instrument specific auxiliary files which are supplied with the directory from
@@ -202,7 +222,7 @@ asar_focus/0.2.0
 As of release version 0.3 `type` supports `IMS` or `IMP`. Any other value would result in termination
 of processing with accompanying message on console.
 
-### 3.1.1 Hidden CLI features
+### 3.2.1 Hidden CLI features
 
 For debugging and research possibilities couple of 'unofficial' command line arguments are present which are given below.
 * `--plot` - create HTML files consisting graphs of the following processing properties - processing velocity,
@@ -212,9 +232,9 @@ For debugging and research possibilities couple of 'unofficial' command line arg
 All the created files would be saved in the same directory as the final product given by the `output` argument. They are
 prefixed with the level 0 dataset name pattern.
 
-### 3.1.3 Examples
+### 3.2.2 Examples
 
-During the production and internal tests there are so called test datasets (TDS) packages used. This is not required
+During the production and internal tests there are so-called test datasets (TDS) packages used. This is not required
 and one could simply have manually assembled the collection of suitable orbit files and auxiliary files downloaded as
 a bundle on online at available ESA sites (see [ERS](https://earth.esa.int/eogateway/instruments/sar-ers/auxiliary-data)
 and [ENVISAT](https://earth.esa.int/eogateway/instruments/asar/auxiliary-data)).
@@ -239,12 +259,12 @@ DOR_VOR_AXVF-P20120424_125300_20040228_215528_20040301_002328
 --sensing_stop 20040229_212523002000
 ```
 
-## 3.2 Input datasets
+## 3.3 Input datasets
 
 Single level 0 **envisat format** ERS-1/2 and Envisat mission dataset is required. As of version 0.3 only imaging mode
 datasets are supported. The specification is given in document `PO-RS-MDA-GS-2009 4/C`.
 
-## 3.3 Auxiliary files
+## 3.4 Auxiliary files
 
 As of version 0.3 the following auxiliary files are used:
 * DORIS orbit files in envisat format, see [DOR_VOR_AX](https://earth.esa.int/eogateway/catalog/envisat-doris-precise-orbit-state-vectors-dor-vor_ax-)
@@ -261,7 +281,7 @@ and [ENVISAT aux](https://earth.esa.int/eogateway/instruments/asar/auxiliary-dat
 Below are specified minimum requirements for hardware. It is based on the resources needed to focus 16 seconds of
 level 0 imaging mode dataset. Resource like CPU is out of scope, because all modern CPUs are suitable. Disk storage
 resource is dismal, since only level 1 dataset storage is required also no intermediate files are stored
-(except for debugging features discussed in [3.1.1 Hidden CLI features](#311-hidden-cli-features)).
+(except for debugging features discussed in [3.2.1 Hidden CLI features](#321-hidden-cli-features)).
 
 | Property               | Value  |
 |------------------------|--------|
