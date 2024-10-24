@@ -322,9 +322,17 @@ int main(int argc, char* argv[]) {
             stats_image.InitExtPtr(sar_meta.img.range_size, sar_meta.img.azimuth_size, sar_meta.img.range_size,
                                    sar_meta.img.azimuth_size, srgr_dest);
             auto results_stats = TimeStart();
-            const auto stats = alus::asar::mainflow::CalculateStatisticsImaged(stats_image);
+            auto stats = alus::asar::mainflow::CalculateStatisticsImaged(stats_image);
             srgr_dest = stats_image.ReleaseMemory();
             TimeStop(results_stats, "Calculated mean and std dev of the final cut area with amplitude values.");
+
+            const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
+            auto tambov = conf_file.process_gain_imp[swath_idx] / sqrt(xca.scaling_factor_im_precision_vv[swath_idx]);
+            LOGI << "IMP tambov = " << tambov;
+            // TODO - final statistic perhaps should be calculated on the final assembled image
+            // not the raw focussed one?
+            stats.at(0) *= tambov;
+            stats.at(2) *= tambov;
 
             auto format_result_workspace = std::move(d_workspace);
             constexpr size_t record_header_bytes = 12 + 1 + 4;
@@ -346,9 +354,7 @@ int main(int argc, char* argv[]) {
                     "Implementation error occurred - CUDA workspace buffer shall be made larger or equal to what is "
                     "required for MDS buffer.");
             }
-            const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
-            auto tambov = conf_file.process_gain_imp[swath_idx] / sqrt(xca.scaling_factor_im_precision_vv[swath_idx]);
-            LOGI << "IMP tambov = " << tambov;
+
             auto device_mds_buf = format_result_workspace.GetAs<char>();
             const float* d_deteced_img = srgr_dest.GetAs<float>();
 
@@ -364,8 +370,21 @@ int main(int argc, char* argv[]) {
             LOGI << "IMP done @ " << lvl1_out_full_path;
         } else if (alus::asar::specification::IsSLCProduct(asar_meta.target_product_type)) {
             auto results_stats = TimeStart();
-            const auto stats = alus::asar::mainflow::CalculateStatistics(subsetted_raster);
+            auto stats = alus::asar::mainflow::CalculateStatistics(subsetted_raster);
             TimeStop(results_stats, "Calculated mean and std dev of the final cut area with pure I/Q values.");
+
+            // Best guess for final scaling as can be.
+            const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
+            auto tambov = conf_file.process_gain_ims[swath_idx] / sqrt(xca.scaling_factor_im_slc_vv[swath_idx]);
+            if (instrument_type == alus::asar::specification::Instrument::SAR) {
+                tambov /= (2 * 4);
+            }
+            // TODO - Final statistic perhaps should be calculated on the final assembled
+            // image not the raw focussed one?
+            stats.at(0) *= tambov;
+            stats.at(1) *= tambov;
+            stats.at(2) *= tambov;
+            stats.at(3) *= tambov;
 
             auto result_file_assembly = TimeStart();
             // az_compressed_image is unused from now on.
@@ -396,12 +415,6 @@ int main(int argc, char* argv[]) {
                     "required for MDS buffer.");
             }
 
-            // Best guess for final scaling as can be.
-            const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
-            auto tambov = conf_file.process_gain_ims[swath_idx] / sqrt(xca.scaling_factor_im_slc_vv[swath_idx]);
-            if (instrument_type == alus::asar::specification::Instrument::SAR) {
-                tambov /= (2 * 4);
-            }
             auto device_mds_buf = d_workspace.GetAs<char>();
             alus::asar::mainflow::FormatResultsSLC(subsetted_raster, device_mds_buf, record_header_bytes, tambov);
             TimeStop(result_correction_start, "Image results correction");
