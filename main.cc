@@ -156,8 +156,8 @@ int main(int argc, char* argv[]) {
                                                    compressed_measurements.max_samples,
                                                    compressed_measurements.total_samples, product_type);
         alus::asar::envformat::ParseConfFile(conf_file, sar_meta, asar_meta);
-        // This is open issue - what exactly constitutes to product error.
-        // Currently only when ERS has missing packets base on data record no.
+        // This is originally fetched from L0 "PRODUCT_ERR" field - but the conditions when to set it are unknown.
+        // It would be overwritten in case of ERS missing packets, nothing implemented for ENVISAT.
         if (compressed_measurements.no_of_product_errors_compensated > 0) {
             asar_meta.product_err = true;
         }
@@ -184,9 +184,15 @@ int main(int argc, char* argv[]) {
             asar_meta.orbit_metadata.y_velocity = orbit_l1_metadata.y_velocity;
             asar_meta.orbit_metadata.z_velocity = orbit_l1_metadata.z_velocity;
             asar_meta.orbit_metadata.state_vector_time = orbit_l1_metadata.state_vector_time;
-            asar_meta.orbit_metadata.phase = orbit_l1_metadata.phase;
-            asar_meta.orbit_metadata.cycle = orbit_l1_metadata.cycle;
-            asar_meta.orbit_metadata.abs_orbit = orbit_l1_metadata.abs_orbit;
+            // Not correctly specified in the Doris Orbit -> transfer from L0 metadata.
+            asar_meta.orbit_metadata.phase = asar_meta.phase;
+            // Not correctly specified in the Doris Orbit -> transfer from L0 metadata.
+            asar_meta.orbit_metadata.cycle = asar_meta.cycle;
+            // Not specified in the Doris Orbit (value +00000) -> transfer from L0 metadata.
+            asar_meta.orbit_metadata.rel_orbit = asar_meta.rel_orbit;
+            // Could be not correctly specified in the transformed Doris Orbit files,
+            // especially ERS ones -> transfer from L0 metadata.
+            asar_meta.orbit_metadata.abs_orbit = asar_meta.abs_orbit;
             asar_meta.orbit_metadata.orbit_name = orbit_l1_metadata.orbit_name;
             asar_meta.orbit_metadata.delta_ut1 = orbit_l1_metadata.delta_ut1;
             asar_meta.orbit_dataset_name = orbit_l1_metadata.orbit_name;
@@ -292,8 +298,6 @@ int main(int argc, char* argv[]) {
                                                  az_compressed_image);
         }
 
-        auto result_file_assembly = TimeStart();
-
         EnvisatSubFiles envisat_headers{};
         alus::asar::mainflow::PrefillIms(envisat_headers, packets_metadata.size());
 
@@ -314,6 +318,21 @@ int main(int argc, char* argv[]) {
                                           alus::asar::specification::REFERENCE_RANGE});
             auto srgr_dest = subsetted_raster.ReleaseMemory();
             SlantRangeToGroundRangeInterpolation(sar_meta, d_workspace.GetAs<float>(), srgr_dest.GetAs<float>());
+            DevicePaddedImage stats_image;
+            stats_image.InitExtPtr(sar_meta.img.range_size, sar_meta.img.azimuth_size, sar_meta.img.range_size,
+                                   sar_meta.img.azimuth_size, srgr_dest);
+            auto results_stats = TimeStart();
+            auto stats = alus::asar::mainflow::CalculateStatisticsImaged(stats_image);
+            srgr_dest = stats_image.ReleaseMemory();
+            TimeStop(results_stats, "Calculated mean and std dev of the final cut area with amplitude values.");
+
+            const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
+            auto tambov = conf_file.process_gain_imp[swath_idx] / sqrt(xca.scaling_factor_im_precision_vv[swath_idx]);
+            LOGI << "IMP tambov = " << tambov;
+            // TODO - final statistic perhaps should be calculated on the final assembled image
+            // not the raw focussed one?
+            stats.at(0) *= tambov;
+            stats.at(2) *= tambov;
 
             auto format_result_workspace = std::move(d_workspace);
             constexpr size_t record_header_bytes = 12 + 1 + 4;
@@ -324,7 +343,7 @@ int main(int argc, char* argv[]) {
             mds.record_size = mds_record_size;
             mds.buf = new char[mds.n_records * mds.record_size];
             const std::vector<uint8_t> output_header =
-                ConstructEnvisatFileHeader(envisat_headers, sar_meta, asar_meta, mds, GetSoftwareVersion());
+                ConstructEnvisatFileHeader(envisat_headers, sar_meta, asar_meta, mds, stats, GetSoftwareVersion());
             if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
                 throw std::runtime_error("Could not create L1 file at " + lvl1_out_full_path);
             }
@@ -335,9 +354,7 @@ int main(int argc, char* argv[]) {
                     "Implementation error occurred - CUDA workspace buffer shall be made larger or equal to what is "
                     "required for MDS buffer.");
             }
-            const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
-            auto tambov = conf_file.process_gain_imp[swath_idx] / sqrt(xca.scaling_factor_im_precision_vv[swath_idx]);
-            LOGI << "IMP tambov = " << tambov;
+
             auto device_mds_buf = format_result_workspace.GetAs<char>();
             const float* d_deteced_img = srgr_dest.GetAs<float>();
 
@@ -351,8 +368,25 @@ int main(int argc, char* argv[]) {
             }
             lvl1_file_handle.WriteSync(mds.buf, mds.n_records * mds.record_size);
             LOGI << "IMP done @ " << lvl1_out_full_path;
-        }
-        else if (alus::asar::specification::IsSLCProduct(asar_meta.target_product_type)) {
+        } else if (alus::asar::specification::IsSLCProduct(asar_meta.target_product_type)) {
+            auto results_stats = TimeStart();
+            auto stats = alus::asar::mainflow::CalculateStatistics(subsetted_raster);
+            TimeStop(results_stats, "Calculated mean and std dev of the final cut area with pure I/Q values.");
+
+            // Best guess for final scaling as can be.
+            const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
+            auto tambov = conf_file.process_gain_ims[swath_idx] / sqrt(xca.scaling_factor_im_slc_vv[swath_idx]);
+            if (instrument_type == alus::asar::specification::Instrument::SAR) {
+                tambov /= (2 * 4);
+            }
+            // TODO - Final statistic perhaps should be calculated on the final assembled
+            // image not the raw focussed one?
+            stats.at(0) *= tambov;
+            stats.at(1) *= tambov;
+            stats.at(2) *= tambov;
+            stats.at(3) *= tambov;
+
+            auto result_file_assembly = TimeStart();
             // az_compressed_image is unused from now on.
             constexpr size_t record_header_bytes = 12 + 1 + 4;
             const auto mds_record_size = subsetted_raster.XSize() * sizeof(IQ16) + record_header_bytes;
@@ -365,7 +399,7 @@ int main(int argc, char* argv[]) {
             });
 
             const std::vector<uint8_t> output_header =
-                ConstructEnvisatFileHeader(envisat_headers, sar_meta, asar_meta, mds, GetSoftwareVersion());
+                ConstructEnvisatFileHeader(envisat_headers, sar_meta, asar_meta, mds, stats, GetSoftwareVersion());
             if (!lvl1_file_handle.CanWrite(std::chrono::seconds(10))) {
                 throw std::runtime_error("Could not create L1 file at " + lvl1_out_full_path);
             }
@@ -381,12 +415,6 @@ int main(int argc, char* argv[]) {
                     "required for MDS buffer.");
             }
 
-            // Best guess for final scaling as can be.
-            const auto swath_idx = alus::asar::envformat::SwathIdx(asar_meta.swath);
-            auto tambov = conf_file.process_gain_ims[swath_idx] / sqrt(xca.scaling_factor_im_slc_vv[swath_idx]);
-            if (instrument_type == alus::asar::specification::Instrument::SAR) {
-                tambov /= (2 * 4);
-            }
             auto device_mds_buf = d_workspace.GetAs<char>();
             alus::asar::mainflow::FormatResultsSLC(subsetted_raster, device_mds_buf, record_header_bytes, tambov);
             TimeStop(result_correction_start, "Image results correction");

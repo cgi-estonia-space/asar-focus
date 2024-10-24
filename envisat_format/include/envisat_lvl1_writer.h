@@ -40,5 +40,6 @@ struct MDS {
     MDS& operator=(const MDS&) = delete;
 };
 
-std::vector<uint8_t> ConstructEnvisatFileHeader(EnvisatSubFiles& ims, const SARMetadata& sar_meta, const ASARMetadata& asar_meta, const MDS& mds,
-                  std::string_view software_ver);
+std::vector<uint8_t> ConstructEnvisatFileHeader(EnvisatSubFiles& ims, const SARMetadata& sar_meta,
+                                                const ASARMetadata& asar_meta, const MDS& mds,
+                                                std::array<double, 4> statistics, std::string_view software_ver);

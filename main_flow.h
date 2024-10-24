@@ -92,4 +92,10 @@ void PrefillIms(EnvisatSubFiles& ims, size_t total_packets_processed);
 
 void CheckAndRegisterPatc(const envformat::aux::Patc& patc, ASARMetadata& metadata);
 
+// I/Q mean I/Q std dev
+std::array<double, 4> CalculateStatistics(const DevicePaddedImage& img);
+
+// Amplitude mean, 0, Amplitude std dev, 0
+std::array<double, 4> CalculateStatisticsImaged(const DevicePaddedImage& img);
+
 }  // namespace alus::asar::mainflow

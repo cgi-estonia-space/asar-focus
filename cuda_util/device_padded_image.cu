@@ -311,7 +311,7 @@ namespace {
 
     }
 
-    cufftComplex DevicePaddedImage::CalcStdDev(float i_mean, float q_mean, size_t total_samples)
+    cufftComplex DevicePaddedImage::CalcStdDev(float i_mean, float q_mean, size_t total_samples) const
     {
         size_t n_blocks = 50;
         size_t byte_size = n_blocks * sizeof(float);
@@ -342,6 +342,9 @@ namespace {
         r.x = std::accumulate(h_i_sum.begin(), h_i_sum.end(), 0.0);
         r.y = std::accumulate(h_q_sum.begin(), h_q_sum.end(), 0.0);
 
+        if (total_samples == 0) {
+            total_samples = x_size_ * y_size_;
+        }
         // variance
         r.x /= total_samples;
         r.y /= total_samples;
@@ -353,7 +356,7 @@ namespace {
         return r;
     }
 
-    cufftComplex DevicePaddedImage::CalcMean(size_t total_samples)
+    cufftComplex DevicePaddedImage::CalcMean(size_t total_samples) const
     {
         size_t n_blocks = 50;
         size_t byte_size = n_blocks * sizeof(float);
@@ -382,6 +385,10 @@ namespace {
         cufftComplex r = {};
         r.x = std::accumulate(h_i_sum.begin(), h_i_sum.end(), 0.0);
         r.y = std::accumulate(h_q_sum.begin(), h_q_sum.end(), 0.0);
+
+        if (total_samples == 0) {
+            total_samples = x_size_ * y_size_;
+        }
 
         r.x /= total_samples;
         r.y /= total_samples;
