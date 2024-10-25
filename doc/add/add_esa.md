@@ -18,7 +18,7 @@
 <br>
 <br>
 <br>
-<p style="text-align: center; font-weight: bold">CGI Estonia<br>Jan 8th 2024<br>Issue/Revision: 1/A</p>
+<p style="text-align: center; font-weight: bold">CGI Estonia<br>Jan 8th 2024<br>Issue/Revision: 1/B</p>
 <br>
 
 <p style="text-align: center">Published (including this document) at <a href="https://github.com/cgi-estonia-space/asar-focus">Github<br>https://github.com/cgi-estonia-space/asar-focus</a></p>
@@ -136,7 +136,7 @@ This processor's general system has been kept simple which has been validated by
 systems with possibility to add convenient functionality like graphical user interface or data fetching. Below are
 general blocks that define the approach.
 
-![asar_focus system context](https://github.com/kautlenbachs/bulpp_diagrams/blob/main/asar-focus-system-context-a.drawio.png?raw=true)
+![asar_focus system context](https://private-user-images.githubusercontent.com/98521380/379805603-d07659d5-48f7-4fbf-9661-ba81db2a49ba.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Mjk3NzkzMDIsIm5iZiI6MTcyOTc3OTAwMiwicGF0aCI6Ii85ODUyMTM4MC8zNzk4MDU2MDMtZDA3NjU5ZDUtNDhmNy00ZmJmLTk2NjEtYmE4MWRiMmE0OWJhLnBuZz9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNDEwMjQlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjQxMDI0VDE0MTAwMlomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTUzMTIzOTNmNDFlZTkwZjcxODFjNzAwZDkyZTM1ODAzYzdjMGU5NGYwZjNlZDVkNWVlODNjZWQ5MmZmYTEzZmYmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.IFwEzsQBKHy3lNfmevUhQI7lUfCxDs-p9v3Nr3gxUG8)
 
 *Figure 3.0 - General system block scheme*
 
@@ -165,12 +165,13 @@ The `asar_focus` processor:
 Main focus is on the efficient GPU processing pipeline where the time spent on I/O should be minimized or parallelized
 while processing calculations. Below is the general pipeline of the processor.
 
-![general processing pipeline](https://github.com/kautlenbachs/bulpp_diagrams/blob/main/asar_meta_flow.drawio.png?raw=true)
+![general processing pipeline](https://private-user-images.githubusercontent.com/98521380/380160723-e622e536-894c-4670-8e7a-16be2fe54ca5.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Mjk4NTk4MDEsIm5iZiI6MTcyOTg1OTUwMSwicGF0aCI6Ii85ODUyMTM4MC8zODAxNjA3MjMtZTYyMmU1MzYtODk0Yy00NjcwLThlN2EtMTZiZTJmZTU0Y2E1LnBuZz9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNDEwMjUlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjQxMDI1VDEyMzE0MVomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTljMGRiYmZjNzliMTBlZGQ0MWVlN2FiNmM4YTUwNDEyZGY1N2E5NmIwNzllNjYwYWZjYzQ3MDMzYzZhYTExNDcmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.Yq_JobrN-bzrbgXMB58ZI_hW7vDr9jo_LF7MyROJ1w4)
 
 *Figure 4.0 - General processing pipeline*
 
 The **measurements processing** step is generic focussing pipeline that is represented by the figure below.
-![focussing processing pipeline](https://github.com/kautlenbachs/bulpp_diagrams/blob/main/sar_focussing.drawio.png?raw=true)
+
+![focussing processing pipeline](https://private-user-images.githubusercontent.com/98521380/380164487-f083e9b2-ef14-40b7-825a-3bd5891b1a6a.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Mjk4NjAzODgsIm5iZiI6MTcyOTg2MDA4OCwicGF0aCI6Ii85ODUyMTM4MC8zODAxNjQ0ODctZjA4M2U5YjItZWYxNC00MGI3LTgyNWEtM2JkNTg5MWIxYTZhLnBuZz9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNDEwMjUlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjQxMDI1VDEyNDEyOFomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWIxZWRjMmIyYTNkZjE5NzBkZjM0NDI3OWE5Y2MxYzk2ODgwYzZiNTUyMWU1NDkwNmFlODhlMzAwZmY1OGVjM2ImWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.Mn8HRrhAYwnSF04WCOMTH1qqCOvxJJa4bmeiWjgH1zI)
 
 *Figure 4.1 - Generic focussing pipeline*
 
@@ -275,7 +276,7 @@ call.
 ## 6.1 Profiling analyze
 
 Example GPU profiling chart is presented below
-![profiling chart](https://sar-focusing.s3.eu-central-1.amazonaws.com/pages/asar-focus_profile_add.png)
+![profiling chart](https://private-user-images.githubusercontent.com/98521380/380165156-46fad159-30ce-458c-9cea-55dad33d99ef.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Mjk4NjA0ODIsIm5iZiI6MTcyOTg2MDE4MiwicGF0aCI6Ii85ODUyMTM4MC8zODAxNjUxNTYtNDZmYWQxNTktMzBjZS00NThjLTljZWEtNTVkYWQzM2Q5OWVmLnBuZz9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNDEwMjUlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjQxMDI1VDEyNDMwMlomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTFiYjFiZWE4OGVhMWU5NTk5MzNjYWZlM2Q0YmFhNjQxNGNjZGMyMjQ4ODRhNzQ0YTgyOGFlY2E2MjRhMzkwNjImWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.7GKJIMwKXX58cbJUodDfI76qqUUfOxZYFl3TWn46m08)
 
 *Figure 6.1 - Processor profiling*
 

@@ -112,16 +112,16 @@ struct Lvl1MPH {
         SetStr(vector_source, "VECTOR_SOURCE", md.orbit_metadata.vector_source);
     }
 
-    void Set_SBT_Defaults() {
-        SetStr(utc_sbt_time, "UTC_SBT_TIME", "");
-        SetAl(sat_binary_time, "SAT_BINARY_TIME", 0);
-        SetAl(clock_step, "CLOCK_STEP", 0, "<ps>");
+    void SetSbt(const ASARMetadata& md) {
+        SetStr(utc_sbt_time, "UTC_SBT_TIME", PtimeToStr(md.utc_sbt_time));
+        SetAl(sat_binary_time, "SAT_BINARY_TIME", md.sat_binary_time);
+        SetAl(clock_step, "CLOCK_STEP", md.clock_step, "<ps>");
     }
 
-    void Set_LEAP_Defaults() {
-        SetStr(leap_utc, "LEAP_UTC", "");
-        SetAc(leap_sign, "LEAP_SIGN", 0);
-        SetChar(leap_err, "LEAP_ERR", '0');
+    void SetLeap(const ASARMetadata& md) {
+        SetStr(leap_utc, "LEAP_UTC", PtimeToStr(md.leap_utc));
+        SetAc(leap_sign, "LEAP_SIGN", md.leap_sign);
+        SetChar(leap_err, "LEAP_ERR", md.leap_err);
     }
 
     void Set_PRODUCT_ERR(char val) { SetChar(product_err, "PRODUCT_ERR", val); }

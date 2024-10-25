@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include <cstdint>
 #include <map>
 #include <string_view>
 #include <variant>
@@ -39,6 +40,8 @@ struct ASARMetadata {
     std::string orbit_dataset_name;
     std::string acquistion_station;
     std::string processing_station;
+    char phase;
+    int16_t cycle;
     uint32_t rel_orbit;
     uint32_t abs_orbit;
     boost::posix_time::ptime sensing_start;
@@ -46,6 +49,14 @@ struct ASARMetadata {
     boost::posix_time::ptime first_line_time;
     boost::posix_time::ptime last_line_time;
     bool product_err{false};
+
+    boost::posix_time::ptime utc_sbt_time;
+    int64_t sat_binary_time;
+    int64_t clock_step;
+
+    boost::posix_time::ptime leap_utc;
+    uint16_t leap_sign;
+    char leap_err;
 
     std::string swath;
     int swath_idx;
@@ -140,6 +151,7 @@ struct ASARMetadata {
         fl exp_output_std_dev;
         fl thresh_input_missing_lines;
         fl thresh_input_gaps;
+        ul lines_per_gaps;
     } summary_quality;
 };
 

@@ -656,4 +656,16 @@ void CheckAndRegisterPatc(const envformat::aux::Patc& patc, ASARMetadata& metada
     envformat::ers::RegisterPatc(patc);
 }
 
+std::array<double, 4> CalculateStatistics(const DevicePaddedImage& img) {
+    const auto mean = img.CalcMean();
+    const auto std_dev = img.CalcStdDev(mean.x, mean.y);
+    return {mean.x, mean.y, std_dev.x, std_dev.y};
+}
+
+std::array<double, 4> CalculateStatisticsImaged(const DevicePaddedImage& img) {
+    const auto mean = img.CalcMean();
+    const auto std_dev = img.CalcStdDev(mean.x, mean.y);
+    return {(mean.x + mean.y) / 2, 0, (std_dev.x + std_dev.y) / 2, 0};
+}
+
 }  // namespace alus::asar::mainflow
