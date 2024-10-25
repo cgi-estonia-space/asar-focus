@@ -1,3 +1,40 @@
+# Release 0.3.1
+
+## Breaking changes
+
+## Known Caveats
+* Only IMS and IMP product processing
+* Azimuth compression windowing is yet to be done - https://github.com/cgi-estonia-space/asar-focus/issues/2
+* Processing speed (Vr) and Doppler centroid changes in azimuth direction yet to be done - https://github.com/cgi-estonia-space/asar-focus/issues/2
+* Packets' ISP sensing time handling might not be 100% correct
+  * It is observed for the reference products that it calculates new ISP sensing times based on PRI
+  * Therefore products by this processor differ in sensing start/stop and first/last line times (always inside the specified sensing filter)
+  * Best knowledge/effort basis changes has been implemented - https://github.com/cgi-estonia-space/asar-focus/issues/17 and https://github.com/cgi-estonia-space/asar-focus/issues/16
+* Various metadata fields needs further work (Some were adressed during this release)
+* Final results' scaling is yet to be determined, currently it is not matching exactly the reference processor
+  * With the current experience/knowledge there is a "best guess" implemented
+
+## Major Features and Improvements
+* Following metadata fields implemented:
+  * SQ ADS missing fields (output statistics, thresholds)
+  * REL_ORBIT
+  * ABS_ORBIT
+  * PHASE, CYCLE
+  * LEVEL 0 PRODUCT
+  * LEAP_XYZ
+  * CLOCK_STEP, UTC_SBT_TIME, SAT_BINARY_TIME
+
+## Bug Fixes and Other Changes
+* `CMAKE_CUDA_ARCHITECTURES` is not ignored anymore when generating via cmake
+* SUM consists of development 101
+
+## Thanks to our Contributors
+
+Kajal Haria, Fabiano Costantini from Telespazio UK\
+Sabrina Pinori, Marco Galli from SERCO\
+Andrea Recchia from aresys
+
+
 # Release 0.3.0
 
 ## Breaking changes
