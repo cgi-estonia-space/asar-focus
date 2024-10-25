@@ -100,7 +100,7 @@ The project can be built using CMake. The arguments are:\
 `cmake -B <build files dir> <CMakeLists.txt location>` e.g. `cmake -B build .`\
 Next run `make` inside the build directory.
 
-Additionally one can open the `CMakeLists.txt` file with an editor/IDE that support CMake (e.g. CLion).
+Additionally one can open the `CMakeLists.txt` file with an editor/IDE that supports CMake (e.g. CLion).
 
 The build script supports two options:
 * Specify CUDA architecture target(s) for the binary - `CMAKE_CUDA_ARCHITECTURES` or environment variable `CUDAARCHS`
@@ -118,7 +118,7 @@ specific DORIS orbit file path could be given. When not specifying sensing time 
 input packets if there is sufficient GPU memory.
 
 ```
-asar_focus/0.2.0
+asar_gpu/0.3.1
   -h [ --help ]         Print help
   -i [ --input ] arg    Level 0 ERS or ENVISAT dataset
   --aux arg             Auxiliary files folder path
@@ -136,7 +136,7 @@ asar_focus/0.2.0
                         verbose|debug|info|warning|error
 ```
 
-As of release version 0.3 `type` supports `IMS` or `IMP`. Any other value would result in termination
+As of release version 0.3.x `type` supports `IMS` or `IMP`. Any other value would result in termination
 of processing with accompanying message on console.
 
 ### 3.2.1 Hidden CLI features
@@ -178,12 +178,12 @@ DOR_VOR_AXVF-P20120424_125300_20040228_215528_20040301_002328
 
 ## 3.3 Input datasets
 
-Single level 0 **envisat format** ERS-1/2 and Envisat mission dataset is required. As of version 0.3 only imaging mode
+Single level 0 **envisat format** ERS-1/2 and Envisat mission dataset is required. As of version 0.3.x only imaging mode
 datasets are supported. The specification is given in document `PO-RS-MDA-GS-2009 4/C`.
 
 ## 3.4 Auxiliary files
 
-As of version 0.3 the following auxiliary files are used:
+As of version 0.3.x the following auxiliary files are used:
 * DORIS orbit files in envisat format, see [DOR_VOR_AX](https://earth.esa.int/eogateway/catalog/envisat-doris-precise-orbit-state-vectors-dor-vor_ax-)
 * Processor configuration file (ASA_CON_AX/ER_CON_AX)
 * Instrument characterization file (AUX_INS_AX/ER_INS_AX)
@@ -193,7 +193,7 @@ As of version 0.3 the following auxiliary files are used:
 For auxiliary file access and documentation please visit [ERS aux](https://earth.esa.int/eogateway/instruments/sar-ers/auxiliary-data)
 and [ENVISAT aux](https://earth.esa.int/eogateway/instruments/asar/auxiliary-data) pages at ESA.
 
-# 4 Requirements
+# 4 Hardware requirements
 
 Below are specified minimum requirements for hardware. It is based on the resources needed to focus 16 seconds of
 level 0 imaging mode dataset. Resource like CPU is out of scope, because all modern CPUs are suitable. Disk storage
