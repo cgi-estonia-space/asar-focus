@@ -1,3 +1,19 @@
+# Release 0.3.2
+
+## Breaking changes
+* License changed from CC 4.0 to Apache 2.0
+  * All source files' headers replaced
+  * LICENSE file with Apache 2.0 default
+
+## Known Caveats
+see 0.3.1
+
+## Major Features and Improvements
+see 0.3.1
+
+## Bug Fixes and Other changes
+see 0.3.1
+
 # Release 0.3.1
 
 ## Breaking changes
