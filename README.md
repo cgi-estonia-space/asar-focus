@@ -18,7 +18,7 @@ See [RELEASE.md](RELEASE.md)
 
 ## License
 
-[Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](LICENSE.txt)
+[Apache License, version 2.0](LICENSE.txt)
 
 
 

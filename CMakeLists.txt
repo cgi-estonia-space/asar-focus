@@ -15,9 +15,9 @@ set(SAR_SOURCES
         sar/fractional_doppler_centroid.cuh
         sar/iq_correction.cu
         sar/iq_correction.cuh
-        sar/orbit_state_vector.cpp
+        sar/orbit_state_vector.cc
         sar/orbit_state_vector.h
-        sar/processing_velocity_estimation.cpp
+        sar/processing_velocity_estimation.cc
         sar/processing_velocity_estimation.h
         sar/range_compression.cu
         sar/range_compression.cuh
@@ -26,7 +26,7 @@ set(SAR_SOURCES
         sar/range_spreading_loss.cuh
         sar/range_spreading_loss.cu
         sar/sar_chirp.h
-        sar/sar_chirp.cpp
+        sar/sar_chirp.cc
         sar/sar_metadata.h
         sar/srgr.cuh
         sar/srgr.cu
